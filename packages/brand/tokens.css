@@ -1,0 +1,16 @@
+/* HUNGREE Goat brand tokens — shared by website, player and control */
+@font-face{font-family:"Montserrat";font-weight:800;src:url(fonts/Montserrat-ExtraBold.ttf) format("truetype");font-display:swap}
+@font-face{font-family:"Montserrat";font-weight:700;src:url(fonts/Montserrat-Bold.ttf) format("truetype");font-display:swap}
+@font-face{font-family:"Montserrat";font-weight:600;src:url(fonts/Montserrat-SemiBold.ttf) format("truetype");font-display:swap}
+@font-face{font-family:"Inter";font-weight:100 900;src:url(fonts/Inter-Variable.ttf) format("truetype");font-display:swap}
+@font-face{font-family:"Great Vibes";src:url(fonts/GreatVibes-Regular.ttf) format("truetype");font-display:swap}
+:root{
+  --hg-navy:#070d18;--hg-navy2:#0b1526;--hg-ink:#050912;--hg-teal:#0b2a36;--hg-slate:#182636;--hg-slate2:#22344a;
+  --hg-gold:#f2c14e;--hg-gold2:#d9a63a;--hg-gold3:#ffe08a;--hg-amber:#ffb454;--hg-orange:#ff8a3d;
+  --hg-blue:#4f8cff;--hg-blue2:#7fb0ff;--hg-cyan:#38d6e8;--hg-cyan2:#8de9f3;--hg-green:#2ecc8a;--hg-green2:#63e3ad;--hg-red:#ff5a6a;--hg-yt:#ff0033;
+  --hg-text:#eef2f8;--hg-muted:#a7b6c9;--hg-muted2:#7386a0;
+  --hg-line:rgba(128,168,214,.16);--hg-line2:rgba(128,168,214,.3);--hg-line-gold:rgba(242,193,78,.5);
+  --hg-r:18px;--hg-r2:12px;--hg-shadow:0 14px 40px rgba(0,0,0,.45);
+  --hg-sans:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--hg-display:"Montserrat","Inter",system-ui,sans-serif;--hg-script:"Great Vibes",cursive;
+  --hg-gold-grad:linear-gradient(90deg,#ffe08a,#f2c14e 55%,#d9a63a);
+}

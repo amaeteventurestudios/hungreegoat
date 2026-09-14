@@ -1,0 +1,1 @@
+{ "name": "@hungreegoat/website", "private": true, "version": "1.0.0", "scripts": { "build": "node ../../packages/shared/build.mjs website", "dev": "node ../../packages/shared/build.mjs website && npx -y serve dist -l 4173" } }

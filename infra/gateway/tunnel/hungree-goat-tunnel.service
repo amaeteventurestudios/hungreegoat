@@ -1,0 +1,15 @@
+# User unit on pi-node-01: keeps a reverse SSH tunnel to the Hetzner gateway so that
+# 127.0.0.1:18090 on the gateway reaches the control backend (pi:8090). No inbound ports on the Pi/router.
+[Unit]
+Description=HUNGREE Goat reverse tunnel to gateway
+After=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/ssh -NT -o ServerAliveInterval=20 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -o StrictHostKeyChecking=accept-new -o BatchMode=yes -i %h/.ssh/hg-tunnel -R 127.0.0.1:18090:127.0.0.1:8090 hgtunnel@65.21.7.133
+Restart=always
+RestartSec=15
+
+[Install]
+WantedBy=default.target

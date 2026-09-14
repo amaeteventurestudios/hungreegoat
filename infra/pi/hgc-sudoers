@@ -1,0 +1,3 @@
+# /etc/sudoers.d/hgc-usb-repair — lets HUNGREE Goat Control self-heal the USB drive.
+# The helper must be root-owned and not writable by aumanah (installed with `install -o root -m 755`).
+aumanah ALL=(root) NOPASSWD: /usr/local/sbin/hgc-usb-repair

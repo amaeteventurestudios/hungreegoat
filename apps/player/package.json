@@ -1,0 +1,1 @@
+{ "name": "@hungreegoat/player", "private": true, "version": "1.0.0", "scripts": { "build": "node ../../packages/shared/build.mjs player", "dev": "node ../../packages/shared/build.mjs player && npx -y serve dist -l 4174" } }

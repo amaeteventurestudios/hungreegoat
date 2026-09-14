@@ -1,0 +1,43 @@
+# secrets — never commit
+secrets/
+*.env
+!*.env.example
+!youtube.env.example
+operator.json
+operator-password.txt
+*.key
+*.pem
+*.crt
+*.token
+hg-tunnel
+hg-tunnel.pub.local
+# runtime state
+logs/
+run/
+data/
+*.sqlite3
+*.sqlite3-*
+*.db
+*.log
+# media
+media/
+music/
+uploads/
+*.wav
+*.mp3
+*.flac
+*.m4a
+*.mp4
+# build / deps
+__pycache__/
+*.pyc
+venv/
+.venv/
+node_modules/
+dist/
+.vercel/
+.DS_Store
+._*
+# generated brand copies inside the control app (run apps/control/scripts/sync-brand.sh)
+apps/control/static/assets/img/
+apps/control/static/assets/fonts/

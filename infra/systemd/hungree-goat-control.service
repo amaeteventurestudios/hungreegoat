@@ -1,0 +1,16 @@
+[Unit]
+Description=HUNGREE Goat Control (API + dashboard)
+After=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+Type=simple
+WorkingDirectory=%h/hungree-goat/app
+ExecStart=%h/hungree-goat/venv/bin/python -m hgc serve
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

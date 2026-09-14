@@ -1,0 +1,19 @@
+[Unit]
+Description=HUNGREE Goat video stream (FFmpeg) — station %i
+After=hungree-goat-liquidsoap@%i.service hungree-goat-control.service
+Wants=hungree-goat-liquidsoap@%i.service
+StartLimitIntervalSec=600
+StartLimitBurst=8
+
+[Service]
+Type=simple
+WorkingDirectory=%h/hungree-goat/app
+ExecStartPre=%h/hungree-goat/bin/hgc-wait-media.sh
+ExecStart=%h/hungree-goat/venv/bin/python -m hgc stream %i
+Restart=always
+RestartSec=8
+TimeoutStopSec=20
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target
