@@ -84,8 +84,9 @@ main = main_dyn
 # whatever is in /media/hungree-goat/fallback, then generated silence-safe tone-free blank.
 # Source tags travel inside the request (annotate:) — no metadata.map wrapper, which
 # crashed with Source.Unavailable when pulled while its child had an empty queue.
-backup = playlist(id="backup", mode="randomize", reload=300, reload_mode="seconds",
-                  prefix="annotate:hgc_source=\"backup\":", fallback_m3u)
+backup_pl = playlist(id="backup", mode="randomize", reload=300, reload_mode="seconds",
+                     prefix="annotate:hgc_source=\"backup\":", fallback_m3u)
+backup = backup_pl
 # Give the backend-driven main source a 4 s head start at boot so the station
 # does not begin its day on the backup playlist just because of fetch latency.
 backup = source.available(backup, {time.up() > 4.})
@@ -159,18 +160,40 @@ output.harbor(id="listen", mount="/#{station}-listen.mp3", port=harbor_port,
 
 # Extra server commands for the backend.
 server.register(namespace="hgc", "requeue", fun (_) -> begin main_dyn.set_queue([]); "OK" end)
-# Skip whatever is on air (the skip propagates to the selected child source).
+# Skip the track that is actually on air. The on-air source is read from the last metadata
+# (annotate:hgc_source) so a skip right after a fallback switch lands on the right child
+# instead of on the switch's transition source.
 server.register(namespace="hgc", "skip", fun (_) -> begin
   if live.is_ready() or remote.is_ready() then
     "live input on air; not skipped"
   else
-    radio.skip()
-    "skipped"
+    m = radio.last_metadata() ?? []
+    src = m["hgc_source"]
+    if src == "main" then main_dyn.skip() "skipped main"
+    elsif src == "backup" then backup.skip() "skipped backup"
+    elsif src == "emergency" then emergency.skip() "skipped emergency"
+    else radio.skip() "skipped" end
   end
 end)
+# Track id of the request a source is currently playing ("" when none).
+def cur_track(r) =
+  if null.defined(r) then
+    m = request.metadata(null.get(r))
+    m["hgc_track_id"]
+  else
+    ""
+  end
+end
+
+def on_air_source() =
+  m = radio.last_metadata() ?? []
+  m["hgc_source"]
+end
+
 # One-shot state for the backend (one socket round-trip per dashboard refresh).
 server.register(namespace="hgc", "state", fun (_) ->
-  json.stringify({uptime=time.up(), live=live.is_ready(), remote=remote.is_ready(), main=main.is_ready(),
+  json.stringify({uptime=time.up(), on_air_source=on_air_source(),
+                  main_current=cur_track(main_dyn.current()), backup_current=cur_track(backup_pl.current()), live=live.is_ready(), remote=remote.is_ready(), main=main.is_ready(),
                   backup=backup.is_ready(), emergency=emergency.is_ready(), forced=force_fallback(),
                   elapsed=radio.elapsed(), remaining=radio.remaining(), duration=radio.duration(),
                   queue_len=list.length(main_dyn.queue()),

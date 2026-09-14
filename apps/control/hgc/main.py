@@ -373,12 +373,35 @@ def _sync_now_from_liq(sid: str) -> None:
             pass
 
 
+def _reconcile_now(sid: str, state: dict) -> None:
+    """The on_metadata callback can be swallowed during a switch transition; the engine's
+    actual current request is authoritative. Rebuild NOW when they disagree."""
+    src = state.get("on_air_source") or NOW[sid].get("source")
+    cur = state.get("main_current") if src == "main" else state.get("backup_current") if src == "backup" else None
+    if cur and str(cur).isdigit() and NOW[sid].get("track_id") != int(cur):
+        t = db.q1("SELECT * FROM tracks WHERE id=?", (int(cur),))
+        if t:
+            internal_now_playing(NowPlaying(station=sid, filename=t["path"], title=t["title"], artist=t["artist"], source=src,
+                                            track_id=str(t["id"])), _LocalRequest())
+    elif NOW[sid].get("title") is None:
+        _sync_now_from_liq(sid)
+
+
+class _LocalRequest:
+    """Minimal stand-in so the internal handler's loopback/token check passes for in-process calls."""
+    client = type("c", (), {"host": "127.0.0.1"})()
+    headers = {}
+
+    def __init__(self):
+        self.headers = {"X-HGC-Token": auth.internal_token()}
+
+
 def station_status(sid: str) -> dict:
     st = config.station(sid)
     ls = liq.status(sid)
     liq_alive = "uptime" in ls
-    if liq_alive and NOW[sid].get("title") is None:
-        _sync_now_from_liq(sid)
+    if liq_alive:
+        _reconcile_now(sid, ls_full := liq.state(sid))
     now = dict(NOW[sid])
     pos = liq.position(sid) if liq_alive else {}
     remaining = pos.get("remaining")
