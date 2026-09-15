@@ -17,7 +17,7 @@ import shutil
 import subprocess
 import urllib.request
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -393,6 +393,20 @@ def _reconcile_now(sid: str, state: dict) -> None:
     """The on_metadata callback can be swallowed during a switch transition; the engine's
     actual current request is authoritative. Rebuild NOW when they disagree."""
     src = state.get("on_air_source") or NOW[sid].get("source")
+    if state.get("live") is True:      # a live input is connected and has priority: no track metadata exists
+        if NOW[sid].get("source") != "live":
+            prev_src = NOW[sid].get("source")
+            NOW[sid] = {"title": "Live from this device", "artist": "HUNGREE Goat DJ", "album": "", "genre": config.station(sid)["genre"],
+                        "filename": None, "track_id": None, "duration": None, "source": "live", "artwork": str(config.DEFAULT_ARTWORK),
+                        "kind": "live", "started_at": time.time()}
+            db.log_event("warning", "fallback", f"Source changed: {prev_src} → live (DJ input on air)", sid)
+            try:
+                overlay.render(sid, "Live", "HUNGREE Goat DJ", "Live from the studio", None, kind="live")
+            except Exception:
+                pass
+        return
+    if NOW[sid].get("source") == "live":
+        NOW[sid]["source"] = None   # live ended: fall through and rebuild from the engine's current request
     cur = state.get("main_current") if src == "main" else state.get("backup_current") if src == "backup" else None
     if cur and str(cur).isdigit() and NOW[sid].get("track_id") != int(cur):
         t = db.q1("SELECT * FROM tracks WHERE id=?", (int(cur),))
@@ -1490,6 +1504,89 @@ def _asset_version() -> str:
     except OSError:
         parts = [str(int(time.time()))]
     return hashlib.sha1("|".join(parts).encode()).hexdigest()[:10]
+
+
+# ---------------------------------------------------------------------------
+# Go Live From This Device: authenticated WebSocket carrying raw PCM from the browser's
+# microphone → FFmpeg (MP3) → Liquidsoap's live harbor mount. Only the control backend
+# talks to the harbor; the browser never sees ports, passwords or the control socket.
+DJ_SESSIONS: dict[str, dict] = {}
+
+
+@app.websocket("/api/stations/{sid}/dj/ws")
+async def dj_ws(websocket: WebSocket, sid: str):
+    user = auth.check(websocket.cookies.get(auth.COOKIE))
+    if not user or sid not in config.STATIONS:
+        await websocket.close(code=4401)
+        return
+    await websocket.accept()
+    st = config.station(sid)
+    rate = int(websocket.query_params.get("rate", "48000")); ch = int(websocket.query_params.get("channels", "1"))
+    rate = rate if rate in (44100, 48000) else 48000; ch = 1 if ch != 2 else 2
+    pw = (config.SECRETS_DIR / f"live-{sid}.password").read_text().strip()
+    cmd = ["ffmpeg", "-v", "error", "-nostdin", "-f", "s16le", "-ar", str(rate), "-ac", str(ch), "-i", "pipe:0",
+           "-ac", "2", "-ar", "48000", "-c:a", "libmp3lame", "-b:a", "192k", "-content_type", "audio/mpeg", "-ice_name", "HUNGREE Goat DJ",
+           "-f", "mp3", f"icecast://source:{pw}@127.0.0.1:{st['live_port']}/live"]
+    proc = await __import__("asyncio").create_subprocess_exec(*cmd, stdin=__import__("asyncio").subprocess.PIPE, stderr=__import__("asyncio").subprocess.PIPE)
+    DJ_SESSIONS[sid] = {"user": user, "since": time.time(), "bytes": 0}
+    db.log_event("info", "stream", f"DJ session opened from the browser by {user}", sid)
+    try:
+        while True:
+            msg = await websocket.receive()
+            if msg.get("type") == "websocket.disconnect":
+                break
+            data = msg.get("bytes")
+            if data:
+                DJ_SESSIONS[sid]["bytes"] += len(data)
+                try:
+                    proc.stdin.write(data); await proc.stdin.drain()
+                except (BrokenPipeError, ConnectionResetError):
+                    err = (await proc.stderr.read()).decode(errors="replace")[-300:]
+                    db.log_event("error", "stream", f"DJ audio pipe closed: {err.strip() or 'ffmpeg exited'}", sid)
+                    await websocket.send_text(json.dumps({"error": "encoder stopped"}))
+                    break
+            elif msg.get("text"):
+                t = msg["text"]
+                if t == "ping":
+                    await websocket.send_text(json.dumps({"ok": True, "bytes": DJ_SESSIONS[sid]["bytes"], "live": liq.state(sid).get("live")}))
+    except WebSocketDisconnect:
+        pass
+    finally:
+        DJ_SESSIONS.pop(sid, None)
+        try:
+            proc.stdin.close()
+        except Exception:
+            pass
+        try:
+            await __import__("asyncio").wait_for(proc.wait(), 3)
+        except Exception:
+            proc.kill()
+        db.log_event("info", "stream", "DJ session closed", sid)
+
+
+class DjBody(BaseModel):
+    live: bool
+
+
+@app.post("/api/stations/{sid}/dj/take")
+def dj_take(sid: str, body: DjBody, user: str = Depends(current_user)):
+    """Take Live = let the live input take priority; Return = hand back to scheduled music."""
+    _sid(sid)
+    db.set_setting(sid, "live_mic_enabled", body.live)
+    try:
+        liq.set_var(sid, "live_enabled", body.live)
+    except liq.LiqError as e:
+        raise HTTPException(503, f"audio engine unavailable: {e}")
+    db.log_event("warning" if body.live else "info", "fallback", ("Operator took the station LIVE from the browser" if body.live else "Returned to scheduled music"), sid)
+    return {"ok": True, "live": body.live, "session": DJ_SESSIONS.get(sid)}
+
+
+@app.get("/api/stations/{sid}/dj/status")
+def dj_status(sid: str, user: str = Depends(current_user)):
+    _sid(sid)
+    st = liq.state(sid)
+    return {"session": DJ_SESSIONS.get(sid), "harbor_connected": st.get("live") is True, "on_air": st.get("on_air_source") == "live",
+            "enabled": bool(db.get_setting(sid, "live_mic_enabled")), "secure_context_required": True}
 
 
 # ---------------------------------------------------------------------------
