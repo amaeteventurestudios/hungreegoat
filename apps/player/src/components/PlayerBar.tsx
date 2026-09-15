@@ -2,7 +2,7 @@
 import { usePlayer } from '../store/PlayerContext';
 import { fmt } from '../lib/api';
 export default function PlayerBar() {
-  const { s, d, toggle } = usePlayer();
+  const { s, d, toggle, setMode, play } = usePlayer();
   const now = s.now; const t = s.tracks[s.index];
   const live = s.mode === 'live';
   const title = live ? (now?.live ? now.title : 'Station is off air') : t?.title || 'Loading catalog…';
@@ -15,7 +15,7 @@ export default function PlayerBar() {
     <div className="footer">
       <div className="song-name">
         <img className="art" src={art} alt="" />
-        <div className="txt"><span className={`badge ${live ? (now?.live ? 'live' : 'off') : 'explore'}`}>{live ? (now?.live ? 'LIVE' : 'OFF AIR') : 'EXPLORE'}</span><b>{title}</b><small>{artist}{live && now?.station ? ` · ${now.station}` : ''}</small>
+        <div className="txt">{live ? <span className={`badge ${now?.live ? 'live' : 'off'}`}>{now?.live ? 'LIVE' : 'OFF AIR'}</span> : <button className="badge explore" onClick={() => { setMode('live'); play(); }} title="Return to the live broadcast">CATALOG · BACK TO LIVE</button>}<b>{title}</b><small>{artist}{live && now?.station ? ` · ${now.station}` : ''}</small>
           {dur > 0 && <div className="prog"><i style={{ width: `${Math.min(100, elapsed / dur * 100)}%` }} /><em>{fmt(elapsed)} / {fmt(dur)}</em></div>}</div>
       </div>
       <div className="controller">

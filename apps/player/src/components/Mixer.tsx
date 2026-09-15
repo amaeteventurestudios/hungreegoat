@@ -13,8 +13,9 @@ export default function Mixer() {
         {s.panel === 'mix' && (
           <div className="modifierBox">
             <h4>Scene</h4>
+            <div className="skins">{s.skins.map(x => <button key={x.id} className={`skin ${x.id === s.skinId ? 'on' : ''}`} onClick={() => d({ type: 'skin', id: x.id })} title={x.name}>{x.thumbnail ? <img src={x.thumbnail} alt="" /> : x.video ? <video src={x.video} muted loop playsInline /> : <span className="ph" style={{ background: x.accent || '#22344a' }} />}<b>{x.name}</b></button>)}</div>
+            <h5>Time of day</h5>
             <div className="times">{TIMES.map(t => <button key={t} className={s.time === t ? 'on' : ''} onClick={() => d({ type: 'time', time: t })}>{TIME_LABEL[t]}</button>)}<button className={s.timeAuto ? 'on' : ''} onClick={() => d({ type: 'time', time: 'auto' })} title="Follow the clock">Auto</button></div>
-            <div className="skins">{s.skins.filter(x => x.time === s.time).map(x => <button key={x.id} className={`skin ${x.id === s.skinId ? 'on' : ''}`} onClick={() => d({ type: 'skin', id: x.id })} title={x.name}>{x.thumbnail ? <img src={x.thumbnail} alt="" /> : <span className="ph" style={{ background: x.accent || '#22344a' }} />}<b>{x.name}</b></button>)}</div>
             <div className="volume"><span className="lbl">Volume</span><input type="range" min={0} max={100} value={Math.round(s.volume * 100)} onChange={e => d({ type: 'set', patch: { volume: +e.target.value / 100, muted: false } })} aria-label="Music volume" /><b>{Math.round(s.volume * 100)}</b></div>
             <h5>Ambient sounds</h5>
             <div className="backgroundNoise">{AMBIENCE.map(a => (
@@ -22,7 +23,7 @@ export default function Mixer() {
                 <button className="tgl" onClick={() => d({ type: 'ambience', key: a.key, value: (s.ambience[a.key] || 0) > 0 ? 0 : 35 })} aria-pressed={(s.ambience[a.key] || 0) > 0}>{a.label}</button>
                 <input type="range" min={0} max={100} value={s.ambience[a.key] || 0} onChange={e => d({ type: 'ambience', key: a.key, value: +e.target.value })} aria-label={`${a.label} volume`} />
               </div>))}</div>
-            {skin && <div className="hint">Scene: {skin.name}{skin.source === 'operator' ? ' · HUNGREE Goat skin' : ''}</div>}
+            {skin && <div className="hint">Scene: {skin.name}{skin.source === 'custom' ? ' · HUNGREE Goat skin' : ''}</div>}
           </div>)}
       </div>
       <div className="modifier__icon"><button className={`icon ${s.panel === 'focus' ? 'active' : ''}`} onClick={() => open('focus')} aria-label="Focus mode" title="Focus">

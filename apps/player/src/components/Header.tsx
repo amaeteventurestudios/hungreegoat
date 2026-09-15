@@ -11,7 +11,7 @@ const I = {
   dusk: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 18h18M6 14a6 6 0 0 1 12 0M12 9V6M8 20h8" /></svg>,
 };
 export default function Header() {
-  const { s, d, setMode } = usePlayer();
+  const { s, d } = usePlayer();
   const [fs, setFs] = useState(false);
   useEffect(() => { const h = () => setFs(!!document.fullscreenElement); document.addEventListener('fullscreenchange', h); return () => document.removeEventListener('fullscreenchange', h); }, []);
   const fullscreen = () => { if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {}); else document.exitFullscreen?.(); };
@@ -20,11 +20,7 @@ export default function Header() {
   const yt = s.stations.find(x => x.id === s.station)?.youtube_url || YT_ENV;
   return (
     <nav className="wrap">
-      <a className="brand" href={HOME} title="Back to hungreegoat.com"><img src="/assets/logo.png" alt="HUNGREE Goat Music" /><span><b>HUNGREE GOAT</b><small>PLAYER</small></span></a>
-      <div className="modes" role="tablist" aria-label="Mode">
-        <button role="tab" aria-selected={s.mode === 'live'} className={s.mode === 'live' ? 'on' : ''} onClick={() => setMode('live')}><i className={`dot ${s.now?.live ? 'live' : ''}`} />Live</button>
-        <button role="tab" aria-selected={s.mode === 'explore'} className={s.mode === 'explore' ? 'on' : ''} onClick={() => setMode('explore')}>Explore</button>
-      </div>
+      <a className="brand" href={HOME} title="Back to hungreegoat.com"><img src="/assets/logo.png" alt="HUNGREE Goat" /><b>HUNGREE GOAT MUSIC PLAYER</b></a>
       <div className="nav-menu">
         <a href={HOME} className="home">← hungreegoat.com</a>
         {yt && <a href={yt} target="_blank" rel="noreferrer" className="yt">YouTube</a>}

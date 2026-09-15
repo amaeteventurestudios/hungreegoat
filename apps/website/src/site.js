@@ -4,17 +4,19 @@
   const h = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const PLAYER = window.HG_PLAYER_URL || 'https://player.hungreegoat.com';
   let station = 'lofi', now = null, ytUrl = window.HG_YOUTUBE_URL || '';
+  const xUrl = window.HG_X_URL || '';
   document.querySelector('[data-year]').textContent = new Date().getFullYear();
   $$('.player-link').forEach(a => { a.href = a.dataset.playerStation ? `${PLAYER}/?station=${a.dataset.playerStation}` : PLAYER; });
   function applyYouTube(url) { ytUrl = url || ''; $$('.yt-link').forEach(a => { if (ytUrl) { a.href = ytUrl; a.hidden = false; } else { a.hidden = true; } }); $$('.yt-fallback').forEach(b => { b.hidden = !!ytUrl; }); }
   applyYouTube(ytUrl);
+  if (xUrl) $$('.x-link').forEach(a => { a.href = xUrl; a.hidden = false; });
 
   /* mobile drawer */
   const burger = $('[data-menu]'), drawer = $('#drawer');
   burger.addEventListener('click', () => { const open = drawer.hidden; drawer.hidden = !open; burger.setAttribute('aria-expanded', String(open)); });
   drawer.addEventListener('click', e => { if (e.target.tagName === 'A') { drawer.hidden = true; burger.setAttribute('aria-expanded', 'false'); } });
   /* active nav on scroll */
-  const secs = ['home','now','stations','why','schedule','about'].map(id => document.getElementById(id)).filter(Boolean);
+  const secs = ['home','now','stations','why','about'].map(id => document.getElementById(id)).filter(Boolean);
   const io = new IntersectionObserver(es => { es.forEach(en => { if (en.isIntersecting) $$('.nav a').forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + (en.target.id === 'now' ? 'home' : en.target.id === 'why' ? 'about' : en.target.id))); }); }, { rootMargin: '-40% 0px -50% 0px' });
   secs.forEach(s => io.observe(s));
 
@@ -35,7 +37,7 @@
   /* live data */
   const liveEl = $('[data-live]');
   function render(s) {
-    if (!s.ok) { liveEl.className = 'live off'; liveEl.innerHTML = '<i></i>OFFLINE'; if (!now) { $('[data-title]').textContent = 'Stream information unavailable'; $('[data-artist]').textContent = 'Listen Live still works when the station is up.'; const strip = $('[data-schedule]'); if (strip.querySelector('.empty')) strip.innerHTML = '<div class="slot empty">The schedule could not be loaded right now.</div>'; } return; }
+    if (!s.ok) { liveEl.className = 'live off'; liveEl.innerHTML = '<i></i>OFFLINE'; if (!now) { $('[data-title]').textContent = 'Stream information unavailable'; $('[data-artist]').textContent = 'Listen Live still works when the station is up.'; } return; }
     if (s.unchanged) { tickProgress(); return; }
     now = s.now;
     const st = s.stations.find(x => x.id === station) || {};
@@ -48,12 +50,8 @@
     $$('[data-art]').forEach(img => { if (img.dataset.src !== now.artwork) { const n = new Image(); n.onload = () => { img.src = now.artwork; img.dataset.src = now.artwork; }; n.src = now.artwork; } });
     const prog = $('[data-prog]'); prog.hidden = !(now.live && now.duration); tickProgress();
     const un = $('[data-upnext]');
-    un.innerHTML = s.upNext.length ? s.upNext.slice(0, 6).map((t, i) => `<li><span class="n">${i + 1}</span><img src="${h(t.artwork)}" alt="" loading="lazy" width="44" height="44"><div><b>${h(t.title)}</b><span class="a">${h(t.artist || '')}${t.source === 'request' ? ' · listener request' : t.source === 'planned' ? ' · planned' : ''}</span></div><span class="d">${HG.fmt(t.duration)}</span></li>`).join('') : '<li class="empty">Up next is decided live by the station — check back in a moment.</li>';
-    s.stations.forEach(st => { const card = $(`[data-station-card="${st.id}"]`); if (!card) return; const l = $('[data-st-live]', card); if (st.status === 'live') { l.className = 'live'; l.innerHTML = '<i></i>LIVE NOW'; card.classList.remove('soon'); const b = $('[data-listen]', card); } else if (st.status === 'coming_soon') { l.className = 'live soon'; l.innerHTML = '<i></i>COMING SOON'; } else { l.className = 'live off'; l.innerHTML = '<i></i>OFF AIR'; } if (st.description) $('[data-st-desc]', card).textContent = st.description; });
-    const sch = s.schedule; const strip = $('[data-schedule]');
-    const ico = (start) => { const hr = +String(start).split(':')[0]; return hr < 6 ? '🌙' : hr < 12 ? '🌅' : hr < 18 ? '☀️' : '🌆'; };
-    strip.innerHTML = (sch.today || []).length ? sch.today.map(b => `<div class="slot ${b.on_now ? 'now' : ''} ${b.next ? 'next' : ''}"><span class="ico">${ico(b.start)}</span>${b.on_now ? '<span class="badge">NOW PLAYING</span>' : b.next ? '<span class="badge nx">UP NEXT</span>' : ''}<span class="t">${h(b.start)} – ${h(b.end)}</span><b>${h(b.name)}</b><span>${h(b.description || '')}</span><small>${h(now.station || 'HUNGREE Goat')}</small></div>`).join('') : '<div class="slot empty">No programme published for today.</div>';
-    if (sch.timezone) $('[data-sched-note]').textContent = `Times in station time (${sch.timezone}).`;
+    un.innerHTML = s.upNext.length ? s.upNext.slice(0, 5).map((t, i) => `<li><span class="n">${i + 1}</span><img src="${h(t.artwork)}" alt="" loading="lazy" width="44" height="44"><div><b>${h(t.title)}</b><span class="a">${h(t.artist || '')}${t.source === 'request' ? ' · listener request' : t.source === 'planned' ? ' · planned' : ''}</span></div><span class="d">${HG.fmt(t.duration)}</span></li>`).join('') : '<li class="empty">Up next is decided live by the station. Check back in a moment.</li>';
+    s.stations.forEach(st => { const card = $(`[data-station-card="${st.id}"]`); if (!card) return; const l = $('[data-st-live]', card); if (st.status === 'live') { l.className = 'live'; l.innerHTML = '<i></i>LIVE NOW'; card.classList.remove('soon'); } else if (st.status === 'coming_soon') { l.className = 'live soon'; l.innerHTML = '<i></i>COMING SOON'; } else { l.className = 'live off'; l.innerHTML = '<i></i>OFF AIR'; } if (st.description) $('[data-st-desc]', card).textContent = st.description; });
   }
   let lastState = null;
   function tickProgress() { if (!now || !now.live || !now.duration) return; const started = now.started_at ? new Date(now.started_at).getTime() : null; const el = started ? Math.min(now.duration, (Date.now() - started) / 1000) : (now.elapsed || 0); $('[data-el]').textContent = HG.fmt(el); $('[data-dur]').textContent = HG.fmt(now.duration); $('[data-prog] .bar b').style.width = Math.min(100, el / now.duration * 100) + '%'; }

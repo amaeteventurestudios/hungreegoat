@@ -18,9 +18,10 @@ cpSync(join(root, 'packages', 'shared', 'hg-api.js'), join(dist, 'assets', 'hg-a
 cpSync(join(root, 'packages', 'ui', 'hg-ui.css'), join(dist, 'assets', 'hg-ui.css'));
 const apiBase = process.env.HG_API_BASE || 'https://api.hungreegoat.com';
 const youtube = process.env.HG_YOUTUBE_URL || '';
+const x = process.env.HG_X_URL || '';
 const player = process.env.HG_PLAYER_URL || 'https://player.hungreegoat.com';
 const home = process.env.HG_HOME_URL || 'https://hungreegoat.com';
-writeFileSync(join(dist, 'assets', 'config.js'), `window.HG_API_BASE=${JSON.stringify(apiBase)};window.HG_YOUTUBE_URL=${JSON.stringify(youtube)};window.HG_PLAYER_URL=${JSON.stringify(player)};window.HG_HOME_URL=${JSON.stringify(home)};\n`);
+writeFileSync(join(dist, 'assets', 'config.js'), `window.HG_API_BASE=${JSON.stringify(apiBase)};window.HG_YOUTUBE_URL=${JSON.stringify(youtube)};window.HG_X_URL=${JSON.stringify(x)};window.HG_PLAYER_URL=${JSON.stringify(player)};window.HG_HOME_URL=${JSON.stringify(home)};\n`);
 // content hash of everything except html → version query
 const h = createHash('sha1');
 (function walk(d) { for (const f of readdirSync(d).sort()) { const p = join(d, f); if (statSync(p).isDirectory()) walk(p); else if (!p.endsWith('.html')) h.update(readFileSync(p)); } })(dist);

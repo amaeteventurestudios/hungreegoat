@@ -10,7 +10,16 @@ export interface UpNextItem { title: string; artist: string; duration: number; a
 export interface ScheduleBlock { name: string; description: string; start: string; end: string; on_now: boolean; next: boolean; }
 export interface Schedule { timezone: string; now: string | null; next_switch: string | null; today: ScheduleBlock[]; }
 export interface Track { id: number; title: string; artist: string; album: string; genre: string; duration: number; artwork: string; audio: string; }
-export interface Skin { id: string; name: string; time: 'dawn' | 'afternoon' | 'dusk' | 'night'; enabled: boolean; order: number; accent?: string | null; video?: string | null; image?: string | null; thumbnail?: string | null; ambience?: Record<string, number>; default?: boolean; source: 'bundled' | 'operator'; }
+export type TimeVariant = { video?: string | null; image?: string | null };
+export interface Skin {
+  id: string; name: string; description?: string; enabled: boolean; order: number; accent?: string | null;
+  video?: string | null; image?: string | null; thumbnail?: string | null;
+  /* A skin is a visual scene, independent of time of day. time_mode 'variants' means the
+     operator attached optional per-time-of-day assets on top of the same scene — it never
+     means the scene itself changes when the time changes. */
+  time_mode: 'always' | 'variants'; time_variants?: Partial<Record<'dawn' | 'afternoon' | 'dusk' | 'night', TimeVariant>>;
+  ambience?: Record<string, number>; default?: boolean; source: 'built-in' | 'custom'; overridden?: boolean;
+}
 
 async function get<T>(path: string, timeout = 8000): Promise<T> {
   const c = new AbortController(); const t = setTimeout(() => c.abort(), timeout);
@@ -22,6 +31,11 @@ export const api = {
   stations: () => get<{ stations: Station[] }>('/v1/stations').then(d => d.stations.map(s => ({ ...s, stream_url: abs(s.stream_url) }))),
   schedule: (s: string) => get<Schedule>(`/v1/schedule?station=${s}`),
   tracks: (s: string) => get<{ tracks: Track[] }>(`/v1/tracks?station=${s}`).then(d => d.tracks.map(t => ({ ...t, artwork: abs(t.artwork), audio: abs(t.audio) }))),
-  skins: () => get<{ skins: Skin[]; default: string | null }>('/v1/skins').then(d => ({ skins: d.skins.map(s => ({ ...s, video: abs(s.video), image: abs(s.image), thumbnail: abs(s.thumbnail) })), def: d.default })),
+  skins: () => get<{ skins: Skin[]; default: string | null }>('/v1/skins').then(d => ({
+    skins: d.skins.map(s => ({
+      ...s, video: abs(s.video), image: abs(s.image), thumbnail: abs(s.thumbnail),
+      time_variants: s.time_variants && Object.fromEntries(Object.entries(s.time_variants).map(([k, v]) => [k, { video: abs(v?.video), image: abs(v?.image) }])),
+    })), def: d.default,
+  })),
 };
 export const fmt = (s?: number | null) => { if (s == null || isNaN(s)) return '--:--'; s = Math.max(0, Math.round(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };

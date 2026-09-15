@@ -8,7 +8,7 @@ and restarts the control service. Restart the engine after a `station.liq` chang
 Until `api.hungreegoat.com` exists (gateway + DNS), the deployed site and player cannot reach the broadcast core and show their offline states; audio only works once the API is public.
 Two Vercel projects from this repo (root directory `apps/website` and `apps/player`; framework "Other").
 Build command and output are in each `vercel.json` (`node ../../packages/shared/build.mjs <app>` → `dist`).
-Website env: `HG_API_BASE`, `HG_PLAYER_URL`, `HG_HOME_URL`, optional `HG_YOUTUBE_URL`. Player (Vite) env: `VITE_HG_API_BASE`, `VITE_HG_HOME_URL`, optional `VITE_HG_YOUTUBE_URL` — defaults point at the production hostnames.
+Website env: `HG_API_BASE`, `HG_PLAYER_URL`, `HG_HOME_URL`, optional `HG_YOUTUBE_URL` and `HG_X_URL` (the site links only to YouTube and X; the X link stays hidden until this is set). Player (Vite) env: `VITE_HG_API_BASE`, `VITE_HG_HOME_URL`, optional `VITE_HG_YOUTUBE_URL` — defaults point at the production hostnames.
 Domains: website → `hungreegoat.com` + `www.hungreegoat.com` (redirect to apex); player → `player.hungreegoat.com`.
 Assets are content-hashed (`?v=`), HTML is `must-revalidate`, `/assets/*` immutable — no stale-bundle problem.
 
