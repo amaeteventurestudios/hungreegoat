@@ -17,3 +17,4 @@ Assets are content-hashed (`?v=`), HTML is `must-revalidate`, `/assets/*` immuta
 2. Create DNS A records for `api.` and `dashboard.` → 65.21.7.133.
 3. On the gateway as root: `infra/gateway/install-hetzner.sh` (creates `hgtunnel`, installs the two vhosts, certbot).
 4. Verify: `curl https://api.hungreegoat.com/v1/live`; open `https://dashboard.hungreegoat.com` → login page.
+- Deployments are accepted only for commits authored by the Vercel-linked GitHub account (`amaeteventurestudios`); the repo's local git config is set to its no-reply address.
