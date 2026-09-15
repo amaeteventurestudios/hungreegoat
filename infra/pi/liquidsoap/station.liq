@@ -119,14 +119,12 @@ main.on_blank(synchronous=false, fun () -> begin
   end
 end)
 
-# Track transitions: fade-out at the end of each track and fade-in at the start,
-# with the operator-set duration. Deliberately NOT the overlapping `crossfade`
-# operator: its look-ahead buffering wedged the pipeline twice during testing
-# (audio kept flowing but no request was on air and skips stopped working).
-# Per-track durations come from the backend as liq_fade_out / liq_fade_in metadata.
-main = fade.out(id="xfade", duration=5., main)
-main = fade.in(duration=1.5, main)
-backup = fade.in(duration=1.5, fade.out(duration=3., backup))
+# Track transitions: fade-in at the start of each track (duration per track via
+# liq_fade_in metadata from the backend). Deliberately NOT `crossfade` (its look-ahead
+# buffering wedged the pipeline under rapid skips) and NOT `fade.out` (on Liquidsoap
+# 2.4.5 it silences the entire output — verified stage-by-stage on 2026-09-15).
+main = fade.in(id="xfade", duration=1.5, main)
+backup = fade.in(duration=1.5, backup)
 
 # ---------------------------------------------------------------------------
 # Routing: live > remote > (forced fallback) > main > backup > emergency > silence

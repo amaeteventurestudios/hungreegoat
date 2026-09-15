@@ -131,6 +131,17 @@ class Streamer:
             except Exception:
                 pass
 
+    def stderr_reader(self, stderr, lf, secret: str | None) -> None:
+        """FFmpeg echoes the full output URL in its errors; the stream key must never reach the log."""
+        for raw in iter(stderr.readline, b""):
+            line = raw.decode(errors="replace")
+            if secret and len(secret) > 4:
+                line = line.replace(secret, "<redacted>")
+            try:
+                lf.write(line.encode()); lf.flush()
+            except ValueError:
+                break
+
     # ---- progress / status ------------------------------------------------
     def progress_reader(self, stdout) -> None:
         cur = {}
@@ -208,7 +219,10 @@ class Streamer:
             if mode == "none" and info.get("error"):
                 self.state.update(state="waiting", last_error=info["error"], started_at=None)
                 self.write_status()
-                time.sleep(10)
+                for _ in range(20):
+                    if self.stop_flag:
+                        break
+                    time.sleep(0.5)
                 continue
             try:
                 self.load_frame()
@@ -222,7 +236,9 @@ class Streamer:
                 lf.write(f"\n=== {time.strftime('%Y-%m-%d %H:%M:%S')} starting ffmpeg target={mode}\n".encode())
                 lf.write((" ".join(_redact(a) for a in cmd) + "\n").encode())
                 lf.flush()
-                self.proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=lf, bufsize=0)
+                self.proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0)
+                secret = next((a.rsplit("/", 1)[-1] for a in out_args if a.startswith("rtmp")), None)
+                threading.Thread(target=self.stderr_reader, args=(self.proc.stderr, lf, secret), daemon=True).start()
                 self.state.update(state="running", started_at=time.time(), last_error=None)
                 self.progress = {}
                 self.write_status()
@@ -247,7 +263,10 @@ class Streamer:
                               last_error=f"ffmpeg exited rc={rc} after {int(ran)}s")
             self.write_status()
             backoff = 3 if ran > 120 else min(60, backoff * 2)
-            time.sleep(backoff)
+            for _ in range(int(backoff * 2)):      # interruptible so a stop lands immediately
+                if self.stop_flag:
+                    break
+                time.sleep(0.5)
         self._kill()
         self.state.update(state="stopped")
         self.write_status()
@@ -263,6 +282,11 @@ class Streamer:
     def _on_term(self, *_):
         self.stop_flag = True
         self._kill()
+        self.state.update(state="stopped")
+        try:
+            self.write_status()
+        except Exception:
+            pass
 
 
 def _kbps(v) -> float | None:

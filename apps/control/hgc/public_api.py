@@ -14,7 +14,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
 
-from . import config, db, liq, scheduler, selector
+from . import config, db, liq, scheduler, selector, skins as skins_mod
 
 router = APIRouter(prefix="/v1", tags=["public"])
 _cache: dict[str, tuple[float, object]] = {}
@@ -171,6 +171,89 @@ def listen(sid: str, request: Request):
             upstream.close()
     return StreamingResponse(gen(), media_type="audio/mpeg", headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no",
                              "Access-Control-Allow-Origin": "*", "icy-name": config.station(sid)["name"]})
+
+
+# ---- Explore mode: public track catalog + per-track audio (cached MP3 transcodes) -------------
+MP3_CACHE = config.MEDIA / ".cache" / "mp3"
+
+
+def _tracks_public(sid: str) -> list[dict]:
+    rows = db.q("SELECT id,title,artist,album,genre,duration FROM tracks WHERE station=? AND corrupt=0 AND enabled=1 "
+                "ORDER BY title COLLATE NOCASE", (sid,))
+    return [{"id": r["id"], "title": r["title"], "artist": r["artist"], "album": r["album"], "genre": r["genre"],
+             "duration": round(r["duration"] or 0, 1), "artwork": f"/v1/artwork/{r['id']}.jpg", "audio": f"/v1/tracks/{r['id']}/audio.mp3"} for r in rows]
+
+
+@router.get("/tracks")
+def tracks(station: str = "lofi"):
+    if station not in config.STATIONS:
+        raise HTTPException(404)
+    return Response(content=__import__("json").dumps({"station_id": station, "tracks": _cached(f"tr-{station}", 30, lambda: _tracks_public(station))}),
+                    media_type="application/json", headers={**PUBLIC_HEADERS, "Cache-Control": "public, max-age=30"})
+
+
+def ensure_mp3(track_id: int) -> Path | None:
+    """Transcode once to MP3 128k on the media drive; subsequent plays are plain file serves."""
+    import subprocess
+    t = db.q1("SELECT path, mtime FROM tracks WHERE id=? AND corrupt=0", (track_id,))
+    if not t:
+        return None
+    MP3_CACHE.mkdir(parents=True, exist_ok=True)
+    out = MP3_CACHE / f"{track_id}.mp3"
+    if out.exists() and out.stat().st_size > 1000 and out.stat().st_mtime >= (t["mtime"] or 0):
+        return out
+    tmp = out.with_suffix(".tmp.mp3")
+    r = subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", t["path"], "-vn", "-ac", "2", "-ar", "44100", "-b:a", "128k",
+                        "-f", "mp3", str(tmp)], capture_output=True, timeout=600)
+    if r.returncode != 0 or not tmp.exists():
+        return None
+    tmp.replace(out)
+    return out
+
+
+@router.get("/tracks/{track_id}/audio.mp3")
+def track_audio(track_id: int, request: Request):
+    p = ensure_mp3(track_id)
+    if not p:
+        raise HTTPException(404)
+    size = p.stat().st_size
+    hdr = {"Accept-Ranges": "bytes", "Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=86400", "Content-Type": "audio/mpeg"}
+    rng = request.headers.get("range")
+    if rng and rng.startswith("bytes="):
+        a, _, b = rng[6:].partition("-")
+        start = int(a) if a else max(0, size - int(b or 0)); end = int(b) if (b and a) else size - 1
+        end = min(end, size - 1)
+        if start > end:
+            raise HTTPException(416)
+        def gen():
+            with open(p, "rb") as f:
+                f.seek(start); left = end - start + 1
+                while left > 0:
+                    chunk = f.read(min(65536, left)); left -= len(chunk)
+                    if not chunk:
+                        break
+                    yield chunk
+        hdr.update({"Content-Range": f"bytes {start}-{end}/{size}", "Content-Length": str(end - start + 1)})
+        return StreamingResponse(gen(), status_code=206, headers=hdr)
+    return FileResponse(p, media_type="audio/mpeg", headers=hdr)
+
+
+# ---- Player skins ----------------------------------------------------------------------------
+@router.get("/skins")
+def skins():
+    d = skins_mod.load()
+    return Response(content=__import__("json").dumps({"skins": skins_mod.public_list(), "default": d.get("default"), "updated_at": d.get("updated_at")}),
+                    media_type="application/json", headers={**PUBLIC_HEADERS, "Cache-Control": "public, max-age=30"})
+
+
+@router.get("/skins/assets/{name}")
+def skin_asset(name: str):
+    if "/" in name or name.startswith("."):
+        raise HTTPException(404)
+    p = skins_mod.SKINS_DIR / name
+    if not p.is_file():
+        raise HTTPException(404)
+    return FileResponse(p, headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=604800"})
 
 
 @router.options("/{rest:path}")

@@ -66,17 +66,21 @@ const I = {
   edit:P('<path d="M4 20h4l10-10-4-4L4 16z"/><path d="M13 7l4 4"/>'), copy:P('<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5h10"/>'), eye:P('<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'), grip:P('<path d="M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01" stroke-width="3"/>'),
   alert:P('<path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18h.01"/>'), info:P('<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>'), up:P('<path d="M12 19V5M5 12l7-7 7 7"/>'), down:P('<path d="M12 5v14M5 12l7 7 7-7"/>'),
 };
-const NAV = [['dashboard','Dashboard',I.home],['streams','Streams',I.stream],['schedules','Schedules',I.cal],['library','Library',I.music],['playlists','Playlists',I.list],['queue','Queue',I.queue],['sources','Sources',I.sources],['metadata','Metadata',I.tag],['outputs','Outputs',I.out],['youtube','YouTube Setup',I.yt],['alerts','Alerts',I.bell],['logs','Logs',I.logs],['settings','Settings',I.cog]];
+const NAV = [['dashboard','Dashboard',I.home],['streams','Streams',I.stream],['schedules','Schedules',I.cal],['library','Library',I.music],['playlists','Playlists',I.list],['queue','Queue',I.queue],['sources','Sources',I.sources],['metadata','Metadata',I.tag],['outputs','Outputs',I.out],['youtube','YouTube Setup',I.yt],['skins','Player Skins',I.image],['alerts','Alerts',I.bell],['logs','Logs',I.logs],['settings','Settings',I.cog]];
 
 /* ---------------- DOM morphing ---------------- */
 function morph(from, to) {
   if (from.nodeType === 3) { if (from.nodeValue !== to.nodeValue) from.nodeValue = to.nodeValue; return; }
   if (from.nodeType !== 1 || to.nodeType !== 1 || from.tagName !== to.tagName || from.getAttribute('data-key') !== to.getAttribute('data-key')) { from.replaceWith(to); return; }
-  const focused = document.activeElement === from;
-  for (const a of [...from.attributes]) if (!to.hasAttribute(a.name)) from.removeAttribute(a.name);
-  for (const a of [...to.attributes]) { if (focused && (a.name==='value')) continue; if (from.getAttribute(a.name) !== a.value) from.setAttribute(a.name, a.value); }
-  if (from.tagName==='INPUT' && !focused && from.type!=='file') { if (from.type==='checkbox'||from.type==='radio') from.checked = to.hasAttribute('checked'); else if (from.value !== (to.getAttribute('value')||'')) from.value = to.getAttribute('value')||''; }
-  if (from.tagName==='SELECT' && !focused) { const v = to.querySelector('option[selected]'); if (v && from.value !== v.value) from.value = v.value; }
+  // Never touch a form control the operator has edited (or is editing): a background
+  // refresh must not wipe a pasted stream key or a half-typed title.
+  const dirty = document.activeElement === from || from.hasAttribute('data-dirty') || (from.form && from.form.hasAttribute('data-dirty'));
+  for (const a of [...from.attributes]) if (!to.hasAttribute(a.name) && a.name !== 'data-dirty') from.removeAttribute(a.name);
+  for (const a of [...to.attributes]) { if (dirty && (a.name==='value'||a.name==='checked'||a.name==='selected')) continue; if (from.getAttribute(a.name) !== a.value) from.setAttribute(a.name, a.value); }
+  if (from.tagName==='INPUT' && !dirty && from.type!=='file') { if (from.type==='checkbox'||from.type==='radio') from.checked = to.hasAttribute('checked'); else if (from.value !== (to.getAttribute('value')||'')) from.value = to.getAttribute('value')||''; }
+  if (from.tagName==='TEXTAREA' && !dirty && from.value !== to.textContent) from.value = to.textContent;
+  if (from.tagName==='SELECT' && !dirty) { const v = to.querySelector('option[selected]'); if (v && from.value !== v.value) from.value = v.value; }
+  if (dirty && (from.tagName==='INPUT'||from.tagName==='TEXTAREA'||from.tagName==='SELECT')) return;
   if (from.hasAttribute('data-static')) return;
   const fc = [...from.childNodes], tc = [...to.childNodes];
   const keyed = new Map(); fc.forEach(n => { if (n.nodeType===1 && n.hasAttribute('data-key')) keyed.set(n.getAttribute('data-key'), n); });
@@ -195,7 +199,8 @@ function delegate(){ const root=document.body;
     // container actions (backdrop, dropzones) must not swallow clicks on their own controls
     if(el!==e.target && e.target.closest('button,input,select,textarea,label,a,[data-act]')!==el && e.target.closest('button,input,select,textarea,label,a')) return;
     if(el.tagName!=='A' || name!=='nav-close') e.preventDefault(); fn(el, e); });
-  root.addEventListener('submit', e=>{ const f=e.target.closest('[data-form]'); if(!f) return; e.preventDefault(); const fn=FORMS[f.dataset.form]; if(fn) fn(f, Object.fromEntries(new FormData(f).entries()), e); });
+  root.addEventListener('submit', e=>{ const f=e.target.closest('[data-form]'); if(!f) return; e.preventDefault(); const fn=FORMS[f.dataset.form]; f.removeAttribute('data-dirty'); f.querySelectorAll('[data-dirty]').forEach(x=>x.removeAttribute('data-dirty')); if(fn) fn(f, Object.fromEntries(new FormData(f).entries()), e); });
+  root.addEventListener('input', e=>{ const t=e.target; if(t && (t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT') && t.form && t.form.hasAttribute('data-form')) { t.setAttribute('data-dirty','1'); t.form.setAttribute('data-dirty','1'); } }, true);
   root.addEventListener('change', e=>{ const el=e.target.closest('[data-change]'); if(!el) return; const fn=CHANGES[el.dataset.change]; if(fn) fn(el, e); });
   root.addEventListener('input', e=>{ const el=e.target.closest('[data-input]'); if(!el) return; const fn=CHANGES[el.dataset.input]; if(fn) fn(el, e); });
   root.addEventListener('keydown', e=>{ if(e.key==='Enter'){ const el=e.target.closest('[data-act-enter]'); if(el){ e.preventDefault(); const fn=ACTIONS[el.dataset.actEnter]; if(fn) fn(el,e); } } if(e.key==='Escape'){ if(state.modal){ if(state.modal.res) state.modal.res(false); state.modal=null; render(); } else if(state.drawer){ state.drawer=null; render(); } } });

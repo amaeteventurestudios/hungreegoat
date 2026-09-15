@@ -136,8 +136,7 @@ def next_uri(sid: str) -> tuple[str | None, dict]:
     if settings.get("normalization") and t.get("replaygain_db") is not None:
         extra["replaygain_track_gain"] = f"{t['replaygain_db']:+.2f} dB"
     xf = float(settings.get("crossfade_sec") or 0)
-    extra["liq_fade_out"] = f"{xf:.1f}"
-    extra["liq_fade_in"] = f"{min(xf, 2.0):.1f}"
+    extra["liq_fade_in"] = f"{min(xf, 5.0):.1f}"
     return _annotate(t, extra), info
 
 

@@ -80,6 +80,7 @@ def _watchdog() -> None:
     last_repair = 0.0
     synced: dict[str, bool] = {}
     stall: dict[str, list] = {}   # sid -> [last_elapsed, unchanged_since]
+    silent_since: dict[str, float] = {}
     while True:
         try:
             u = metrics.usb()
@@ -126,6 +127,19 @@ def _watchdog() -> None:
                         services.action("liquidsoap", "restart", sid)
                         synced[sid] = False
                         continue
+                if alive:
+                    # Output-silence guard: a track is on air but the encoder input is dead silent.
+                    rms = liq.rms(sid)
+                    if rms is not None and rms < 0.0005 and db.q1("SELECT 1 FROM tracks WHERE station=? AND corrupt=0 LIMIT 1", (sid,)):
+                        silent_since.setdefault(sid, time.time())
+                        if time.time() - silent_since[sid] > 90:
+                            silent_since[sid] = time.time()
+                            db.log_event("critical", "silence", "Station output has been silent for 90 s while a track is on air — restarting the audio engine", sid)
+                            services.action("liquidsoap", "restart", sid)
+                            synced[sid] = False
+                            continue
+                    else:
+                        silent_since.pop(sid, None)
                 if alive and not synced.get(sid):
                     _push_settings(sid)
                     synced[sid] = True
@@ -332,6 +346,8 @@ def _stream_status(sid: str) -> dict:
         d = json.loads(p.read_text())
         # stale if the supervisor hasn't written for a while
         d["stale"] = (time.time() - p.stat().st_mtime) > 20
+        if d.get("state") != "stopped" and not services.state("stream", sid)["active"]:
+            d["state"] = "stopped"; d["stale"] = False   # unit is down: the file is history
         if d.get("state") == "running" and d.get("target") == "youtube" and not d["stale"] and (d.get("uptime_sec") or 0) > 20:
             last = db.get_setting(sid, "youtube_last_connected")
             if not last or time.time() - last > 60:
@@ -1401,6 +1417,7 @@ def youtube_get(sid: str, user: str = Depends(current_user)):
 class YouTubeBody(BaseModel):
     rtmps_url: str = "rtmps://a.rtmps.youtube.com:443/live2"
     stream_key: str | None = None   # None = keep existing
+    clear_key: bool = False
     output_enabled: bool | None = None
     meta: dict | None = None
 
@@ -1414,11 +1431,18 @@ def youtube_save(sid: str, body: YouTubeBody, user: str = Depends(current_user))
     key = body.stream_key.strip() if body.stream_key is not None else None
     if key is not None and key != "" and not re.fullmatch(r"[\w\-]{8,80}", key):
         raise HTTPException(400, "stream key format not recognised")
-    _yt_write(sid, url, key if key else None)
+    if body.clear_key:
+        _yt_write(sid, url, "")
+        db.log_event("warning", "stream", "YouTube stream key removed", sid)
+        services.action("stream", "restart", sid)
+    else:
+        _yt_write(sid, url, key if key else None)
     if body.output_enabled is not None:
         db.set_setting(sid, "output_target", "youtube" if body.output_enabled else "none")
     if body.meta is not None:
-        allowed = {k: str(v)[:500] for k, v in body.meta.items() if k in ("title", "description", "category", "latency", "visibility", "channel", "public_url", "public_description")}
+        cur_meta = db.get_setting(sid, "youtube_meta") or {}
+        allowed = dict(cur_meta)   # partial saves never blank fields that were not submitted
+        allowed.update({k: str(v)[:2000] for k, v in body.meta.items() if k in ("title", "description", "category", "latency", "visibility", "channel", "public_url", "public_description")})
         if allowed.get("public_url") and not re.fullmatch(r"https://(www\.)?(youtube\.com|youtu\.be)/\S+", allowed["public_url"]):
             raise HTTPException(400, "public URL must be a youtube.com / youtu.be link")
         db.set_setting(sid, "youtube_meta", allowed)
@@ -1466,6 +1490,97 @@ def _asset_version() -> str:
     except OSError:
         parts = [str(int(time.time()))]
     return hashlib.sha1("|".join(parts).encode()).hexdigest()[:10]
+
+
+# ---------------------------------------------------------------------------
+# Player skins (private management)
+from . import skins as skins_mod  # noqa: E402
+
+
+@app.get("/api/skins")
+def skins_list(user: str = Depends(current_user)):
+    d = skins_mod.load()
+    return {"skins": skins_mod.public_list(include_disabled=True), "default": d.get("default")}
+
+
+class SkinBody(BaseModel):
+    name: str
+    time: str = "afternoon"
+    enabled: bool = True
+    accent: str | None = None
+    ambience: dict | None = None
+    order: int | None = None
+
+
+@app.post("/api/skins")
+def skins_create(body: SkinBody, user: str = Depends(current_user)):
+    s = skins_mod.upsert(body.model_dump())
+    db.log_event("info", "system", f"Player skin created: {body.name}")
+    return s
+
+
+@app.put("/api/skins/{skin_id}")
+def skins_update(skin_id: str, body: SkinBody, user: str = Depends(current_user)):
+    try:
+        return skins_mod.upsert(body.model_dump(), skin_id)
+    except KeyError:
+        raise HTTPException(404)
+
+
+@app.delete("/api/skins/{skin_id}")
+def skins_delete(skin_id: str, user: str = Depends(current_user)):
+    try:
+        skins_mod.delete(skin_id)
+    except KeyError:
+        raise HTTPException(404)
+    db.log_event("info", "system", f"Player skin deleted: {skin_id}")
+    return {"ok": True}
+
+
+@app.post("/api/skins/{skin_id}/default")
+def skins_default(skin_id: str, user: str = Depends(current_user)):
+    skins_mod.set_default(None if skin_id == "none" else skin_id)
+    return {"ok": True}
+
+
+class SkinOrder(BaseModel):
+    order: list[str]
+
+
+@app.post("/api/skins/reorder")
+def skins_reorder(body: SkinOrder, user: str = Depends(current_user)):
+    skins_mod.reorder(body.order)
+    return {"ok": True}
+
+
+@app.post("/api/skins/{skin_id}/asset/{kind}")
+async def skins_asset(skin_id: str, kind: str, file: UploadFile = File(...), user: str = Depends(current_user)):
+    if kind not in ("video", "image", "thumbnail"):
+        raise HTTPException(400)
+    data = await file.read()
+    if len(data) > 120 * 1024 * 1024:
+        raise HTTPException(413, "asset too large (120 MB max)")
+    try:
+        name = skins_mod.store_asset(skin_id, kind, file.filename or "asset", data)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except KeyError:
+        raise HTTPException(404)
+    return {"ok": True, "file": name}
+
+
+@app.post("/api/library/prepare-mp3")
+def prepare_mp3(user: str = Depends(current_user)):
+    """Pre-transcode the whole catalog for Explore mode (runs in the background)."""
+    from . import public_api
+    def run():
+        n = 0
+        for r in db.q("SELECT id FROM tracks WHERE corrupt=0 AND enabled=1"):
+            if public_api.ensure_mp3(r["id"]):
+                n += 1
+        db.log_event("info", "media", f"Explore-mode MP3 cache ready: {n} tracks")
+    threading.Thread(target=run, daemon=True).start()
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------------------
