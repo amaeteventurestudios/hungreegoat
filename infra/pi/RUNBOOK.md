@@ -47,7 +47,7 @@ Liquidsoap script check: `docker run --rm -v ~/hungree-goat/liquidsoap:/liq:ro -
 - YouTube Setup page: key written to `secrets/youtube-<sid>.env` (0600), masked in the UI, never logged.
 - Alerts: `alerts` table derived from warning/error/critical events; clearing alerts never touches `events`.
 
-## Remote access (later, dashboard.hungreegoat.com)
+## Remote access (control.hungreegoat.com, via the Hetzner gateway reverse tunnel)
 Put a TLS reverse proxy (Caddy/nginx/Cloudflare Tunnel) in front of `127.0.0.1:8090`; forward `X-Forwarded-Proto: https`
 (cookies become Secure automatically; uvicorn trusts proxy headers from 127.0.0.1 only). Keep 8090 LAN-only (no port-forward);
 the proxy must require HTTPS and should add its own auth layer (e.g. Authentik forward-auth) in front of the operator login.

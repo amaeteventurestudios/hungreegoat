@@ -50,6 +50,11 @@ VIDEO_W, VIDEO_H, VIDEO_FPS = 1280, 720, 30
 # Overlay band composited on the bottom of the frame (see overlay.py).
 OVERLAY_W, OVERLAY_H, OVERLAY_Y = 1280, 300, VIDEO_H - 300
 
+# Vertical (9:16, mobile/Shorts-style) output — a separate, independently-run pipeline;
+# see overlay.render_vertical() and streamer_vertical.py. Never derived by stretching the
+# horizontal frame: it is composed fresh from the current artwork at this native size.
+VERT_W, VERT_H, VERT_FPS = 720, 1280, 30
+
 STATIONS = {
     "lofi": {
         "id": "lofi",

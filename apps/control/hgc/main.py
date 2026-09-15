@@ -18,6 +18,7 @@ import subprocess
 import urllib.request
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -25,6 +26,15 @@ from pydantic import BaseModel
 from . import auth, catalog, config, db, liq, metrics, overlay, scheduler, selector, services
 
 app = FastAPI(title="HUNGREE Goat Control", docs_url=None, redoc_url=None, openapi_url=None)
+
+
+@app.exception_handler(RequestValidationError)
+async def _friendly_validation_error(request: Request, exc: RequestValidationError):
+    """The operator UI shows `detail` verbatim in a toast — never leak raw Pydantic
+    error objects (field locations, type names) to that surface."""
+    first = exc.errors()[0] if exc.errors() else {}
+    field = ".".join(str(p) for p in first.get("loc", []) if p not in ("body", "path", "query")) or "request"
+    return JSONResponse(status_code=422, content={"detail": f"Invalid {field}: {first.get('msg', 'value not accepted')}"})
 
 # ---------------------------------------------------------------------------
 # Runtime state (per station): now playing + last-known health. Persisted history in DB.
@@ -231,9 +241,11 @@ class PasswordChange(BaseModel):
 @app.post("/api/password")
 def change_password(body: PasswordChange, user: str = Depends(current_user)):
     if not auth.verify(user, body.current):
-        raise HTTPException(400, "current password incorrect")
-    if len(body.new) < 10:
-        raise HTTPException(400, "new password must be at least 10 characters")
+        raise HTTPException(400, "Current password is incorrect")
+    if len(body.new) < 9:
+        raise HTTPException(400, "New password must be at least 9 characters")
+    if body.new == body.current:
+        raise HTTPException(400, "New password must be different from your current password")
     auth.set_password(user, body.new)
     try:
         auth.PASSWORD_FILE.unlink()
@@ -618,6 +630,10 @@ def set_settings(sid: str, body: SettingsBody, user: str = Depends(current_user)
             v = bool(v)
         if k == "output_target" and v not in ("youtube", "local", "none"):
             raise HTTPException(400, "bad output target")
+        if k == "public_up_next_count":
+            v = int(v)
+            if v not in (3, 5, 10):
+                raise HTTPException(400, "Public Up Next Count must be 3, 5 or 10")
         db.set_setting(sid, k, v)
         changed.append(k)
         if k == "shuffle" and v:
@@ -1122,6 +1138,23 @@ def alerts(state: str = "active", limit: int = 200, user: str = Depends(current_
     return {"alerts": db.rows(rows), "counts": {k: (counts[k] or 0) for k in counts.keys()}}
 
 
+# NOTE: this route MUST be registered before /api/alerts/{aid}/{act} — FastAPI/Starlette
+# matches routes in registration order, and {aid} is an untyped path segment that would
+# otherwise swallow "bulk" and fail int-parsing it (the bug behind the old "bulk" 422s).
+@app.post("/api/alerts/bulk/{act}")
+def alerts_bulk(act: str, user: str = Depends(current_user)):
+    if act not in ("read-all", "clear-resolved", "clear-all"):
+        raise HTTPException(400, "unknown bulk action")
+    with db.tx() as c:
+        if act == "read-all":
+            n = c.execute("UPDATE alerts SET read=1 WHERE state IN ('open','acknowledged')").rowcount
+        elif act == "clear-resolved":
+            n = c.execute("UPDATE alerts SET state='cleared' WHERE state='resolved'").rowcount
+        else:
+            n = c.execute("UPDATE alerts SET state='cleared' WHERE state!='cleared'").rowcount
+    return {"ok": True, "count": n}
+
+
 @app.post("/api/alerts/{aid}/{act}")
 def alert_action(aid: int, act: str, user: str = Depends(current_user)):
     if act not in ("ack", "read", "clear", "resolve"):
@@ -1136,20 +1169,6 @@ def alert_action(aid: int, act: str, user: str = Depends(current_user)):
         else:
             c.execute("UPDATE alerts SET state='cleared', updated_at=? WHERE id=?", (time.time(), aid))
     return {"ok": True}
-
-
-@app.post("/api/alerts/bulk/{act}")
-def alerts_bulk(act: str, user: str = Depends(current_user)):
-    with db.tx() as c:
-        if act == "read-all":
-            n = c.execute("UPDATE alerts SET read=1 WHERE state IN ('open','acknowledged')").rowcount
-        elif act == "clear-resolved":
-            n = c.execute("UPDATE alerts SET state='cleared' WHERE state='resolved'").rowcount
-        elif act == "clear-all":
-            n = c.execute("UPDATE alerts SET state='cleared' WHERE state!='cleared'").rowcount
-        else:
-            raise HTTPException(400)
-    return {"ok": True, "count": n}
 
 
 # ---------------------------------------------------------------------------
@@ -1597,16 +1616,21 @@ from . import skins as skins_mod  # noqa: E402
 @app.get("/api/skins")
 def skins_list(user: str = Depends(current_user)):
     d = skins_mod.load()
-    return {"skins": skins_mod.public_list(include_disabled=True), "default": d.get("default")}
+    all_skins = skins_mod.public_list(include_disabled=True)
+    return {"skins": all_skins, "default": d.get("default"),
+            "built_in_count": len(skins_mod.BUILT_IN), "custom_count": sum(1 for s in all_skins if s["source"] == "custom"),
+            "ambience_options": [{"key": k, "label": v} for k, v in skins_mod.AMBIENCE_LABELS.items()]}
 
 
 class SkinBody(BaseModel):
     name: str
-    time: str = "afternoon"
+    description: str = ""
     enabled: bool = True
     accent: str | None = None
     ambience: dict | None = None
     order: int | None = None
+    time_mode: str = "always"
+    time_variants: dict | None = None
 
 
 @app.post("/api/skins")
@@ -1651,18 +1675,34 @@ def skins_reorder(body: SkinOrder, user: str = Depends(current_user)):
 
 
 @app.post("/api/skins/{skin_id}/asset/{kind}")
-async def skins_asset(skin_id: str, kind: str, file: UploadFile = File(...), user: str = Depends(current_user)):
+async def skins_asset(skin_id: str, kind: str, time_key: str | None = None, file: UploadFile = File(...), user: str = Depends(current_user)):
     if kind not in ("video", "image", "thumbnail"):
         raise HTTPException(400)
+    if time_key is not None and time_key not in skins_mod.TIMES:
+        raise HTTPException(400, "bad time_key")
     data = await file.read()
     if len(data) > 120 * 1024 * 1024:
         raise HTTPException(413, "asset too large (120 MB max)")
     try:
-        name = skins_mod.store_asset(skin_id, kind, file.filename or "asset", data)
+        name = skins_mod.store_asset(skin_id, kind, file.filename or "asset", data, time_key)
+        probe = skins_mod.probe_asset(name) if kind != "thumbnail" else None
     except ValueError as e:
         raise HTTPException(400, str(e))
     except KeyError:
         raise HTTPException(404)
+    db.log_event("info", "system", f"Player skin asset uploaded: {skin_id} ({kind}{' '+time_key if time_key else ''})")
+    return {"ok": True, "file": name, "probe": probe}
+
+
+@app.post("/api/skins/{skin_id}/thumbnail/generate")
+def skins_thumb_generate(skin_id: str, source: str, user: str = Depends(current_user)):
+    """'Generate from visual': still frame from the video, or a resized copy of the image."""
+    try:
+        name = skins_mod.generate_thumbnail(skin_id, source)
+    except KeyError:
+        raise HTTPException(404, "source asset not found")
+    except RuntimeError as e:
+        raise HTTPException(400, str(e))
     return {"ok": True, "file": name}
 
 

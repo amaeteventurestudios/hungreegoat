@@ -178,6 +178,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "live_remote_url": "",
     "force_fallback": False,
     "output_target": "youtube",   # youtube | local | none
+    "public_up_next_count": 5,     # how many upcoming tracks the public homepage shows (3, 5 or 10)
     "sequential_cursor": 0,
     "schedule_override": None,     # {"playlist_slug":..., "until": ts, "name":...}
     "youtube_meta": {},            # operator reference: title/description/category/latency (Requires YouTube Studio)

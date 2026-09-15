@@ -1,7 +1,7 @@
 #!/bin/bash
-# Run as root ON THE HETZNER GATEWAY (65.21.7.133). Creates the restricted tunnel user, installs the nginx sites
+# Run as root ON THE HETZNER GATEWAY (2.29.28.125). Creates the restricted tunnel user, installs the nginx sites
 # and requests certificates. Requires: the Pi's tunnel public key (infra/gateway/tunnel/hg-tunnel.pub) and DNS A records
-# for api.hungreegoat.com and dashboard.hungreegoat.com pointing at this server.
+# for api.hungreegoat.com and control.hungreegoat.com pointing at this server.
 set -euo pipefail
 H=$(cd "$(dirname "$0")" && pwd)
 id hgtunnel >/dev/null 2>&1 || useradd -r -m -s /usr/sbin/nologin hgtunnel
@@ -21,8 +21,8 @@ SSHD
 sshd -t && systemctl reload ssh
 mkdir -p /var/cache/nginx/hgapi
 cp "$H/nginx/api.hungreegoat.com.conf" /etc/nginx/sites-available/api.hungreegoat.com
-cp "$H/nginx/dashboard.hungreegoat.com.conf" /etc/nginx/sites-available/dashboard.hungreegoat.com
-ln -sf /etc/nginx/sites-available/api.hungreegoat.com /etc/nginx/sites-enabled/; ln -sf /etc/nginx/sites-available/dashboard.hungreegoat.com /etc/nginx/sites-enabled/
-certbot --nginx -d api.hungreegoat.com -d dashboard.hungreegoat.com --non-interactive --agree-tos --keep-until-expiring -m "${CERT_EMAIL:-amaete@umanahsystems.com}" || echo "certbot failed — check DNS, then rerun"
+cp "$H/nginx/control.hungreegoat.com.conf" /etc/nginx/sites-available/control.hungreegoat.com
+ln -sf /etc/nginx/sites-available/api.hungreegoat.com /etc/nginx/sites-enabled/; ln -sf /etc/nginx/sites-available/control.hungreegoat.com /etc/nginx/sites-enabled/
+certbot --nginx -d api.hungreegoat.com -d control.hungreegoat.com --non-interactive --agree-tos --keep-until-expiring -m "${CERT_EMAIL:-amaete@umanahsystems.com}" || echo "certbot failed — check DNS, then rerun"
 nginx -t && systemctl reload nginx
 echo "gateway installed. Tunnel arrives on 127.0.0.1:18090 once the Pi unit connects."

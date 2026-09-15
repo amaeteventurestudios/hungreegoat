@@ -24,6 +24,9 @@ def main(argv):
     elif cmd == "stream":
         from . import streamer
         streamer.main(argv[1])
+    elif cmd == "streamv":
+        from . import streamer_vertical
+        streamer_vertical.main(argv[1], argv[2] if len(argv) > 2 else "12")
     elif cmd == "report":
         for sid in config.STATION_IDS:
             r = db.q1("SELECT COUNT(*) n, SUM(size) b, SUM(duration) d FROM tracks WHERE station=? AND corrupt=0", (sid,))

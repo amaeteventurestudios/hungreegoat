@@ -81,6 +81,9 @@ def _now_public(sid: str) -> dict:
 def _up_next(sid: str) -> list[dict]:
     if not liq.alive(sid):
         return []
+    n = db.get_setting(sid, "public_up_next_count", 5)
+    if n not in (3, 5, 10):
+        n = 5
     out = []
     for t in selector.prepared(sid):
         if t.get("id"):
@@ -89,7 +92,7 @@ def _up_next(sid: str) -> list[dict]:
         out.append({"title": t["title"], "artist": t["artist"], "duration": t["duration"], "artwork": f"/v1/artwork/{t['id']}.jpg", "source": "request"})
     for t in selector.planned(sid):
         out.append({"title": t["title"], "artist": t["artist"], "duration": t["duration"], "artwork": f"/v1/artwork/{t['id']}.jpg", "source": "planned"})
-    return out[:8]
+    return out[:n]
 
 
 def _schedule_public(sid: str) -> dict:
