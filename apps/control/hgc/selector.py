@@ -15,6 +15,10 @@ _last_hour_id: dict[str, int] = {}
 _recent: dict[str, list[int]] = {}
 # Operator requests handed to Liquidsoap but not yet on air (so a play-next can put them back).
 SERVED: dict[str, list[int]] = {}
+# Planned rotation picks: chosen now, served in order later (unless a request jumps the line),
+# so "Up Next" on the public site is a truthful plan rather than a guess.
+PLAN: dict[str, list[dict]] = {}
+PLAN_DEPTH = 5
 
 
 def _annotate(t: dict, extra: dict | None = None) -> str:
@@ -119,14 +123,23 @@ def next_uri(sid: str) -> tuple[str | None, dict]:
             db.log_event("info", "queue", f"Queued request handed to Liquidsoap: {t['title']}", sid)
             _songs_since_jingle[sid] = _songs_since_jingle.get(sid, 0) + 1
             return _annotate(t, {"hgc_kind": "request"}), info
-    # 3. scheduled playlist
+    # 3. scheduled playlist — served from the plan (refilled to PLAN_DEPTH each time)
     sched = scheduler.evaluate(sid)
     slug = sched["playlist_slug"]
+    plan = PLAN.setdefault(sid, [])
+    if plan and plan[0].get("_slug") != slug:
+        plan.clear()   # schedule changed: re-plan from the new playlist
     tracks = _playlist_tracks(sid, slug)
     if not tracks and slug != "all":
         db.log_event("warning", "schedule", f"Scheduled playlist '{slug}' is empty, using full library", sid)
         tracks = _playlist_tracks(sid, "all")
-    t = _pick(sid, tracks, settings)
+    while len(plan) < PLAN_DEPTH and tracks:
+        cand = _pick(sid, tracks, settings)
+        if not cand:
+            break
+        cand = dict(cand); cand["_slug"] = slug
+        plan.append(cand)
+    t = plan.pop(0) if plan else None
     if not t:
         info["reason"] = "empty"
         return None, info
@@ -147,6 +160,12 @@ def upcoming(sid: str, n: int = 50) -> list[dict]:
                         "t.resolved_artwork, t.filename FROM queue q JOIN tracks t ON t.id=q.track_id "
                         "WHERE q.station=? ORDER BY q.position LIMIT ?", (sid, n)))
     return rows
+
+
+def planned(sid: str) -> list[dict]:
+    """The rotation picks that will follow the engine's prepared tracks (real plan, not a guess)."""
+    return [{"id": t["id"], "title": t["title"], "artist": t["artist"], "album": t.get("album"), "duration": t["duration"],
+             "resolved_artwork": t.get("resolved_artwork"), "planned": True} for t in PLAN.get(sid, [])]
 
 
 def prepared(sid: str) -> list[dict]:

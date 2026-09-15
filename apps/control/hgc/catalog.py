@@ -166,7 +166,7 @@ def clean_title(stem: str) -> str:
 
 def split_title(stem: str) -> tuple[str, str | None]:
     """'Abamani - Wrapping oneself in comfort' -> ('Abamani', 'Wrapping oneself in comfort')."""
-    parts = re.split(r"\s+-\s+", stem, maxsplit=1)
+    parts = re.split(r"\s*-\s+", stem, maxsplit=1)   # "Name - tagline" and "Name- tagline"
     if len(parts) == 2 and not re.fullmatch(r"\d{1,3}", parts[0].strip()):
         return clean_title(parts[0]), parts[1].strip()
     return clean_title(stem), None

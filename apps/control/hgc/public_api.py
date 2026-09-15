@@ -87,6 +87,8 @@ def _up_next(sid: str) -> list[dict]:
             out.append({"title": t["title"], "artist": t["artist"], "duration": t["duration"], "artwork": f"/v1/artwork/{t['id']}.jpg", "source": "engine"})
     for t in selector.upcoming(sid, 10):
         out.append({"title": t["title"], "artist": t["artist"], "duration": t["duration"], "artwork": f"/v1/artwork/{t['id']}.jpg", "source": "request"})
+    for t in selector.planned(sid):
+        out.append({"title": t["title"], "artist": t["artist"], "duration": t["duration"], "artwork": f"/v1/artwork/{t['id']}.jpg", "source": "planned"})
     return out[:8]
 
 

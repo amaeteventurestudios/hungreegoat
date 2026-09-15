@@ -469,7 +469,7 @@ def station_status(sid: str) -> dict:
         "on_air": on_air,
         "audio_running": liq_alive,
         "now_playing": {**now, "elapsed": elapsed, "remaining": remaining, "source_label": source_label},
-        "schedule": sched, "queue": queue, "queue_depth": len(queue), "prepared": prepared,
+        "schedule": sched, "queue": queue, "queue_depth": len(queue), "prepared": prepared, "planned": selector.planned(sid),
         "settings": settings, "fallback": fallback_state,
         "library": {"tracks": lib["n"], "duration": lib["d"], "bytes": lib["b"], "empty": lib["n"] == 0},
         "live": {"mic_enabled": settings.get("live_mic_enabled"), "remote_enabled": settings.get("live_remote_enabled"),

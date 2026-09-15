@@ -6,7 +6,7 @@ operator console, all fed by one broadcast core (Liquidsoap + FFmpeg) running on
 | Surface | Path | Hosting | Auth |
 |---|---|---|---|
 | Homepage `hungreegoat.com` | `apps/website` | Vercel (static) | none |
-| Player `player.hungreegoat.com` | `apps/player` | Vercel (static, PWA-ready) | none |
+| Player `player.hungreegoat.com` | `apps/player` (Vite/React, **AGPL-3.0** — see `apps/player/NOTICE.md`) | Vercel (static, PWA-ready) | none |
 | Control `dashboard.hungreegoat.com` | `apps/control` | pi-node-01 via HTTPS gateway | operator login |
 | Public API `api.hungreegoat.com` | `apps/control/hgc/public_api.py` (`/v1/*`) | pi-node-01 via gateway | none (read-only) |
 
