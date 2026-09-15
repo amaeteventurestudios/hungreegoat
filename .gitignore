@@ -41,3 +41,5 @@ dist/
 # generated brand copies inside the control app (run apps/control/scripts/sync-brand.sh)
 apps/control/static/assets/img/
 apps/control/static/assets/fonts/
+# the player's bundled scene videos and ambient loops (AGPL project assets) must ship with the app
+!apps/player/public/assets/**
