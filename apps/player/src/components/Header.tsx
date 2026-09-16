@@ -23,7 +23,7 @@ export default function Header() {
       <a className="brand" href={HOME} title="Back to hungreegoat.com"><img src="/assets/logo.png" alt="HUNGREE Goat" /><b>HUNGREE GOAT MUSIC PLAYER</b></a>
       <div className="nav-menu">
         <a href={HOME} className="home">← hungreegoat.com</a>
-        {yt && <a href={yt} target="_blank" rel="noreferrer" className="yt">YouTube</a>}
+        {yt && <a href={yt} target="_blank" rel="noreferrer" className="yt" title="Opens the HUNGREE Goat live broadcast on YouTube — separate from this player">Listen Live<span className="yt-full"> on YouTube</span></a>}
         <button className="time" onClick={nextTime} title={`Time of day: ${TIME_LABEL[s.time]}${s.timeAuto ? ' (auto)' : ''} — click to change`} aria-label="Change time of day">{icon}<span>{TIME_LABEL[s.time]}</span></button>
         <button className="fullscreen-btn" onClick={fullscreen} aria-label={fs ? 'Exit fullscreen' : 'Fullscreen'}>{fs ? I.compress : I.expand}</button>
       </div>

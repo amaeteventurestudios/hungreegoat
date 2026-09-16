@@ -42,7 +42,7 @@
     now = s.now;
     const st = s.stations.find(x => x.id === station) || {};
     applyYouTube(st.youtube_url || s.now.youtube_url || window.HG_YOUTUBE_URL || '');
-    liveEl.className = 'live ' + (now.live ? '' : 'off'); liveEl.innerHTML = '<i></i>' + (now.live ? 'LIVE NOW' : 'OFF AIR');
+    liveEl.className = 'live ' + (now.live ? '' : 'off'); liveEl.innerHTML = '<i></i>' + (now.live ? 'LIVE ON YOUTUBE' : 'OFF AIR');
     $$('[data-title]').forEach(e => e.textContent = now.live ? (now.title || 'Untitled') : 'Station is off air');
     $$('[data-artist]').forEach(e => e.textContent = now.live ? (now.artist || '') : '');
     $('[data-station]').textContent = now.station + (now.live ? ' · HUNGREE Goat' : '');
@@ -51,7 +51,8 @@
     const prog = $('[data-prog]'); prog.hidden = !(now.live && now.duration); tickProgress();
     const un = $('[data-upnext]');
     un.innerHTML = s.upNext.length ? s.upNext.slice(0, 5).map((t, i) => `<li><span class="n">${i + 1}</span><img src="${h(t.artwork)}" alt="" loading="lazy" width="44" height="44"><div><b>${h(t.title)}</b><span class="a">${h(t.artist || '')}${t.source === 'request' ? ' · listener request' : t.source === 'planned' ? ' · planned' : ''}</span></div><span class="d">${HG.fmt(t.duration)}</span></li>`).join('') : '<li class="empty">Up next is decided live by the station. Check back in a moment.</li>';
-    s.stations.forEach(st => { const card = $(`[data-station-card="${st.id}"]`); if (!card) return; const l = $('[data-st-live]', card); if (st.status === 'live') { l.className = 'live'; l.innerHTML = '<i></i>LIVE NOW'; card.classList.remove('soon'); } else if (st.status === 'coming_soon') { l.className = 'live soon'; l.innerHTML = '<i></i>COMING SOON'; } else { l.className = 'live off'; l.innerHTML = '<i></i>OFF AIR'; } if (st.description) $('[data-st-desc]', card).textContent = st.description; });
+    s.stations.forEach(st => { const card = $(`[data-station-card="${st.id}"]`); if (!card) return; const l = $('[data-st-live]', card); if (st.status === 'live') { l.className = 'live'; l.innerHTML = '<i></i>LIVE NOW'; card.classList.remove('soon'); } else if (st.status === 'coming_soon') { l.className = 'live soon'; l.innerHTML = '<i></i>COMING SOON'; } else { l.className = 'live off'; l.innerHTML = '<i></i>OFF AIR'; } if (st.description) $('[data-st-desc]', card).textContent = st.description;
+      const stYt = $('[data-station-yt]', card); if (stYt) { if (st.youtube_url) { stYt.href = st.youtube_url; stYt.hidden = false; } else stYt.hidden = true; } });
   }
   let lastState = null;
   function tickProgress() { if (!now || !now.live || !now.duration) return; const started = now.started_at ? new Date(now.started_at).getTime() : null; const el = started ? Math.min(now.duration, (Date.now() - started) / 1000) : (now.elapsed || 0); $('[data-el]').textContent = HG.fmt(el); $('[data-dur]').textContent = HG.fmt(now.duration); $('[data-prog] .bar b').style.width = Math.min(100, el / now.duration * 100) + '%'; }
