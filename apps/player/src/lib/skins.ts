@@ -7,15 +7,23 @@ export const TIME_LABEL: Record<TimeOfDay, string> = { dawn: 'Dawn', afternoon: 
    control backend, which manages their enabled/order/default/accent/ambience state and can
    attach an operator-uploaded visual override). A scene is independent of time of day —
    TIME only drives the light/vignette overlay in Scene.tsx, never which scene is showing.
-   The loop videos below are the original AGPL project's assets, reused as placeholders
-   until an operator uploads dedicated footage per scene from the Control dashboard. */
+   Only two of these six have footage that actually matches their name, both from the
+   original AGPL project: Day-sunny.mp4 is a genuine study-room desk scene, and
+   truckCampBackground.mp4 is a genuine camping van. Day-rainny.mp4, Night-clear.mp4 and
+   Night-rainny.mp4 were previously (wrongly) assigned to Rainforest/Cafe/Riverfront —
+   pulling a real frame from each proved they are the *same* study-room composition, just
+   recolored for weather/time of day, not distinct environments. Showing that footage under
+   another scene's name would be exactly the "silently fall back while displaying another
+   scene name" the UI must never do, so these four have no video/image until an operator
+   uploads real footage; `placeholder: true` drives the honest "Placeholder art" disclosure
+   in Mixer.tsx instead. */
 export const BUILT_IN: Skin[] = [
   { id: 'study-room', name: 'Study Room', enabled: true, order: 0, video: '/assets/scenes/Day-sunny.mp4', accent: '#f2c14e', time_mode: 'always', ambience: {}, source: 'built-in' },
   { id: 'camping-van', name: 'Camping Van', enabled: true, order: 1, video: '/assets/scenes/truckCampBackground.mp4', accent: '#ff8a3d', time_mode: 'always', ambience: { campfire: 30, forestNight: 15 }, source: 'built-in' },
-  { id: 'rainforest', name: 'Rainforest', enabled: true, order: 2, video: '/assets/scenes/Day-rainny.mp4', accent: '#38d6e8', time_mode: 'always', ambience: { rainForest: 35, birds: 20 }, source: 'built-in' },
-  { id: 'beach', name: 'Beach', enabled: true, order: 3, video: '/assets/scenes/Day-sunny.mp4', accent: '#ffb454', time_mode: 'always', ambience: { waves: 35 }, source: 'built-in', placeholder: true },
-  { id: 'cafe', name: 'Cafe', enabled: true, order: 4, video: '/assets/scenes/Night-clear.mp4', accent: '#7fb0ff', time_mode: 'always', ambience: { people: 20 }, source: 'built-in' },
-  { id: 'riverfront', name: 'Riverfront', enabled: true, order: 5, video: '/assets/scenes/Night-rainny.mp4', accent: '#4f8cff', time_mode: 'always', ambience: { river: 30 }, source: 'built-in' },
+  { id: 'rainforest', name: 'Rainforest', enabled: true, order: 2, accent: '#38d6e8', time_mode: 'always', ambience: { rainForest: 35, birds: 20 }, source: 'built-in', placeholder: true },
+  { id: 'beach', name: 'Beach', enabled: true, order: 3, accent: '#ffb454', time_mode: 'always', ambience: { waves: 35 }, source: 'built-in', placeholder: true },
+  { id: 'cafe', name: 'Cafe', enabled: true, order: 4, accent: '#7fb0ff', time_mode: 'always', ambience: { people: 20 }, source: 'built-in', placeholder: true },
+  { id: 'riverfront', name: 'Riverfront', enabled: true, order: 5, accent: '#4f8cff', time_mode: 'always', ambience: { river: 30 }, source: 'built-in', placeholder: true },
 ];
 const BUILT_IN_IDS = new Set(BUILT_IN.map(b => b.id));
 
