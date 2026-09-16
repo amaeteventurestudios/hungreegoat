@@ -15,6 +15,11 @@ export interface Skin {
      means the scene itself changes when the time changes. */
   time_mode: 'always' | 'variants'; time_variants?: Partial<Record<'dawn' | 'afternoon' | 'dusk' | 'night', TimeVariant>>;
   ambience?: Record<string, number>; default?: boolean; source: 'built-in' | 'custom'; overridden?: boolean;
+  /* Client-side only: true for a bundled built-in that has no dedicated footage yet and is
+     borrowing another scene's placeholder video, so the UI can disclose it honestly instead
+     of silently pretending it is unique. Cleared automatically once an operator uploads a
+     real override for this scene (overridden becomes true from the API). */
+  placeholder?: boolean;
 }
 
 async function get<T>(path: string, timeout = 8000): Promise<T> {

@@ -10,7 +10,10 @@ export type Conn = 'idle' | 'connecting' | 'playing' | 'buffering' | 'reconnecti
 export interface State {
   started: boolean; conn: Conn; playing: boolean; volume: number; muted: boolean;
   time: TimeOfDay; timeAuto: boolean; skins: Skin[]; skinId: string | null; defaultSkin: string | null;
-  ambience: Record<string, number>; station: string; stations: Station[];
+  /* Two independent buses: `volume` is the Music master, `ambienceMaster` scales every
+     individual ambience channel in `ambience` together (see Ambience.tsx). Neither ever
+     touches the other. */
+  ambience: Record<string, number>; ambienceMaster: number; station: string; stations: Station[];
   tracks: Track[]; index: number; shuffle: boolean; repeat: boolean; queueHistory: number[]; elapsed: number;
   panel: 'none' | 'mix' | 'scenes' | 'focus' | 'library' | 'credits';
 }
@@ -19,7 +22,7 @@ const ls = (k: string, d: string) => { try { return localStorage.getItem(k) ?? d
 const init: State = {
   started: false, conn: 'idle', playing: false, volume: +ls('hg.vol', '0.85'), muted: false,
   time: autoTime(), timeAuto: ls('hg.timeAuto', '1') === '1', skins: mergeSkins([]), skinId: ls('hg.skin', '') || null, defaultSkin: null,
-  ambience: {}, station: ls('hg.station', 'lofi'), stations: [],
+  ambience: {}, ambienceMaster: +ls('hg.ambVol', '1'), station: ls('hg.station', 'lofi'), stations: [],
   tracks: [], index: 0, shuffle: ls('hg.shuffle', '0') === '1', repeat: false, queueHistory: [], elapsed: 0, panel: 'none',
 };
 function reducer(s: State, a: Action): State {
@@ -54,7 +57,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, []);
   /* ---- volume ---- */
   useEffect(() => { const v = s.muted ? 0 : s.volume; if (audio.current) audio.current.volume = v; try { localStorage.setItem('hg.vol', String(s.volume)); } catch {} }, [s.volume, s.muted]);
-  useEffect(() => { try { localStorage.setItem('hg.station', s.station); localStorage.setItem('hg.shuffle', s.shuffle ? '1' : '0'); localStorage.setItem('hg.timeAuto', s.timeAuto ? '1' : '0'); if (s.skinId) localStorage.setItem('hg.skin', s.skinId); } catch {} }, [s.station, s.shuffle, s.timeAuto, s.skinId]);
+  useEffect(() => { try { localStorage.setItem('hg.station', s.station); localStorage.setItem('hg.shuffle', s.shuffle ? '1' : '0'); localStorage.setItem('hg.timeAuto', s.timeAuto ? '1' : '0'); localStorage.setItem('hg.ambVol', String(s.ambienceMaster)); if (s.skinId) localStorage.setItem('hg.skin', s.skinId); } catch {} }, [s.station, s.shuffle, s.timeAuto, s.skinId, s.ambienceMaster]);
   /* ---- stations (for the station switcher and the secondary "Listen Live on YouTube" link only) ---- */
   useEffect(() => { let stop = false; let timer: number;
     const tick = async () => { if (stop) return; try { const stations = await api.stations(); if (!stop) d({ type: 'set', patch: { stations } }); } catch { /* keep the last known list */ } timer = window.setTimeout(tick, 60000); };

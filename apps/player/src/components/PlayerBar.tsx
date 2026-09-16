@@ -1,5 +1,6 @@
-/* Footer transport bar: artwork, title/artist, progress, and full controls for the
-   listener's own catalog playback. */
+/* Footer transport bar: artwork, title/artist, a draggable progress bar (the actual seek
+   control, not a second anonymous slider), and full controls for the listener's own
+   catalog playback. */
 import { usePlayer } from '../store/PlayerContext';
 import { fmt } from '../lib/api';
 export default function PlayerBar() {
@@ -10,12 +11,13 @@ export default function PlayerBar() {
   const art = t?.artwork || '/assets/default-art.webp';
   const connTxt = { idle: 'Ready', connecting: 'Connecting…', playing: 'Playing', buffering: 'Buffering…', reconnecting: 'Reconnecting…', paused: 'Paused', blocked: 'Tap play' }[s.conn];
   const dur = t?.duration || 0;
+  const seek = (v: number) => { if (audio.current) audio.current.currentTime = v; d({ type: 'set', patch: { elapsed: v } }); };
   return (
     <div className="footer">
       <div className="song-name">
         <img className="art" src={art} alt="" />
         <div className="txt"><b>{title}</b><small>{artist}</small>
-          {dur > 0 && <div className="prog"><i style={{ width: `${Math.min(100, s.elapsed / dur * 100)}%` }} /><em>{fmt(s.elapsed)} / {fmt(dur)}</em></div>}</div>
+          {dur > 0 && <div className="prog"><input type="range" className="seekbar" min={0} max={dur} step={1} value={Math.min(s.elapsed, dur)} onChange={e => seek(+e.target.value)} aria-label="Seek backward or forward" style={{ '--pct': `${Math.min(100, s.elapsed / dur * 100)}%` } as React.CSSProperties} /><em>{fmt(s.elapsed)} / {fmt(dur)}</em></div>}</div>
       </div>
       <div className="controller">
         <div className="music-player--controls">
@@ -30,9 +32,8 @@ export default function PlayerBar() {
         </div>
       </div>
       <div className="right">
-        <button className="mute" onClick={() => d({ type: 'set', patch: { muted: !s.muted } })} aria-label={s.muted ? 'Unmute' : 'Mute'}>{s.muted ? '🔇' : '🔊'}</button>
-        <input type="range" min={0} max={100} value={Math.round(s.volume * 100)} onChange={e => d({ type: 'set', patch: { volume: +e.target.value / 100, muted: false } })} aria-label="Volume" />
-        <input type="range" className="seek" min={0} max={dur || 0} step={1} value={Math.min(s.elapsed, dur || 0)} onChange={e => { if (audio.current) audio.current.currentTime = +e.target.value; d({ type: 'set', patch: { elapsed: +e.target.value } }); }} aria-label="Seek" title="Seek backward or forward" disabled={!dur} />
+        <button className="mute" onClick={() => d({ type: 'set', patch: { muted: !s.muted } })} aria-label={s.muted ? 'Unmute' : 'Mute'} title="Music volume">{s.muted ? '🔇' : '🔊'}</button>
+        <input type="range" min={0} max={100} value={Math.round(s.volume * 100)} onChange={e => d({ type: 'set', patch: { volume: +e.target.value / 100, muted: false } })} aria-label="Music volume" title="Music volume" />
         <button className="mini" onClick={() => d({ type: 'set', patch: { panel: s.panel === 'credits' ? 'none' : 'credits' } })}>Credits</button>
       </div>
     </div>

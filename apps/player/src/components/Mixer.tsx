@@ -15,9 +15,9 @@ export default function Mixer() {
         {s.panel === 'scenes' && (
           <div className="modifierBox scenesBox">
             <h4>Scene<span className="hint2">Pick the physical environment</span></h4>
-            <div className="skins">{s.skins.map(x => <button key={x.id} className={`skin ${x.id === s.skinId ? 'on' : ''}`} onClick={() => d({ type: 'skin', id: x.id })} title={x.name}>
+            <div className="skins">{s.skins.map(x => <button key={x.id} className={`skin ${x.id === s.skinId ? 'on' : ''}`} onClick={() => d({ type: 'skin', id: x.id })} title={x.placeholder ? `${x.name}: real footage not uploaded yet, showing a placeholder` : x.name}>
               {x.thumbnail ? <img src={x.thumbnail} alt="" /> : x.video ? <video src={x.video} muted loop playsInline /> : <span className="ph" style={{ background: x.accent || '#22344a' }} />}
-              <b>{x.name}</b></button>)}</div>
+              <b>{x.name}</b>{x.placeholder && <small className="placeholderTag">Placeholder art</small>}</button>)}</div>
             <h5>Time of day<span className="hint2">Lighting only, the scene never changes</span></h5>
             <div className="times">{TIMES.map(t => <button key={t} className={s.time === t ? 'on' : ''} onClick={() => d({ type: 'time', time: t })}>{TIME_LABEL[t]}</button>)}<button className={s.timeAuto ? 'on' : ''} onClick={() => d({ type: 'time', time: 'auto' })} title="Follow the clock">Auto</button></div>
           </div>)}
@@ -26,8 +26,9 @@ export default function Mixer() {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 6h16M4 12h16M4 18h16" /><circle cx="9" cy="6" r="2" fill="currentColor" /><circle cx="15" cy="12" r="2" fill="currentColor" /><circle cx="7" cy="18" r="2" fill="currentColor" /></svg></button>
         {s.panel === 'mix' && (
           <div className="modifierBox">
-            <h4>Mix</h4>
-            <div className="volume"><span className="lbl">Volume</span><input type="range" min={0} max={100} value={Math.round(s.volume * 100)} onChange={e => d({ type: 'set', patch: { volume: +e.target.value / 100, muted: false } })} aria-label="Music volume" /><b>{Math.round(s.volume * 100)}</b></div>
+            <h4>Mix<span className="hint2">Music and ambience are independent</span></h4>
+            <div className="volume"><span className="lbl">Music</span><input type="range" min={0} max={100} value={Math.round(s.volume * 100)} onChange={e => d({ type: 'set', patch: { volume: +e.target.value / 100, muted: false } })} aria-label="Music volume" /><b>{Math.round(s.volume * 100)}%</b></div>
+            <div className="volume"><span className="lbl">Ambience</span><input type="range" min={0} max={100} value={Math.round(s.ambienceMaster * 100)} onChange={e => d({ type: 'set', patch: { ambienceMaster: +e.target.value / 100 } })} aria-label="Ambience master volume" /><b>{Math.round(s.ambienceMaster * 100)}%</b></div>
             <h5>Ambient sounds</h5>
             <div className="backgroundNoise">{AMBIENCE.map(a => (
               <div key={a.key} className={`noise-option ${(s.ambience[a.key] || 0) > 0 ? 'on' : ''}`}>
