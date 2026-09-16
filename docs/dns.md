@@ -4,18 +4,30 @@
 | `hungreegoat.com` | Vercel (`apps/website`) — A 76.76.21.21 or Vercel-provided | currently points at the legacy host 192.250.227.21 (hostcrane) |
 | `www.hungreegoat.com` | CNAME `cname.vercel-dns.com` | Vercel redirects www → apex |
 | `player.hungreegoat.com` | CNAME `cname.vercel-dns.com` (`apps/player`) | |
-| `control.hungreegoat.com` | A 2.29.28.125 (Hetzner gateway) | private, TLS + operator login (renamed from `dashboard.`; old gateway 65.21.7.133 is dead) |
-| `api.hungreegoat.com` | A 2.29.28.125 (Hetzner gateway) | public read-only `/v1/*` only |
-Nameservers: ns1/ns2.hostcrane.com. Cut-over order: gateway (api → verify `/v1/live`) → player → homepage → www.
+| `control.hungreegoat.com` | A 2.29.28.125 (shared gateway, hostname `hetzner-usg`) | private, TLS + operator login — **LIVE**, verified 2026-09-16 |
+| `api.hungreegoat.com` | A 2.29.28.125 (shared gateway, hostname `hetzner-usg`) | public read-only `/v1/*` only — **LIVE**, verified 2026-09-16 |
+Nameservers: ns1/ns2.hostcrane.com.
+
+## Gateway live 2026-09-16
+Both domains are fully working end to end: `hgtunnel` account created on the gateway (restricted key —
+`command="/bin/false",restrict,port-forwarding,permitlisten="127.0.0.1:18090"` — plus a
+`Match User hgtunnel` block in `sshd_config.d/20-hgtunnel.conf`), the Pi's reverse tunnel
+(`hungree-goat-tunnel.service`) connects and stays up, and `certbot --nginx` issued separate
+certificates for each domain (both auto-renew via the gateway's existing shared `certbot.timer`).
+Verified with real traffic: `https://api.hungreegoat.com/v1/tracks` returns the real 140-track catalog
+and real track audio (206 Partial Content, real MPEG bytes); `https://control.hungreegoat.com` serves
+real authenticated Control pages over a secure context.
+
+The gateway (`hetzner-usg`) is a **shared, multi-tenant Umanah Systems Group box** running many
+unrelated services (nginx vhosts for Stravour/EspoCRM/Vikunja/Documenso/etc., Authentik SSO, several
+Docker containers) — HUNGREE Goat's nginx sites and the `hgtunnel` user were added without touching any
+of those; `nginx -t` was checked before every `reload` (never `restart`) for exactly this reason.
 
 ## Audit 2026-09-15 (second pass, from the Pi)
 `api.hungreegoat.com` and `control.hungreegoat.com` both now resolve to `2.29.28.125`; the old gateway
 `65.21.7.133` refuses TCP connections entirely (confirmed dead, not just slow). The reverse tunnel unit
-(`infra/gateway/tunnel/hungree-goat-tunnel.service`) and the gateway install script have been repointed at
-`2.29.28.125` and renamed `dashboard.` → `control.` throughout. **Outstanding:** the Pi's existing tunnel
-key (`infra/gateway/tunnel/hg-tunnel.pub`) must be authorized on the *new* gateway by re-running
-`infra/gateway/install-hetzner.sh` there (or manually adding it under the `hgtunnel` user) — this could not
-be done from here and needs an operator with root on 2.29.28.125.
+and the gateway install script were repointed at `2.29.28.125` and renamed `dashboard.` → `control.`
+throughout. (Resolved 2026-09-16 — see above.)
 
 ## Audit 2026-09-15 (authoritative zone at ns1/ns2.mysecurecloudhost.com — 13.248.158.180 / 75.2.118.134)
 | Host | Found | Serving |
