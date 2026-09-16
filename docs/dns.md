@@ -4,9 +4,18 @@
 | `hungreegoat.com` | Vercel (`apps/website`) — A 76.76.21.21 or Vercel-provided | currently points at the legacy host 192.250.227.21 (hostcrane) |
 | `www.hungreegoat.com` | CNAME `cname.vercel-dns.com` | Vercel redirects www → apex |
 | `player.hungreegoat.com` | CNAME `cname.vercel-dns.com` (`apps/player`) | |
-| `dashboard.hungreegoat.com` | A 65.21.7.133 (Hetzner gateway) | private, TLS + operator login |
-| `api.hungreegoat.com` | A 65.21.7.133 (Hetzner gateway) | public read-only `/v1/*` only |
+| `control.hungreegoat.com` | A 2.29.28.125 (Hetzner gateway) | private, TLS + operator login (renamed from `dashboard.`; old gateway 65.21.7.133 is dead) |
+| `api.hungreegoat.com` | A 2.29.28.125 (Hetzner gateway) | public read-only `/v1/*` only |
 Nameservers: ns1/ns2.hostcrane.com. Cut-over order: gateway (api → verify `/v1/live`) → player → homepage → www.
+
+## Audit 2026-09-15 (second pass, from the Pi)
+`api.hungreegoat.com` and `control.hungreegoat.com` both now resolve to `2.29.28.125`; the old gateway
+`65.21.7.133` refuses TCP connections entirely (confirmed dead, not just slow). The reverse tunnel unit
+(`infra/gateway/tunnel/hungree-goat-tunnel.service`) and the gateway install script have been repointed at
+`2.29.28.125` and renamed `dashboard.` → `control.` throughout. **Outstanding:** the Pi's existing tunnel
+key (`infra/gateway/tunnel/hg-tunnel.pub`) must be authorized on the *new* gateway by re-running
+`infra/gateway/install-hetzner.sh` there (or manually adding it under the `hgtunnel` user) — this could not
+be done from here and needs an operator with root on 2.29.28.125.
 
 ## Audit 2026-09-15 (authoritative zone at ns1/ns2.mysecurecloudhost.com — 13.248.158.180 / 75.2.118.134)
 | Host | Found | Serving |

@@ -7,7 +7,7 @@ StartLimitIntervalSec=0
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/ssh -NT -o ServerAliveInterval=20 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -o StrictHostKeyChecking=accept-new -o BatchMode=yes -i %h/.ssh/hg-tunnel -R 127.0.0.1:18090:127.0.0.1:8090 hgtunnel@65.21.7.133
+ExecStart=/usr/bin/ssh -NT -o ServerAliveInterval=20 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -o StrictHostKeyChecking=accept-new -o BatchMode=yes -i %h/.ssh/hg-tunnel -R 127.0.0.1:18090:127.0.0.1:8090 hgtunnel@2.29.28.125
 Restart=always
 RestartSec=15
 

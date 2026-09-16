@@ -45,6 +45,10 @@ const st = () => state.overview && state.overview.stations[state.station];
 const artUrl = (t, size=400) => { const id = t && (t.id ?? t.track_id); return id ? `/api/library/${id}/artwork` : ASSET.defaultArt; };
 
 /* ---------------- icons ---------------- */
+/* ---------------- help tooltips (hover + keyboard focus on desktop, tap on mobile) ---------------- */
+function help(text, cls='') { return `<button type="button" class="help ${cls}" data-act="help-toggle" aria-label="What this does">?<span class="tip" role="tooltip">${h(text)}</span></button>`; }
+document.addEventListener('click', e => { if (!e.target.closest('.help')) $$('.help.open').forEach(b => b.classList.remove('open')); }, true);
+
 const P = (d, extra='') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${extra}>${d}</svg>`;
 const I = {
   home:P('<path d="M3 11l9-8 9 8v9a2 2 0 0 1-2 2h-4v-6H9v6H5a2 2 0 0 1-2-2z"/>'), stream:P('<circle cx="12" cy="12" r="2.5"/><path d="M7.5 7.5a6.5 6.5 0 0 0 0 9M16.5 7.5a6.5 6.5 0 0 1 0 9M4.5 4.5a10.5 10.5 0 0 0 0 15M19.5 4.5a10.5 10.5 0 0 1 0 15"/>'),
@@ -194,11 +198,24 @@ function tickClock(){ const s=st(); if(!s) return; const np=s.now_playing; if(np
 function loginView(err=''){ return `<div class="scene"></div><div class="login"><div class="panel"><div class="brand"><img class="mark" src="${ASSET.logo}" alt="HUNGREE Goat Music" style="width:120px;height:120px"><h1>HUNGREE GOAT</h1><small>CONTROL</small></div><form id="login" data-form="login"><label>Operator</label><input class="inp" name="username" value="operator" autocomplete="username"><label>Password</label><input class="inp" name="password" type="password" autocomplete="current-password"><div class="err">${h(err)}</div><button class="btn gold wide" type="submit">Sign In</button></form></div></div>`; }
 
 /* ---------------- delegated events ---------------- */
+// Guards a whitelist of state-changing actions against double-click / double-tap: a second
+// click on the exact same control while the first request is still in flight is ignored,
+// rather than firing a duplicate start/stop/restart/etc.
+const BUSY = new Set();
+const GUARDED_ACTIONS = new Set(['skip','restart-all','stream-start','stream-stop','stream-restart','svc','usb-repair',
+  'alert','alerts-bulk','fallback-toggle','queue-clear','dj-take','dj-return','rescan']);
 function delegate(){ const root=document.body;
   root.addEventListener('click', e=>{ const el=e.target.closest('[data-act]'); if(!el) return; const name=el.dataset.act; const fn=ACTIONS[name]; if(!fn) return;
     // container actions (backdrop, dropzones) must not swallow clicks on their own controls
     if(el!==e.target && e.target.closest('button,input,select,textarea,label,a,[data-act]')!==el && e.target.closest('button,input,select,textarea,label,a')) return;
-    if(el.tagName!=='A' || name!=='nav-close') e.preventDefault(); fn(el, e); });
+    if(el.tagName!=='A' || name!=='nav-close') e.preventDefault();
+    if(GUARDED_ACTIONS.has(name)){
+      const key=name+':'+(el.dataset.id||'')+':'+(el.dataset.op||'')+':'+(el.dataset.svc||'')+':'+(el.dataset.qid||'');
+      if(BUSY.has(key)) return;
+      BUSY.add(key); Promise.resolve(fn(el,e)).finally(()=>BUSY.delete(key));
+      return;
+    }
+    fn(el, e); });
   root.addEventListener('submit', e=>{ const f=e.target.closest('[data-form]'); if(!f) return; e.preventDefault(); const fn=FORMS[f.dataset.form]; f.removeAttribute('data-dirty'); f.querySelectorAll('[data-dirty]').forEach(x=>x.removeAttribute('data-dirty')); if(fn) fn(f, Object.fromEntries(new FormData(f).entries()), e); });
   root.addEventListener('input', e=>{ const t=e.target; if(t && (t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT') && t.form && t.form.hasAttribute('data-form')) { t.setAttribute('data-dirty','1'); t.form.setAttribute('data-dirty','1'); } }, true);
   root.addEventListener('change', e=>{ const el=e.target.closest('[data-change]'); if(!el) return; const fn=CHANGES[el.dataset.change]; if(fn) fn(el, e); });
@@ -206,6 +223,7 @@ function delegate(){ const root=document.body;
   root.addEventListener('keydown', e=>{ if(e.key==='Enter'){ const el=e.target.closest('[data-act-enter]'); if(el){ e.preventDefault(); const fn=ACTIONS[el.dataset.actEnter]; if(fn) fn(el,e); } } if(e.key==='Escape'){ if(state.modal){ if(state.modal.res) state.modal.res(false); state.modal=null; render(); } else if(state.drawer){ state.drawer=null; render(); } } });
 }
 Object.assign(ACTIONS, {
+  'help-toggle': (el,e)=>{ e.stopPropagation(); const open=!el.classList.contains('open'); $$('.help.open').forEach(b=>b.classList.remove('open')); el.classList.toggle('open',open); },
   'nav-toggle': ()=>{ state.navOpen=!state.navOpen; render(); }, 'nav-close': ()=>{ if(state.navOpen){ state.navOpen=false; render(); } },
   'drawer-close': ()=>{ state.drawer=null; render(); }, 'alerts-open': ()=>{ state.drawer = state.drawer==='alerts'?null:'alerts'; render(); }, 'alert-view': (el)=>{ state.alertView=el.dataset.v; render(); },
   'alert': (el)=>act(()=>post(`/api/alerts/${el.dataset.id}/${el.dataset.op}`)), 'alerts-bulk': (el)=>act(()=>post(`/api/alerts/bulk/${el.dataset.op}`)),
@@ -253,5 +271,5 @@ Object.assign(FORMS, {
   setInterval(pollMeter, 2500); setInterval(tickClock, 1000); animateMeter();
   setInterval(async()=>{ try{ const v=await api('/api/version'); if(window.HGC_V && v.assets!==window.HGC_V){ toast('HUNGREE Goat Control was updated — reloading','ok'); setTimeout(()=>location.reload(), 1500); } }catch{} }, 60000);
 })();
-return { state, api, post, put, patch, del, act, toast, confirmDlg, render, refresh, h, I, fmtDur, fmtLong, fmtBytes, fmtTime, fmtDate, st, artUrl, ASSET, ACTIONS, FORMS, CHANGES, previewTrack, listenStart, mobile, pages:{} };
+return { state, api, post, put, patch, del, act, toast, confirmDlg, render, refresh, h, I, fmtDur, fmtLong, fmtBytes, fmtTime, fmtDate, st, artUrl, ASSET, ACTIONS, FORMS, CHANGES, previewTrack, listenStart, mobile, help, pages:{} };
 })();

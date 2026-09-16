@@ -18,7 +18,7 @@ SERVED: dict[str, list[int]] = {}
 # Planned rotation picks: chosen now, served in order later (unless a request jumps the line),
 # so "Up Next" on the public site is a truthful plan rather than a guess.
 PLAN: dict[str, list[dict]] = {}
-PLAN_DEPTH = 5
+PLAN_DEPTH = 10   # internal planning horizon; the public site shows a station-configurable slice of this (settings.public_up_next_count)
 
 
 def _annotate(t: dict, extra: dict | None = None) -> str:
