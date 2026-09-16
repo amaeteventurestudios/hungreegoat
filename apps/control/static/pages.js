@@ -34,7 +34,20 @@ pages.dashboard = { view(){ const s=st(), ov=state.overview; const np=s.now_play
   const liqOn=s.liquidsoap.alive; const [airLabel, airCls]=streamState(s);
   const airDesc = s.on_air ? 'Streaming to YouTube' : liqOn ? (stream.state==='running' ? `Video pipeline running (${stream.target} output)` : stream.state==='waiting' ? 'Waiting for YouTube stream key' : 'Audio running · video stream stopped') : (s.library.empty ? 'Station waiting for media' : 'Audio engine stopped');
   const nextSw = sched.next_switch_in_sec!=null ? fmtLong(sched.next_switch_in_sec).replace(/ \d+s$/,'') : null;
-  const fb=s.fallback; const fbReady=fb.backup.state==='ready'||fb.backup.state==='active'; const queue=s.queue||[]; const prepared=s.prepared||[]; const health=ov.health; const usb=sys.usb; const ytOn=s.on_air;
+  const fb=s.fallback; const fbReady=fb.backup.state==='ready'||fb.backup.state==='active'; const queue=s.queue||[]; const prepared=s.prepared||[]; const planned=s.planned||[]; const health=ov.health; const usb=sys.usb; const ytOn=s.on_air;
+  // Rolling ~10-track horizon for the overview card: READY (Liquidsoap already has it) -> QUEUED
+  // (operator requests, always next) -> PLANNED (engine rotation beyond that). A planned track is
+  // popped out of PLAN the instant Liquidsoap actually takes it, but the seenIds guard skips any
+  // planned row whose id already appears earlier so a slow poll can never show the same track twice.
+  const seenIds=new Set([...prepared,...queue].map(t=>t.id).filter(id=>id!=null));
+  const dashRows=[
+    ...prepared.map(t=>({t, st:'ready'})),
+    ...queue.map(t=>({t, st:'queued'})),
+    ...planned.filter(t=>!(t.id!=null && seenIds.has(t.id))).map(t=>({t, st:'planned'})),
+  ].slice(0,10).map((r,i)=>({...r, pos:i+1}));
+  const dashPill={ready:pill('on','READY'), queued:pill('blue','QUEUED'), planned:pill('gold','PLANNED')};
+  const dashItem=(row)=>{ const {t,st,pos}=row;
+    return `<div class="row" data-key="dq-${st}-${t.qid||t.id||pos}"><span class="idx">${pos}</span><img class="th" src="${artUrl(t)}" loading="lazy"><div class="tt"><b>${h(t.title)}</b><span>${h(t.artist||'')}</span></div>${dashPill[st]}<span class="dur">${t.duration!=null?fmtDur(t.duration):''}</span>${st==='queued'?`<span class="acts"><button class="btn xs icon ghost" data-act="q-del" data-qid="${t.qid}">${I.x}</button></span>`:''}</div>`; };
   const card=(cls,k,v,d,icon,iconCls,extra='')=>`<div class="panel card ${cls}"><div class="k">${k}</div><div class="v"><span class="ic ${iconCls}">${icon}</span><span>${v}</span>${extra}</div><div class="d" title="${h(d.replace(/<[^>]+>/g,''))}">${d}</div></div>`;
   return `
   <section class="grid cards eq">
@@ -78,9 +91,8 @@ pages.dashboard = { view(){ const s=st(), ov=state.overview; const np=s.now_play
   </section>
 
   <section class="grid g-mid eq">
-    <div class="panel"><div class="panel-h"><h3>${ic(I.queue,'cyan')}Queue / Requests${help('Tracks an operator explicitly queued, in the order they will play. This is separate from the engine\'s own rotation — see the Queue page for the full planning horizon.')}</h3><span class="right">${queue.length}</span></div><div class="panel-b scroll"><div class="list">
-      ${prepared.map(t=>`<div class="row" data-key="pr-${t.id}"><span class="idx">▶</span><img class="th" src="${artUrl(t)}" loading="lazy"><div class="tt"><b>${h(t.title)}</b><span>up next · prepared</span></div><span class="dur">${fmtDur(t.duration)}</span></div>`).join('')}
-      ${queue.length?queue.slice(0,8).map((t,i)=>`<div class="row" data-key="q-${t.qid}"><span class="idx">${i+1}</span><img class="th" src="${artUrl(t)}" loading="lazy"><div class="tt"><b>${h(t.title)}</b><span>${h(t.artist)}</span></div><span class="dur">${fmtDur(t.duration)}</span><span class="acts"><button class="btn xs icon ghost" data-act="q-del" data-qid="${t.qid}">${I.x}</button></span></div>`).join(''):(prepared.length?'':empty(I.queue,'Queue is empty','The scheduled playlist is in rotation.',`<a class="btn sm" href="#/library">${I.plus} Add from Library</a>`))}</div></div>
+    <div class="panel"><div class="panel-h"><h3>${ic(I.queue,'cyan')}Queue / Requests${help('The actual expected play order, unified: READY is what Liquidsoap already has locked in next, QUEUED are operator requests (always play before rotation resumes), PLANNED is the engine\'s own rotation beyond that. Same real horizon as the Queue page, just the next ~10.')}</h3><span class="right small">${dashRows.length} upcoming</span></div><div class="panel-b scroll"><div class="list">
+      ${dashRows.length?dashRows.map(dashItem).join(''):empty(I.queue,'Nothing queued yet','The engine plans ahead once the scheduled playlist has tracks to draw from.',`<a class="btn sm" href="#/library">${I.plus} Add from Library</a>`)}</div></div>
       <div class="panel-f"><span class="toggle ${set.request_queue_enabled?'on':''}" data-act="toggle" data-key="request_queue_enabled"></span><span class="small muted">Requests enabled</span><a class="btn xs" href="#/queue" style="margin-left:auto">Open queue ${I.chev}</a></div></div>
 
     <div class="panel"><div class="panel-h"><h3>${ic(I.megaphone,'amber')}Jingles / Station IDs</h3></div><div class="panel-b scroll">${(s.jingles&&(s.jingles.jingles||s.jingles.station_ids))?`<div class="rules">
