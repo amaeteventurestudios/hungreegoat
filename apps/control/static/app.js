@@ -86,6 +86,17 @@ function morph(from, to) {
   if (from.tagName==='SELECT' && !dirty) { const v = to.querySelector('option[selected]'); if (v && from.value !== v.value) from.value = v.value; }
   if (dirty && (from.tagName==='INPUT'||from.tagName==='TEXTAREA'||from.tagName==='SELECT')) return;
   if (from.hasAttribute('data-static')) return;
+  morphChildren(from, to);
+}
+// Reconciles from's live children against to's children in place (keyed by data-key, else
+// positional) without ever detaching from itself from the document. setHTML used to move
+// #root's entire real child list out into a throwaway wrapper and back on every single poll,
+// which works for morph's own diffing but forces every child (sidebar, header, whatever page
+// is open) through a disconnect+reconnect cycle each time — browsers reset a scrollable
+// element's scrollTop on that round trip, and recompositing every backdrop-filter panel on an
+// unrelated 5s poll reads as a visible blink. Diffing #root's children directly leaves anything
+// unchanged (and anything scrolled) untouched.
+function morphChildren(from, to) {
   const fc = [...from.childNodes], tc = [...to.childNodes];
   const keyed = new Map(); fc.forEach(n => { if (n.nodeType===1 && n.hasAttribute('data-key')) keyed.set(n.getAttribute('data-key'), n); });
   let i = 0;
@@ -98,7 +109,7 @@ function morph(from, to) {
   }
   while (from.childNodes.length > tc.length) from.removeChild(from.lastChild);
 }
-function setHTML(el, html) { const tpl = document.createElement('template'); tpl.innerHTML = html; const wrap = document.createElement('div'); wrap.append(...tpl.content.childNodes); const cur = document.createElement('div'); while (el.firstChild) cur.appendChild(el.firstChild); morph(cur, wrap); while (cur.firstChild) el.appendChild(cur.firstChild); }
+function setHTML(el, html) { const tpl = document.createElement('template'); tpl.innerHTML = html; const wrap = document.createElement('div'); wrap.append(...tpl.content.childNodes); morphChildren(el, wrap); }
 
 /* ---------------- shell ---------------- */
 function shell(content) {
