@@ -18,7 +18,7 @@ export default function Mixer() {
             <div className="skins">{s.skins.map(x => <button key={x.id} className={`skin ${x.id === s.skinId ? 'on' : ''}`} onClick={() => d({ type: 'skin', id: x.id })} title={x.name}>
               {x.thumbnail ? <img src={x.thumbnail} alt="" /> : x.video ? <video src={x.video} muted loop playsInline /> : <span className="ph" style={{ background: x.accent || '#22344a' }} />}
               <b>{x.name}</b></button>)}</div>
-            <h5>Time of day<span className="hint2">Lighting only — the scene never changes</span></h5>
+            <h5>Time of day<span className="hint2">Lighting only, the scene never changes</span></h5>
             <div className="times">{TIMES.map(t => <button key={t} className={s.time === t ? 'on' : ''} onClick={() => d({ type: 'time', time: t })}>{TIME_LABEL[t]}</button>)}<button className={s.timeAuto ? 'on' : ''} onClick={() => d({ type: 'time', time: 'auto' })} title="Follow the clock">Auto</button></div>
           </div>)}
       </div>
