@@ -14,7 +14,10 @@ export default function Scene() {
     <div className={`scene time-${s.time}`} aria-hidden="true">
       {layers.map(l => (
         <div key={l.id} className={`layer ${l.id === layerId ? 'in' : 'out'}`}>
-          {l.video ? <video src={l.video} autoPlay loop muted playsInline preload="auto" /> : l.image ? <img src={l.image} alt="" /> : null}
+          {l.video ? <video src={l.video} autoPlay loop muted playsInline preload="auto" />
+            : l.image ? <img src={l.image} alt="" />
+            /* No asset for this scene yet: an honest "not uploaded" card, never another scene's footage. */
+            : <div className="scene-pending" style={{ background: skin?.accent ? `${skin.accent}22` : undefined }}><b>{skin?.name}</b><small>Scene art not uploaded yet</small></div>}
         </div>
       ))}
       <div className="light" />

@@ -16,6 +16,10 @@ export interface State {
   ambience: Record<string, number>; ambienceMaster: number; station: string; stations: Station[];
   tracks: Track[]; index: number; shuffle: boolean; repeat: boolean; queueHistory: number[]; elapsed: number;
   panel: 'none' | 'mix' | 'scenes' | 'focus' | 'library' | 'credits';
+  /* Explicit so the UI can say why it's stuck instead of "Loading catalog..." forever:
+     'loading' only until the very first attempt resolves either way, then 'ready' once any
+     tracks have ever loaded, or 'unavailable' while every attempt so far has failed. */
+  catalogState: 'loading' | 'ready' | 'unavailable';
 }
 type Action = { type: 'set'; patch: Partial<State> } | { type: 'ambience'; key: string; value: number } | { type: 'skin'; id: string } | { type: 'time'; time: TimeOfDay | 'auto' } | { type: 'track-go'; index: number } | { type: 'track-step'; dir: 1 | -1 };
 const ls = (k: string, d: string) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
@@ -23,7 +27,7 @@ const init: State = {
   started: false, conn: 'idle', playing: false, volume: +ls('hg.vol', '0.85'), muted: false,
   time: autoTime(), timeAuto: ls('hg.timeAuto', '1') === '1', skins: mergeSkins([]), skinId: ls('hg.skin', '') || null, defaultSkin: null,
   ambience: {}, ambienceMaster: +ls('hg.ambVol', '1'), station: ls('hg.station', 'lofi'), stations: [],
-  tracks: [], index: 0, shuffle: ls('hg.shuffle', '0') === '1', repeat: false, queueHistory: [], elapsed: 0, panel: 'none',
+  tracks: [], index: 0, shuffle: ls('hg.shuffle', '0') === '1', repeat: false, queueHistory: [], elapsed: 0, panel: 'none', catalogState: 'loading',
 };
 function reducer(s: State, a: Action): State {
   switch (a.type) {
@@ -64,9 +68,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     tick(); return () => { stop = true; clearTimeout(timer); }; }, []);
   /* ---- catalog: the real fix is that a transient failure must recover on its own, not just "have retry code" ---- */
   useEffect(() => { let stop = false; let attempt = 0; let timer: number;
-    const load = () => { api.tracks(s.station).then(tracks => { if (!stop) d({ type: 'set', patch: { tracks, index: 0 } }); })
-      .catch(() => { if (!stop) { const wait = Math.min(30000, 2000 * 2 ** attempt++); timer = window.setTimeout(load, wait); } }); };
-    load(); return () => { stop = true; clearTimeout(timer); }; }, [s.station]);
+    const load = () => { api.tracks(s.station).then(tracks => { if (!stop) d({ type: 'set', patch: { tracks, index: 0, catalogState: 'ready' } }); })
+      .catch(() => { if (!stop) { d({ type: 'set', patch: { catalogState: 'unavailable' } }); const wait = Math.min(30000, 2000 * 2 ** attempt++); timer = window.setTimeout(load, wait); } }); };
+    d({ type: 'set', patch: { catalogState: 'loading' } }); load(); return () => { stop = true; clearTimeout(timer); }; }, [s.station]);
   useEffect(() => { api.skins().then(({ skins, def }) => { const merged = mergeSkins(skins); const st = stateRef.current; const keep = st.skinId && merged.find(x => x.id === st.skinId); const sk = keep ? merged.find(x => x.id === st.skinId)! : pickSkin(merged, def); d({ type: 'set', patch: { skins: merged, defaultSkin: def, skinId: sk ? sk.id : null, ambience: sk && sk.ambience && !keep ? { ...sk.ambience } : st.ambience } }); }).catch(() => { const sk = pickSkin(stateRef.current.skins, null); if (sk && !stateRef.current.skinId) d({ type: 'set', patch: { skinId: sk.id, ambience: { ...(sk.ambience || {}) } } }); }); }, []);
   useEffect(() => { const id = setInterval(() => { if (stateRef.current.timeAuto) { const t = autoTime(); if (t !== stateRef.current.time) d({ type: 'time', time: 'auto' }); } }, 60000); return () => clearInterval(id); }, []);
   useEffect(() => { if ('mediaSession' in navigator) { navigator.mediaSession.setActionHandler('play', () => play()); navigator.mediaSession.setActionHandler('pause', () => pause()); navigator.mediaSession.setActionHandler('nexttrack', () => d({ type: 'track-step', dir: 1 })); navigator.mediaSession.setActionHandler('previoustrack', () => d({ type: 'track-step', dir: -1 })); } // eslint-disable-next-line

@@ -6,7 +6,7 @@ import { fmt } from '../lib/api';
 export default function PlayerBar() {
   const { s, d, toggle, audio } = usePlayer();
   const t = s.tracks[s.index];
-  const title = t?.title || (s.tracks.length ? '' : 'Loading catalog…');
+  const title = t?.title || (s.tracks.length ? '' : s.catalogState === 'unavailable' ? 'Catalog unavailable, retrying…' : 'Loading catalog…');
   const artist = t?.artist || '';
   const art = t?.artwork || '/assets/default-art.webp';
   const connTxt = { idle: 'Ready', connecting: 'Connecting…', playing: 'Playing', buffering: 'Buffering…', reconnecting: 'Reconnecting…', paused: 'Paused', blocked: 'Tap play' }[s.conn];
