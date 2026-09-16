@@ -770,6 +770,19 @@ def reorder_queue(sid: str, body: QueueMove, user: str = Depends(current_user)):
     return {"ok": True, "queue": selector.upcoming(sid, 50)}
 
 
+@app.post("/api/stations/{sid}/queue/planned/{index}/remove")
+def remove_planned(sid: str, index: int, user: str = Depends(current_user)):
+    """Drop one pick from the rotation planning horizon (selector.PLAN) — never touches
+    Liquidsoap's already-prepared track or the operator queue. The next planning cycle
+    refills the horizon naturally, so this is always safe to click."""
+    _sid(sid)
+    lst = selector.PLAN.get(sid, [])
+    if not (0 <= index < len(lst)):
+        raise HTTPException(404, "That planned track is no longer there — it may have already played.")
+    removed = lst.pop(index)
+    return {"ok": True, "removed": removed.get("title"), "planned": selector.planned(sid)}
+
+
 # ---------------------------------------------------------------------------
 # Library
 @app.get("/api/library")
@@ -1122,15 +1135,19 @@ def history(station: str = "lofi", limit: int = 50, user: str = Depends(current_
 
 
 # ---------------------------------------------------------------------------
-# Alerts (operator-facing; clearing never touches the event log)
+# Alerts (operator-facing; clearing never touches the event log).
+# Ordered by id, not updated_at: a recurring condition bumps count/updated_at on its
+# existing row rather than creating a new one, so sorting by updated_at made a row an
+# operator was reading jump to the top of the list every time it recurred — indistinguishable
+# from the panel flickering. id order is stable for the row's whole lifetime.
 @app.get("/api/alerts")
 def alerts(state: str = "active", limit: int = 200, user: str = Depends(current_user)):
     if state == "active":
-        rows = db.q("SELECT * FROM alerts WHERE state IN ('open','acknowledged') ORDER BY updated_at DESC LIMIT ?", (limit,))
+        rows = db.q("SELECT * FROM alerts WHERE state IN ('open','acknowledged') ORDER BY id DESC LIMIT ?", (limit,))
     elif state == "resolved":
-        rows = db.q("SELECT * FROM alerts WHERE state='resolved' ORDER BY updated_at DESC LIMIT ?", (limit,))
+        rows = db.q("SELECT * FROM alerts WHERE state='resolved' ORDER BY id DESC LIMIT ?", (limit,))
     else:
-        rows = db.q("SELECT * FROM alerts WHERE state!='cleared' ORDER BY updated_at DESC LIMIT ?", (limit,))
+        rows = db.q("SELECT * FROM alerts WHERE state!='cleared' ORDER BY id DESC LIMIT ?", (limit,))
     counts = db.q1("SELECT SUM(state IN ('open','acknowledged') AND severity='critical') crit, "
                    "SUM(state IN ('open','acknowledged') AND severity='error') err, "
                    "SUM(state IN ('open','acknowledged') AND severity='warning') warn, "

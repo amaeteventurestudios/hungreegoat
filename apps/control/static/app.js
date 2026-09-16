@@ -110,7 +110,7 @@ function shell(content) {
   <div class="app">
     <aside class="sidebar" style="--sidebar-img:url(${sbImg})" data-key="sidebar">
       <div class="brand"><img class="mark" src="${ASSET.logo}" alt="HUNGREE Goat Music"><h1>HUNGREE GOAT</h1><small>CONTROL</small></div>
-      <nav class="nav">${NAV.map(([id,l,ic])=>`<a href="#/${id}" class="${state.page===id?'active':''}" data-act="nav-close" data-key="nav-${id}">${ic}<span>${l}</span>${id==='alerts'&&badge?`<span class="badge">${badge}</span>`:''}</a>`).join('')}</nav>
+      <nav class="nav">${NAV.map(([id,l,ic])=>`<a href="#/${id}" class="${state.page===id?'active':''}" data-act="nav-close" data-key="nav-${id}">${ic}<span>${l}</span>${id==='alerts'&&badge?`<span class="badge" title="${badge} alert${badge===1?'':'s'} need attention (critical or error)">${badge}</span>`:''}</a>`).join('')}</nav>
       <div class="spacer"></div>
       <div class="tagline">A Brighter Sound<br>for a Higher Africa</div>
       <div class="version">HUNGREE GOAT CONTROL · v2.0</div>
@@ -123,7 +123,7 @@ function shell(content) {
         <div class="topbar-right">
           <div class="search">${I.search}<input id="globalsearch" placeholder="Search tracks, playlists…" value="${h(state.search)}" data-act-enter="search"></div>
           <button class="iconbtn" data-act="listen-toggle" title="Listen Live">${state.player.on&&state.player.status==='playing'?I.pause:I.headphones}</button>
-          <button class="iconbtn" data-act="alerts-open" title="Alerts">${I.bell}${badge?`<span class="badge">${badge}</span>`:(warn?`<span class="badge warn">${warn}</span>`:'')}</button>
+          <button class="iconbtn" data-act="alerts-open" title="${badge?`${badge} alert${badge===1?'':'s'} need attention (critical or error)`:warn?`${warn} warning${warn===1?'':'s'}`:'Alerts'}">${I.bell}${badge?`<span class="badge">${badge}</span>`:(warn?`<span class="badge warn">${warn}</span>`:'')}</button>
           <div class="operator" title="Signed in as ${h(state.user)}"><div class="avatar">HG</div><div class="who"><b>HUNGREE Goat</b><span>${h(state.user||'Operator')}</span></div><button class="btn xs ghost icon" data-act="logout" title="Sign out">${I.x}</button></div>
           <div class="script-tag">Good Music<br>Higher Vibes</div>
         </div></div></header>
@@ -169,7 +169,7 @@ async function render(){ const root=$('#root');
   if(!state.overview){ setHTML(root, '<div class="scene"></div><div class="login"><div class="panel" style="padding:30px">Connecting to HUNGREE Goat Control…</div></div>'); return; }
   const pg=HGC.pages[state.page]||HGC.pages.dashboard; let content='';
   try{ if(pg.load && !state.pageData[state.page]) state.pageData[state.page] = await pg.load(); content = pg.view(state.pageData[state.page]); }catch(e){ content=`<div class="panel" style="padding:20px"><b>Page error:</b> ${h(e.message)}</div>`; console.error(e); }
-  setHTML(root, '<div class="scene"></div>'+shell(content)); swapArt(); drawSparks(); document.body.classList.toggle('nav-open', state.navOpen); if(pg.after) pg.after(); }
+  setHTML(root, '<div class="scene"></div>'+shell(content)); swapArt(); drawSparks(); document.body.classList.toggle('nav-open', state.navOpen); if(pg.after) pg.after(); tickClock(); }
 async function refresh(force=false){ if(!state.user) return; try{ const [ov, al] = await Promise.all([api('/api/overview'), api('/api/alerts?state=all&limit=100')]); const s=ov.stations[state.station];
     const [sch, pls] = await Promise.all([api(`/api/stations/${state.station}/schedules`), api(`/api/stations/${state.station}/playlists`)]);
     s.today_schedule=sch.today; s.playlists=pls; s.jingles={jingles:(pls.find(p=>p.kind==='jingles')||{}).track_count||0, station_ids:(pls.find(p=>p.kind==='station_ids')||{}).track_count||0};
@@ -192,7 +192,12 @@ function animateMeter(){ meterLevel += (meterTarget-meterLevel)*0.25; const t=pe
   requestAnimationFrame(animateMeter); }
 async function pollMeter(){ if(!state.user || !st() || !st().audio_running) { meterTarget=0; return; } if(document.hidden) return; try{ const r=await api(`/api/stations/${state.station}/meter`); meterTarget = r.rms!=null ? Math.min(1, Math.pow(r.rms,0.5)*1.6) : 0; }catch{ meterTarget=0; } }
 function tickClock(){ const s=st(); if(!s) return; const np=s.now_playing; if(np.elapsed==null) return; const age=(Date.now()-state.overviewAt)/1000; const e=Math.min(np.duration||1e9, np.elapsed+age);
-  $$('[data-np-el]').forEach(el=>el.textContent=fmtDur(e)); if(np.duration){ $$('[data-np-rem]').forEach(el=>el.textContent='-'+fmtDur(np.duration-e)); const pct=Math.min(100,e/np.duration*100); $$('.progress[data-np]').forEach(p=>{ p.firstElementChild.style.width=pct+'%'; p.lastElementChild.style.left=pct+'%'; }); } }
+  $$('[data-np-el]').forEach(el=>el.textContent=fmtDur(e)); if(np.duration){ $$('[data-np-rem]').forEach(el=>el.textContent='-'+fmtDur(np.duration-e)); const pct=Math.min(100,e/np.duration*100);
+    $$('.progress[data-np]').forEach(p=>{ const b=p.firstElementChild, i=p.lastElementChild; const prev=parseFloat(b.style.width)||0;
+      // A new track (or Skip) can land here well below the previous percentage; the bar's own
+      // CSS transition would otherwise animate a visible backward "rewind" instead of a clean reset.
+      if(pct < prev - 15){ b.style.transition='none'; i.style.transition='none'; b.style.width=pct+'%'; i.style.left=pct+'%'; b.offsetHeight; b.style.transition=''; i.style.transition=''; }
+      else { b.style.width=pct+'%'; i.style.left=pct+'%'; } }); } }
 
 /* ---------------- login ---------------- */
 function loginView(err=''){ return `<div class="scene"></div><div class="login"><div class="panel"><div class="brand"><img class="mark" src="${ASSET.logo}" alt="HUNGREE Goat Music" style="width:120px;height:120px"><h1>HUNGREE GOAT</h1><small>CONTROL</small></div><form id="login" data-form="login"><label>Operator</label><input class="inp" name="username" value="operator" autocomplete="username"><label>Password</label><input class="inp" name="password" type="password" autocomplete="current-password"><div class="err">${h(err)}</div><button class="btn gold wide" type="submit">Sign In</button></form></div></div>`; }
@@ -226,7 +231,9 @@ Object.assign(ACTIONS, {
   'help-toggle': (el,e)=>{ e.stopPropagation(); const open=!el.classList.contains('open'); $$('.help.open').forEach(b=>b.classList.remove('open')); el.classList.toggle('open',open); },
   'nav-toggle': ()=>{ state.navOpen=!state.navOpen; render(); }, 'nav-close': ()=>{ if(state.navOpen){ state.navOpen=false; render(); } },
   'drawer-close': ()=>{ state.drawer=null; render(); }, 'alerts-open': ()=>{ state.drawer = state.drawer==='alerts'?null:'alerts'; render(); }, 'alert-view': (el)=>{ state.alertView=el.dataset.v; render(); },
-  'alert': (el)=>act(()=>post(`/api/alerts/${el.dataset.id}/${el.dataset.op}`)), 'alerts-bulk': (el)=>act(()=>post(`/api/alerts/bulk/${el.dataset.op}`)),
+  'alert': async(el)=>{ const verb={ack:'Acknowledged',read:'Marked as read',resolve:'Resolved',clear:'Cleared'}[el.dataset.op]||'Updated'; await act(()=>post(`/api/alerts/${el.dataset.id}/${el.dataset.op}`), `${verb} 1 alert.`); },
+  'alerts-bulk': async(el)=>{ const msg=(n)=>({ 'read-all':`Marked ${n} alert${n===1?'':'s'} as read.`, 'clear-resolved':`Cleared ${n} resolved alert${n===1?'':'s'}.`, 'clear-all':`Cleared ${n} alert${n===1?'':'s'}.` }[el.dataset.op]);
+    const r=await act(()=>post(`/api/alerts/bulk/${el.dataset.op}`), null); if(r) toast(msg(r.count),'ok'); },
   'modal-bg': (el,e)=>{ if(e.target===el){ if(state.modal&&state.modal.res) state.modal.res(false); state.modal=null; render(); } }, 'modal-close': ()=>{ if(state.modal&&state.modal.res) state.modal.res(false); state.modal=null; render(); },
   'confirm-yes': ()=>{ const r=state.modal.res; state.modal=null; render(); r(true); }, 'confirm-no': ()=>{ const r=state.modal.res; state.modal=null; render(); r(false); },
   'station': (el)=>{ state.station=el.dataset.id; localStorage.setItem('hgc.station',state.station); state.pageData={}; if(state.player.on) listenStart(); refresh(true); },

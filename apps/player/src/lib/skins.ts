@@ -13,7 +13,7 @@ export const BUILT_IN: Skin[] = [
   { id: 'study-room', name: 'Study Room', enabled: true, order: 0, video: '/assets/scenes/Day-sunny.mp4', accent: '#f2c14e', time_mode: 'always', ambience: {}, source: 'built-in' },
   { id: 'camping-van', name: 'Camping Van', enabled: true, order: 1, video: '/assets/scenes/truckCampBackground.mp4', accent: '#ff8a3d', time_mode: 'always', ambience: { campfire: 30, forestNight: 15 }, source: 'built-in' },
   { id: 'rainforest', name: 'Rainforest', enabled: true, order: 2, video: '/assets/scenes/Day-rainny.mp4', accent: '#38d6e8', time_mode: 'always', ambience: { rainForest: 35, birds: 20 }, source: 'built-in' },
-  { id: 'beach', name: 'Beach', enabled: true, order: 3, video: '/assets/scenes/Day-sunny.mp4', accent: '#ffb454', time_mode: 'always', ambience: { waves: 35 }, source: 'built-in' },
+  { id: 'beach', name: 'Beach', enabled: true, order: 3, video: '/assets/scenes/Day-sunny.mp4', accent: '#ffb454', time_mode: 'always', ambience: { waves: 35 }, source: 'built-in', placeholder: true },
   { id: 'cafe', name: 'Cafe', enabled: true, order: 4, video: '/assets/scenes/Night-clear.mp4', accent: '#7fb0ff', time_mode: 'always', ambience: { people: 20 }, source: 'built-in' },
   { id: 'riverfront', name: 'Riverfront', enabled: true, order: 5, video: '/assets/scenes/Night-rainny.mp4', accent: '#4f8cff', time_mode: 'always', ambience: { river: 30 }, source: 'built-in' },
 ];
@@ -31,7 +31,7 @@ export function mergeSkins(fromApi: Skin[]): Skin[] {
     const row = byId.get(b.id);
     if (!row) return b;
     const overridden = !!(row.video || row.image);
-    return { ...b, ...row, video: overridden ? row.video : b.video, image: overridden ? row.image : b.image };
+    return { ...b, ...row, video: overridden ? row.video : b.video, image: overridden ? row.image : b.image, placeholder: overridden ? false : b.placeholder };
   });
   fromApi.forEach(s => { if (!BUILT_IN_IDS.has(s.id)) out.push(s); });
   return out.filter(s => s.enabled).sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));

@@ -36,9 +36,22 @@
 
   /* live data */
   const liveEl = $('[data-live]');
+  // Whether YouTube is actually broadcasting and whether our own metadata API can be
+  // reached are two different facts. An API outage must never be reported as the
+  // broadcast being offline — that is a claim about YouTube we have no evidence for.
+  let lastKnownLive = null;
   function render(s) {
-    if (!s.ok) { liveEl.className = 'live off'; liveEl.innerHTML = '<i></i>OFFLINE'; if (!now) { $('[data-title]').textContent = 'Stream information unavailable'; $('[data-artist]').textContent = 'Listen Live still works when the station is up.'; } return; }
+    if (!s.ok) {
+      if (lastKnownLive === true) { liveEl.className = 'live'; liveEl.innerHTML = '<i></i>LIVE ON YOUTUBE'; }
+      else if (lastKnownLive === false) { liveEl.className = 'live off'; liveEl.innerHTML = '<i></i>OFF AIR'; }
+      else { liveEl.className = 'live unknown'; liveEl.innerHTML = '<i></i>CONNECTING'; }
+      $$('[data-title]').forEach(e => e.textContent = 'Track information temporarily unavailable');
+      $$('[data-artist]').forEach(e => e.textContent = '');
+      const un = $('[data-upnext]'); if (un) un.innerHTML = '<li class="empty">Upcoming tracks temporarily unavailable.</li>';
+      return;
+    }
     if (s.unchanged) { tickProgress(); return; }
+    lastKnownLive = !!s.now.live;
     now = s.now;
     const st = s.stations.find(x => x.id === station) || {};
     applyYouTube(st.youtube_url || s.now.youtube_url || window.HG_YOUTUBE_URL || '');
