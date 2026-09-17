@@ -66,6 +66,7 @@ class BgFeeder:
         self._helper_path: Path | None = None
         self._last_frame: bytes | None = None
         self._consecutive_failures = 0
+        self._codec_cache: dict[str, str | None] = {}
 
     def fifo_path(self) -> Path:
         return config.RUN_DIR / f"bg-{self.sid}.fifo"
@@ -76,15 +77,51 @@ class BgFeeder:
         if not p.exists():
             os.mkfifo(str(p))
 
+    def _probe_codec(self, path: Path) -> str | None:
+        """Cached per path (helpers restart on every track change but the same clip is
+        looped for a whole song, and this file's codec never changes mid-song)."""
+        key = str(path)
+        if key in self._codec_cache:
+            return self._codec_cache[key]
+        try:
+            r = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0",
+                                "-show_entries", "stream=codec_name", "-of", "csv=p=0", str(path)],
+                               capture_output=True, text=True, timeout=10)
+            codec = r.stdout.strip() or None
+        except Exception:
+            codec = None
+        self._codec_cache[key] = codec
+        return codec
+
     def _spawn_helper(self, path: Path) -> subprocess.Popen:
+        # Hardware-decode h264 sources (every skin video today, including the migrated
+        # loop) exactly like the original single-process pipeline did — proven necessary:
+        # software-decoding a 720p30 h264 clip alone pegged a full CPU core on this Pi 4
+        # and dragged the whole encode below realtime (~0.9x, climbing load average past
+        # the box's 4 cores). Falls back to software decode for anything else (e.g. a
+        # webm upload), which is correct but slower; that trade-off only matters if an
+        # operator puts a non-h264 clip in broadcast rotation.
+        decode_args = ["-c:v", "h264_v4l2m2m"] if self._probe_codec(path) == "h264" else []
         cmd = [
             "ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "warning", "-nostats",
-            "-re", "-stream_loop", "-1", "-i", str(path),
+            *decode_args, "-re", "-stream_loop", "-1", "-i", str(path),
             "-vf", f"scale={config.VIDEO_W}:{config.VIDEO_H}:force_original_aspect_ratio=increase,"
                    f"crop={config.VIDEO_W}:{config.VIDEO_H},fps={config.VIDEO_FPS}",
             "-f", "rawvideo", "-pix_fmt", "yuv420p", "pipe:1",
         ]
-        return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=0)
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=0)
+        # Default Linux pipe capacity is 64 KB; a frame is ~1.3 MB, so the steady-state
+        # read loop was doing ~21 small reads (and 21 select() calls) per frame — measured
+        # burning most of a CPU core in the Python relay loop alone. Grow the pipe as far
+        # as this box allows (1 MB here) so each frame needs only ~2 reads. This is why a
+        # helper CPU fix alone (hardware decode) wasn't enough on its own — the *relay*
+        # loop was the other half of the same regression.
+        try:
+            import fcntl
+            fcntl.fcntl(proc.stdout.fileno(), fcntl.F_SETPIPE_SZ, 1024 * 1024)
+        except (OSError, AttributeError):
+            pass
+        return proc
 
     def _kill_helper(self, proc: subprocess.Popen) -> None:
         try:
