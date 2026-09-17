@@ -50,6 +50,8 @@ def _startup() -> None:
     config.ensure_dirs()
     db.connect()
     auth.bootstrap()
+    from . import skins as _skins_mod
+    _skins_mod.ensure_seeded()
     for sid in config.STATION_IDS:
         scheduler.ensure_defaults(sid)
         try:
@@ -1640,7 +1642,8 @@ def skins_list(user: str = Depends(current_user)):
     d = skins_mod.load()
     all_skins = skins_mod.public_list(include_disabled=True)
     return {"skins": all_skins, "default": d.get("default"),
-            "built_in_count": len(skins_mod.BUILT_IN), "custom_count": sum(1 for s in all_skins if s["source"] == "custom"),
+            "built_in_count": sum(1 for s in all_skins if s["source"] == "built-in"),
+            "custom_count": sum(1 for s in all_skins if s["source"] == "custom"),
             "ambience_options": [{"key": k, "label": v} for k, v in skins_mod.AMBIENCE_LABELS.items()]}
 
 
@@ -1653,6 +1656,7 @@ class SkinBody(BaseModel):
     order: int | None = None
     time_mode: str = "always"
     time_variants: dict | None = None
+    broadcast_eligible: bool | None = None
 
 
 @app.post("/api/skins")
@@ -1726,6 +1730,63 @@ def skins_thumb_generate(skin_id: str, source: str, user: str = Depends(current_
     except RuntimeError as e:
         raise HTTPException(400, str(e))
     return {"ok": True, "file": name}
+
+
+# ---------------------------------------------------------------------------
+# YouTube Broadcast Visuals (private management) — layered on the skins registry above;
+# see hgc/broadcast.py for the model.
+from . import broadcast as broadcast_mod  # noqa: E402
+
+
+@app.get("/api/broadcast")
+def broadcast_get(user: str = Depends(current_user)):
+    return broadcast_mod.public_state()
+
+
+class BroadcastMode(BaseModel):
+    mode: str
+    single_visual: str | None = None
+    active_collection: str | None = None
+
+
+@app.post("/api/broadcast/mode")
+def broadcast_mode(body: BroadcastMode, user: str = Depends(current_user)):
+    try:
+        broadcast_mod.set_mode(body.mode, body.single_visual, body.active_collection)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    db.log_event("info", "system", f"Broadcast mode set: {body.mode}")
+    return broadcast_mod.public_state()
+
+
+class BroadcastCollection(BaseModel):
+    name: str
+    order: str = "sequential"
+    video_ids: list[str] = []
+
+
+@app.post("/api/broadcast/collections")
+def broadcast_collection_create(body: BroadcastCollection, user: str = Depends(current_user)):
+    c = broadcast_mod.upsert_collection(body.model_dump())
+    db.log_event("info", "system", f"Broadcast collection created: {body.name}")
+    return c
+
+
+@app.put("/api/broadcast/collections/{cid}")
+def broadcast_collection_update(cid: str, body: BroadcastCollection, user: str = Depends(current_user)):
+    try:
+        return broadcast_mod.upsert_collection(body.model_dump(), cid)
+    except KeyError:
+        raise HTTPException(404)
+
+
+@app.delete("/api/broadcast/collections/{cid}")
+def broadcast_collection_delete(cid: str, user: str = Depends(current_user)):
+    try:
+        broadcast_mod.delete_collection(cid)
+    except KeyError:
+        raise HTTPException(404)
+    return {"ok": True}
 
 
 @app.post("/api/library/prepare-mp3")

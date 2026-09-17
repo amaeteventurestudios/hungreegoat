@@ -3,46 +3,17 @@ export type TimeOfDay = 'dawn' | 'afternoon' | 'dusk' | 'night';
 export const TIMES: TimeOfDay[] = ['dawn', 'afternoon', 'dusk', 'night'];
 export const TIME_LABEL: Record<TimeOfDay, string> = { dawn: 'Dawn', afternoon: 'Afternoon', dusk: 'Dusk', night: 'Night' };
 
-/* The six scenes the player ships with (ids/names must match hgc/skins.py BUILT_IN on the
-   control backend, which manages their enabled/order/default/accent/ambience state and can
-   attach an operator-uploaded visual override). A scene is independent of time of day —
-   TIME only drives the light/vignette overlay in Scene.tsx, never which scene is showing.
-   Only two of these six have footage that actually matches their name, both from the
-   original AGPL project: Day-sunny.mp4 is a genuine study-room desk scene, and
-   truckCampBackground.mp4 is a genuine camping van. Day-rainny.mp4, Night-clear.mp4 and
-   Night-rainny.mp4 were previously (wrongly) assigned to Rainforest/Cafe/Riverfront —
-   pulling a real frame from each proved they are the *same* study-room composition, just
-   recolored for weather/time of day, not distinct environments. Showing that footage under
-   another scene's name would be exactly the "silently fall back while displaying another
-   scene name" the UI must never do, so these four have no video/image until an operator
-   uploads real footage; `placeholder: true` drives the honest "Placeholder art" disclosure
-   in Mixer.tsx instead. */
-export const BUILT_IN: Skin[] = [
-  { id: 'study-room', name: 'Study Room', enabled: true, order: 0, video: '/assets/scenes/Day-sunny.mp4', accent: '#f2c14e', time_mode: 'always', ambience: {}, source: 'built-in' },
-  { id: 'camping-van', name: 'Camping Van', enabled: true, order: 1, video: '/assets/scenes/truckCampBackground.mp4', accent: '#ff8a3d', time_mode: 'always', ambience: { campfire: 30, forestNight: 15 }, source: 'built-in' },
-  { id: 'rainforest', name: 'Rainforest', enabled: true, order: 2, accent: '#38d6e8', time_mode: 'always', ambience: { rainForest: 35, birds: 20 }, source: 'built-in', placeholder: true },
-  { id: 'beach', name: 'Beach', enabled: true, order: 3, accent: '#ffb454', time_mode: 'always', ambience: { waves: 35 }, source: 'built-in', placeholder: true },
-  { id: 'cafe', name: 'Cafe', enabled: true, order: 4, accent: '#7fb0ff', time_mode: 'always', ambience: { people: 20 }, source: 'built-in', placeholder: true },
-  { id: 'riverfront', name: 'Riverfront', enabled: true, order: 5, accent: '#4f8cff', time_mode: 'always', ambience: { river: 30 }, source: 'built-in', placeholder: true },
-];
-const BUILT_IN_IDS = new Set(BUILT_IN.map(b => b.id));
-
 export function autoTime(d = new Date()): TimeOfDay { const h = d.getHours(); return h >= 5 && h < 11 ? 'dawn' : h >= 11 && h < 17 ? 'afternoon' : h >= 17 && h < 20 ? 'dusk' : 'night'; }
 
-/* Merge the bundled scene assets with the control backend's authoritative state
-   (enabled/order/accent/ambience/default, and any operator-uploaded override). A built-in
-   never disappears even if the backend hasn't seen it yet; a backend row's video/image
-   (an override) always wins over the local placeholder. */
+/* The player carries no scene list of its own — every scene it can show, including the
+   ones it originally shipped with, is a row in Control's skins registry (hgc/skins.py) and
+   arrives here from GET /v1/skins. That is deliberate: a hardcoded local copy is exactly
+   the "hidden list that keeps showing a disabled/deleted scene" failure mode this
+   architecture must not have. The API already filters to enabled rows and sorts by order;
+   this just re-applies both defensively so the player never depends on that ordering
+   contract holding forever. */
 export function mergeSkins(fromApi: Skin[]): Skin[] {
-  const byId = new Map(fromApi.map(s => [s.id, s]));
-  const out: Skin[] = BUILT_IN.map(b => {
-    const row = byId.get(b.id);
-    if (!row) return b;
-    const overridden = !!(row.video || row.image);
-    return { ...b, ...row, video: overridden ? row.video : b.video, image: overridden ? row.image : b.image, placeholder: overridden ? false : b.placeholder };
-  });
-  fromApi.forEach(s => { if (!BUILT_IN_IDS.has(s.id)) out.push(s); });
-  return out.filter(s => s.enabled).sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
+  return fromApi.filter(s => s.enabled).sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
 }
 
 /* Picking a skin is independent of time of day: prefer the flagged default, else the first

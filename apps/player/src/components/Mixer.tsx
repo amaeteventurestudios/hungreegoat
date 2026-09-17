@@ -31,9 +31,9 @@ export default function Mixer() {
         {s.panel === 'scenes' && (
           <div className="modifierBox scenesBox">
             <div className="modifierBox-h"><h4>Scene<span className="hint2">Pick the physical environment</span></h4><button className="x" onClick={close} aria-label="Close scene panel">✕</button></div>
-            <div className="skins">{s.skins.map(x => <button key={x.id} className={`skin ${x.id === s.skinId ? 'on' : ''}`} onClick={() => d({ type: 'skin', id: x.id })} title={x.placeholder ? `${x.name}: real footage not uploaded yet, showing a placeholder` : x.name}>
+            <div className="skins">{s.skins.map(x => { const hasArt = !!(x.video || x.image); return <button key={x.id} className={`skin ${x.id === s.skinId ? 'on' : ''}`} onClick={() => d({ type: 'skin', id: x.id })} title={hasArt ? x.name : `${x.name}: no scene art uploaded yet`}>
               {x.thumbnail ? <img src={x.thumbnail} alt="" /> : x.video ? <video src={x.video} muted loop playsInline /> : <span className="ph" style={{ background: x.accent || '#22344a' }} />}
-              <b>{x.name}</b>{x.placeholder && <small className="placeholderTag">Placeholder art</small>}</button>)}</div>
+              <b>{x.name}</b>{!hasArt && <small className="placeholderTag">No art yet</small>}</button>; })}</div>
             <h5>Time of day<span className="hint2">Lighting only, the scene never changes</span></h5>
             <div className="times">{TIMES.map(t => <button key={t} className={s.time === t ? 'on' : ''} onClick={() => d({ type: 'time', time: t })}>{TIME_LABEL[t]}</button>)}<button className={s.timeAuto ? 'on' : ''} onClick={() => d({ type: 'time', time: 'auto' })} title="Follow the clock">Auto</button></div>
           </div>)}
