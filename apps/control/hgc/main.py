@@ -28,6 +28,24 @@ from . import auth, catalog, config, db, liq, metrics, overlay, scheduler, selec
 app = FastAPI(title="HUNGREE Goat Control", docs_url=None, redoc_url=None, openapi_url=None)
 
 
+@app.middleware("http")
+async def _noindex_everywhere(request: Request, call_next):
+    """This one process is reachable behind three separate private/operational hostnames
+    (control./api./dj.hungreegoat.com — see infra/gateway/nginx/*.conf) and none of them
+    should ever appear in search results. The gateway already sets X-Robots-Tag for
+    control.*, but robots.txt is not a security boundary and shouldn't be the *only* layer
+    — this applies to every response regardless of which hostname routed here, independent
+    of whatever the gateway is or isn't configured to add."""
+    response = await call_next(request)
+    response.headers["X-Robots-Tag"] = "noindex, nofollow, noarchive, nosnippet, noimageindex"
+    return response
+
+
+@app.get("/robots.txt", include_in_schema=False)
+def robots_txt():
+    return PlainTextResponse("User-agent: *\nDisallow: /\n")
+
+
 @app.exception_handler(RequestValidationError)
 async def _friendly_validation_error(request: Request, exc: RequestValidationError):
     """The operator UI shows `detail` verbatim in a toast — never leak raw Pydantic
@@ -218,8 +236,17 @@ def login(body: Login, request: Request, response: Response):
         time.sleep(0.8)
         raise HTTPException(401, "invalid credentials")
     secure = request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
+    # A bare host-only cookie (the default) only ever reaches back whichever exact hostname
+    # was signed in on — fine for LAN/IP access, but once behind the gateway it would mean
+    # signing in again on dj.hungreegoat.com even though it's the same operator session on
+    # the same backend (see apps/dj-studio/NOTICE.md: DJ Studio is designed to share this
+    # cookie, not run a second login). Scope it to the whole hungreegoat.com family instead —
+    # only when the request actually came in on that domain; an IP/LAN hostname can't take an
+    # explicit Domain attribute at all (browsers reject it), so it stays host-only there.
+    host = (request.headers.get("host") or "").split(":")[0]
+    domain = ".hungreegoat.com" if host.endswith(".hungreegoat.com") else None
     response.set_cookie(auth.COOKIE, auth.issue(body.username), httponly=True, samesite="lax", secure=secure,
-                        max_age=auth.SESSION_TTL, path="/")
+                        max_age=auth.SESSION_TTL, path="/", domain=domain)
     db.log_event("info", "auth", f"Operator signed in from {ip}")
     return {"ok": True, "user": body.username}
 
@@ -1833,6 +1860,9 @@ class WorkoutProfileBody(BaseModel):
     recent_history_window: int = 20
     mastering_preset: str = "workout_streaming"
     enabled: bool = True
+    tempo_mode: str = "automatic"
+    tempo_boost_pct: float | None = None
+    target_bpm: float | None = None
 
 
 @app.get("/api/dj/profiles")
@@ -1908,6 +1938,12 @@ class MixGenerateBody(BaseModel):
     playlist: str = "workout"
     transition_sec: float = 8
     transition_type: str = "blend"
+    # Real playback-speed acceleration (see dj_orchestrator.py _resolve_tempo) — "automatic"
+    # derives a boost from the mix's own intensity; "original" applies none.
+    tempo_mode: str = "automatic"
+    tempo_boost_pct: float | None = None
+    target_bpm: float | None = None
+    key_lock: bool = True
 
 
 @app.post("/api/dj/mixes/{mid}/generate")
@@ -1925,12 +1961,17 @@ def dj_mix_generate(mid: int, body: MixGenerateBody, user: str = Depends(current
     def run():
         import subprocess, sys
         try:
+            cmd = [sys.executable, "-m", "hgc.dj_orchestrator", "generate",
+                   "--mix-id", str(mid), "--station", m["station"], "--playlist", body.playlist,
+                   "--duration", str(m["target_duration_sec"]),
+                   "--transition-sec", str(body.transition_sec), "--transition-type", body.transition_type,
+                   "--tempo-mode", body.tempo_mode, "--key-lock", "1" if body.key_lock else "0"]
+            if body.tempo_boost_pct is not None:
+                cmd += ["--tempo-boost-pct", str(body.tempo_boost_pct)]
+            if body.target_bpm is not None:
+                cmd += ["--target-bpm", str(body.target_bpm)]
             r = subprocess.run(
-                [sys.executable, "-m", "hgc.dj_orchestrator", "generate",
-                 "--mix-id", str(mid), "--station", m["station"], "--playlist", body.playlist,
-                 "--duration", str(m["target_duration_sec"]),
-                 "--transition-sec", str(body.transition_sec), "--transition-type", body.transition_type],
-                cwd=str(config.APP_DIR), capture_output=True, text=True,
+                cmd, cwd=str(config.APP_DIR), capture_output=True, text=True,
                 timeout=max(600, m["target_duration_sec"] * 2 + 300))
             if r.returncode != 0:
                 db.log_event("error", "system", f"DJ mix generate failed (#{mid}): {r.stderr[-800:]}", m["station"])

@@ -185,6 +185,21 @@ def connect() -> sqlite3.Connection:
                                ("dj_analyzed_at", "REAL"), ("dj_analysis_version", "TEXT")):
                 if col not in cols:
                     _conn.execute(f"ALTER TABLE tracks ADD COLUMN {col} {decl}")
+            # Real tempo acceleration (see hgc/dj_orchestrator.py _resolve_tempo /
+            # dj-autopilot.js applyTempo) — what was actually requested for the whole mix,
+            # and per-track key-lock state alongside the tempo columns mix_tracks already had.
+            mix_cols = {r[1] for r in _conn.execute("PRAGMA table_info(mixes)")}
+            for col, decl in (("tempo_mode", "TEXT"), ("tempo_boost_pct", "REAL"), ("target_bpm", "REAL")):
+                if col not in mix_cols:
+                    _conn.execute(f"ALTER TABLE mixes ADD COLUMN {col} {decl}")
+            mt_cols = {r[1] for r in _conn.execute("PRAGMA table_info(mix_tracks)")}
+            if "key_lock" not in mt_cols:
+                _conn.execute("ALTER TABLE mix_tracks ADD COLUMN key_lock INTEGER")
+            wp_cols = {r[1] for r in _conn.execute("PRAGMA table_info(workout_profiles)")}
+            for col, decl in (("tempo_mode", "TEXT DEFAULT 'automatic'"), ("tempo_boost_pct", "REAL"),
+                               ("target_bpm", "REAL")):
+                if col not in wp_cols:
+                    _conn.execute(f"ALTER TABLE workout_profiles ADD COLUMN {col} {decl}")
         return _conn
 
 

@@ -33,9 +33,11 @@ fi
 sshd -t && systemctl reload ssh
 cp "$H/nginx/api.hungreegoat.com.conf" /etc/nginx/sites-available/api.hungreegoat.com
 cp "$H/nginx/control.hungreegoat.com.conf" /etc/nginx/sites-available/control.hungreegoat.com
-ln -sf /etc/nginx/sites-available/api.hungreegoat.com /etc/nginx/sites-enabled/; ln -sf /etc/nginx/sites-available/control.hungreegoat.com /etc/nginx/sites-enabled/
+cp "$H/nginx/dj.hungreegoat.com.conf" /etc/nginx/sites-available/dj.hungreegoat.com
+ln -sf /etc/nginx/sites-available/api.hungreegoat.com /etc/nginx/sites-enabled/; ln -sf /etc/nginx/sites-available/control.hungreegoat.com /etc/nginx/sites-enabled/; ln -sf /etc/nginx/sites-available/dj.hungreegoat.com /etc/nginx/sites-enabled/
 nginx -t && systemctl reload nginx
 certbot --nginx -d api.hungreegoat.com --non-interactive --agree-tos --register-unsafely-without-email --keep-until-expiring || echo "certbot failed for api.hungreegoat.com — check DNS, then rerun"
 certbot --nginx -d control.hungreegoat.com --non-interactive --agree-tos --register-unsafely-without-email --keep-until-expiring || echo "certbot failed for control.hungreegoat.com — check DNS, then rerun"
+certbot --nginx -d dj.hungreegoat.com --non-interactive --agree-tos --register-unsafely-without-email --keep-until-expiring || echo "certbot failed for dj.hungreegoat.com — check DNS, then rerun"
 nginx -t && systemctl reload nginx
 echo "gateway installed. Tunnel arrives on 127.0.0.1:18090 once the Pi unit connects."

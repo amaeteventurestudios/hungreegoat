@@ -198,9 +198,12 @@ def tracks(station: str = "lofi"):
 
 
 def ensure_mp3(track_id: int) -> Path | None:
-    """Transcode once to MP3 128k on the media drive; subsequent plays are plain file serves."""
+    """Transcode once to MP3 128k on the media drive; subsequent plays are plain file serves.
+    Same enabled=1 filter as _tracks_public()'s listing — a track an operator has disabled
+    must not remain fetchable by ID once it's no longer listed; track IDs are sequential and
+    trivially enumerable, so "just not linked" was never a real access boundary here."""
     import subprocess
-    t = db.q1("SELECT path, mtime FROM tracks WHERE id=? AND corrupt=0", (track_id,))
+    t = db.q1("SELECT path, mtime FROM tracks WHERE id=? AND corrupt=0 AND enabled=1", (track_id,))
     if not t:
         return None
     MP3_CACHE.mkdir(parents=True, exist_ok=True)

@@ -14,8 +14,12 @@ This directory is `Aurdour/web/` verbatim (a static, no-build two-deck DJ app �
 
 - `index.html` / `styles.css`: re-skinned to the HUNGREE Goat Control design system (dark
   navy/gold palette, `packages/brand/tokens.css` colors, HUNGREE Goat header/branding) instead
-  of upstream's own visual identity. Upstream product name/branding in the operator UI replaced;
-  this notice preserves the required attribution.
+  of upstream's own visual identity. Upstream product name/branding in the operator UI replaced —
+  including the first-run onboarding tour's own "Welcome to AURDOUR DJ" copy, the page's
+  `og:title`/`apple-mobile-web-app-title` meta tags, and `manifest.webmanifest`'s PWA
+  name/short_name, all now say HUNGREE Goat instead. `player.js`'s two `console.log` startup
+  messages still say "[AURDOUR DJ]" — devtools-only, never operator-visible UI, left as
+  harmless in-code attribution. This notice preserves the required attribution either way.
 - `dj/Library.js`: `loadManifest()` now fetches `/api/dj/manifest?station=...&playlist=...` from
   HUNGREE Goat Control instead of the static `data/manifest.json` demo file. Everything else
   (FlowMode auto-DJ, AutoTransition crossfading, Recorder, BpmDetector, HarmonicMixer, Deck, FX,
@@ -26,6 +30,18 @@ This directory is `Aurdour/web/` verbatim (a static, no-build two-deck DJ app �
   `dj_orchestrator.py` drive a real FlowMode session headlessly via a `?autopilot=1` URL
   parameter and a `window.__hgcAutopilot` status object, instead of simulating mouse clicks
   through the full UI. Does not modify any upstream file's own behavior when autopilot is off.
+
+### BPM/key analyzer specifically
+
+`dj/bpm-worker.js` and `dj/BpmDetector.js` are unmodified upstream Aurdour files (same commit,
+same MIT license as above) — HUNGREE Goat did not write a BPM/key detector. `detectBPM()` is a
+low-pass-filtered onset-energy/autocorrelation beat detector; `detectKey()` is a chromagram
+(pitch-class profile) matched against major/minor key templates via the Krumhansl-Schmuckler
+method. `hgc/dj_orchestrator.py`'s `analyze` subcommand calls these exact functions (via
+`apps/dj-studio/tools/analyze.html`, a thin harness that loads `bpm-worker.js` outside its
+normal Web Worker context and calls `detectBPM`/`detectKey` directly on a decoded track buffer)
+rather than reimplementing tempo/key detection — see `hgc/dj.py`'s `save_analysis()` for where
+the results land (`tracks.dj_bpm`/`dj_key`, never overwriting anything tag-derived).
 
 ## Mastering DSP — noisyloop/mastering
 

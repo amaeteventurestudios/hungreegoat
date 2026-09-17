@@ -30,7 +30,9 @@ const closeModal = () => { state.modal=null; render(); };
 Object.assign(ACTIONS, { 'close-modal': closeModal });
 
 /* ======================= DASHBOARD ======================= */
-pages.dashboard = { view(){ const s=st(), ov=state.overview; const np=s.now_playing, sys=ov.system, stream=s.stream, sched=s.schedule, set=s.settings;
+pages.dashboard = { live:true, async load(){ const [mixes, pls] = await Promise.all([api(`/api/dj/mixes?station=${S()}`), api(`${P()}/playlists`)]);
+  return {mixes, workoutPlaylists: pls.filter(p=>p.kind==='workout')}; },
+  view(d){ const s=st(), ov=state.overview; const np=s.now_playing, sys=ov.system, stream=s.stream, sched=s.schedule, set=s.settings;
   const liqOn=s.liquidsoap.alive; const [airLabel, airCls]=streamState(s);
   const airDesc = s.on_air ? 'Streaming to YouTube' : liqOn ? (stream.state==='running' ? `Video pipeline running (${stream.target} output)` : stream.state==='waiting' ? 'Waiting for YouTube stream key' : 'Audio running · video stream stopped') : (s.library.empty ? 'Station waiting for media' : 'Audio engine stopped');
   const nextSw = sched.next_switch_in_sec!=null ? fmtLong(sched.next_switch_in_sec).replace(/ \d+s$/,'') : null;
@@ -122,6 +124,18 @@ pages.dashboard = { view(){ const s=st(), ov=state.overview; const np=s.now_play
     <div class="panel"><div class="panel-h"><h3>${ic(I.list)}Library / Playlists</h3><a class="right link" href="#/library">Library ${I.chev}</a></div><div class="panel-b scroll">
       <div class="pl-tiles">${(s.playlists||[]).map(p=>`<a class="tile ${sched.playlist_slug===p.slug?'active':''}" href="#/playlists" data-key="pl-${p.id}"><span class="ph">${I.list}</span><div class="n"><b>${h(p.name)}</b><span>${p.track_count} tracks</span></div></a>`).join('')}</div></div>
       <div class="panel-f"><span class="small muted">Mode</span><select class="sel" data-change="mode" style="height:34px">${[['shuffle','Shuffle'],['sequential','Sequential']].map(([v,l])=>`<option value="${v}" ${(set.sequential&&!set.shuffle?'sequential':'shuffle')===v?'selected':''}>${l}</option>`).join('')}</select><span class="small muted" style="margin-left:auto;text-align:right">${s.library.tracks} tracks · ${fmtLong(s.library.duration)}</span></div></div>
+
+    ${(()=>{ const latest=(d.mixes||[])[0]; const active=latest&&['creating','recording','mastering'].includes(latest.status);
+      return `<div class="panel"><div class="panel-h"><h3>${ic(I.mic,'gold')}Workout DJ${active?help('Auto-DJ is generating a mix right now — recording in real time, then mastering.'):''}</h3><a class="right link" href="#/workout">Workout DJ ${I.chev}</a></div><div class="panel-b scroll">
+      <div class="grid" style="grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:10px">
+        <div class="stat"><div class="k">Workout playlists</div><div class="v">${(d.workoutPlaylists||[]).length}</div></div>
+        <div class="stat"><div class="k">Mixes saved</div><div class="v">${(d.mixes||[]).length}</div></div>
+      </div>
+      ${active?`<div class="rule" style="background:rgba(242,193,78,.08);border-radius:10px;padding:8px 10px"><span class="led warn pulse"></span><span class="lbl">Auto-DJ: ACTIVE<small>${h(latest.title)} · ${latest.status}</small></span></div>`
+        :latest?`<div class="small muted">Latest: <b>${h(latest.title)}</b> — ${latest.status==='ready'?(latest.actual_duration_sec?fmtLong(latest.actual_duration_sec):''):latest.status}${latest.measured_lufs!=null?` · ${latest.measured_lufs.toFixed(1)} LUFS`:''}</div>`
+        :`<div class="small muted">No mixes generated yet.</div>`}
+      </div>
+      <div class="panel-f qa"><a class="btn sm gold" href="#/workout">${I.plus} Create Workout Mix</a><a class="btn sm" href="/dj/index.html" target="_blank" rel="noopener">${I.headphones} Open DJ Studio</a></div></div>`; })()}
 
     <div class="panel"><div class="panel-h"><h3>${ic(I.out,'blue')}Outputs / Destinations${help('Where the encoded video/audio actually goes: YouTube Live (public broadcast), a local test file on the Pi, or Listen Live (authenticated audio-only for Control users). Change the active destination on the Outputs page.')}</h3></div><div class="panel-b scroll">
       <div class="out"><span class="ic red">${I.yt}</span><div class="n"><b>YouTube Live</b><span>${s.stream.youtube_configured?'rtmps · key configured':'Stream key not configured'}</span></div>${ytOn?pill('on','Live'):(stream.state==='waiting'?pill('warn','Waiting'):(s.stream.youtube_configured?pill('off','Idle'):pill('warn','Needs key')))}</div>
@@ -221,7 +235,7 @@ const trackRow = (t, opts={}) => `<div class="trk ${state.sel&&state.sel.has(t.i
   <div class="a hide-m"><span>${h(t.artist)}</span><span>${t.codec?h(t.codec)+' · ':''}${t.sample_rate?t.sample_rate/1000+' kHz':''}${t.loudness_i!=null?' · '+t.loudness_i.toFixed(1)+' LUFS':''}</span></div>
   <div class="hide-m mono small">${fmtDur(t.duration)}</div>
   <div class="hide-m">${pill(t.artwork_source==='external'?'green':t.artwork_source==='embedded'?'blue':'off', t.artwork_source==='external'?'cover':t.artwork_source==='embedded'?'embedded':'default')}</div>
-  <div class="hide-m"><span class="toggle green ${t.enabled?'on':''}" data-act="track-enable" data-id="${t.id}" title="${t.enabled?'Enabled':'Disabled'}"></span></div>
+  <div class="hide-m" style="display:flex;align-items:center;gap:6px" title="${t.enabled?'Enabled — eligible for playback':'Disabled — excluded from playback'}"><span class="toggle green ${t.enabled?'on':''}" data-act="track-enable" data-id="${t.id}" role="switch" aria-checked="${!!t.enabled}" aria-label="${t.enabled?'Enabled':'Disabled'} — eligible for playback"></span><small class="muted2" style="width:44px">${t.enabled?'Enabled':'Disabled'}</small></div>
   <div class="acts"><button class="btn xs icon ${state.previewing===t.id?'gold':''}" data-act="preview" data-id="${t.id}" data-title="${h(t.title)}" title="Preview">${state.previewing===t.id?I.pause:I.play}</button><button class="btn xs icon" data-act="q-add" data-id="${t.id}" title="Add to queue">${I.plus}</button><button class="btn xs icon gold" data-act="q-next" data-id="${t.id}" title="Play next">${I.skip}</button><button class="btn xs icon" data-act="track-edit" data-id="${t.id}" title="Edit">${I.edit}</button>${opts.remove?`<button class="btn xs icon red" data-act="pl-rm" data-id="${t.id}" title="Remove from playlist">${I.x}</button>`:''}</div></div>`;
 pages.library = { async load(){ const q=state.search||''; const page=state._libPage||1; const sort=state._libSort||'title'; const [d, sum, scan] = await Promise.all([api(`/api/library?station=${S()}&q=${encodeURIComponent(q)}&page=${page}&per_page=50&sort=${sort}`), api('/api/media/summary'), api('/api/library/rescan')]); return {d, m:sum[S()], scan}; },
   view({d,m,scan}){ const sel=state.sel||new Set(); const q=state.search||'';
@@ -291,7 +305,7 @@ pages.playlists = { async load(){ const pls=await api(`${P()}/playlists`); const
     return `<div class="page-h"><h2>Playlists</h2><div class="right"><button class="btn sm gold" data-act="pl-new">${I.plus} New Playlist</button></div></div>
     <div class="pl-tiles" style="margin-bottom:12px">${pls.map(p=>`<a class="tile ${p.id===cur.id?'active':''}" href="#" data-act="pl-select" data-id="${p.id}" data-key="plt-${p.id}"><span class="ph">${kindIcon[p.kind]||I.list}</span><div class="n"><b>${h(p.name)}</b><span>${p.track_count} tracks · ${fmtLong(p.duration)} · ${h(p.mode)}${p.enabled?'':' · disabled'}</span></div></a>`).join('')}</div>
     <div class="panel"><div class="panel-h"><h3>${ic(kindIcon[cur.kind]||I.list)}${h(cur.name||'')}</h3><span class="right">${pill(cur.enabled?'on':'off',cur.enabled?'enabled':'disabled')}${pill('blue',cur.mode||'')}<button class="btn xs" data-act="pl-edit" data-id="${cur.id}">${I.edit}</button>${core?'':`<button class="btn xs red" data-act="pl-del" data-id="${cur.id}">${I.trash}</button>`}</span></div>
-    <div class="panel-b" style="gap:8px"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><div class="search" style="flex:1;min-width:160px">${I.search}<input placeholder="Filter this playlist…" value="${h(state._plq||'')}" data-input="pl-filter"></div><select class="sel" data-change="pl-sort" style="height:36px">${[['position','Playlist order'],['title','Title'],['duration','Duration']].map(([v,l])=>`<option value="${v}" ${sort===v?'selected':''}>${l}</option>`).join('')}</select>${cur.slug==='all'?'':`<button class="btn sm" data-act="pl-add-open">${I.plus} Add tracks</button>`}${['jingles','station_ids'].includes(cur.kind)?`<button class="btn sm gold" data-act="upload-open">${I.upload} Upload ${cur.kind==='jingles'?'jingles':'station IDs'}</button>`:''}</div>
+    <div class="panel-b" style="gap:8px"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><div class="search" style="flex:1;min-width:160px">${I.search}<input placeholder="Filter this playlist…" value="${h(state._plq||'')}" data-input="pl-filter"></div><select class="sel" data-change="pl-sort" style="height:36px">${[['position','Playlist order'],['title','Title'],['duration','Duration']].map(([v,l])=>`<option value="${v}" ${sort===v?'selected':''}>${l}</option>`).join('')}</select>${cur.slug==='all'?'':`<button class="btn sm" data-act="pl-add-open">${I.plus} Add tracks</button>`}${['jingles','station_ids'].includes(cur.kind)?`<button class="btn sm gold" data-act="upload-open">${I.upload} Upload ${cur.kind==='jingles'?'jingles':'station IDs'}</button>`:''}${cur.kind==='workout'?`<a class="btn sm gold" href="#/workout" data-act="pl-goto-workout" data-slug="${h(cur.slug)}">${I.mic} Create Workout Mix</a>`:''}</div>
       ${cur.description?`<div class="small muted">${h(cur.description)}${cur.slug==='all'?' — follows the library automatically.':''}</div>`:''}
       <div style="display:flex;flex-direction:column;max-height:65vh;overflow:auto">${list.length?list.map((t,i)=>trackRow({...t, idx:i}, {remove: cur.slug!=='all'})).join(''):empty(kindIcon[cur.kind]||I.list, cur.kind==='jingles'?'No jingles yet':cur.kind==='station_ids'?'No station IDs yet':'This playlist is empty', ['jingles','station_ids'].includes(cur.kind)?'Upload short idents to enable scheduled inserts between songs.':'Add tracks from the library to build this playlist.', ['jingles','station_ids'].includes(cur.kind)?`<button class="btn sm gold" data-act="upload-open">${I.upload} Upload</button>`:`<button class="btn sm gold" data-act="pl-add-open">${I.plus} Add tracks</button>`)}</div></div>
     <div class="panel-f small muted">${list.length} tracks shown · ${fmtLong(list.reduce((a,t)=>a+(t.duration||0),0))}${cur.mode==='sequential'?' · order = playlist position':''}</div></div>`; } };
@@ -349,6 +363,8 @@ function plAddPlaylistTab(cur){ const sources=state.pageData.playlists.pls.filte
 function plModal(p){ p=p||{name:'',description:'',mode:'shuffle',kind:'music',enabled:1}; return `<h3>${I.list} ${p.id?'Edit':'New'} playlist<button class="btn xs ghost icon x" data-act="close-modal">${I.x}</button></h3><form data-form="playlist" data-id="${p.id||''}" class="form"><label>Name<input class="inp" name="name" value="${h(p.name)}" required></label><label>Kind<select class="sel" name="kind" ${p.id?'disabled':''}>${['music','jingles','station_ids','fallback'].map(k=>`<option ${p.kind===k?'selected':''}>${k}</option>`).join('')}</select></label><label class="wide">Description<input class="inp" name="description" value="${h(p.description||'')}"></label><label>Mode<select class="sel" name="mode">${['shuffle','sequential','weighted'].map(k=>`<option ${p.mode===k?'selected':''}>${k}</option>`).join('')}</select></label><label>Enabled<select class="sel" name="enabled"><option value="1" ${p.enabled?'selected':''}>Yes</option><option value="0" ${!p.enabled?'selected':''}>No</option></select></label><div class="row-actions"><button type="button" class="btn" data-act="close-modal">Cancel</button><button class="btn gold" type="submit">Save</button></div></form>`; }
 Object.assign(ACTIONS, {
   'pl-select': (el)=>{ state._pl=Number(el.dataset.id); state._plq=''; delete state.pageData.playlists; render(); },
+  'pl-goto-workout': (el)=>{ state._woForm = {workout_type:'general', intensity:'moderate', duration_choice:'5', custom_minutes:75,
+    tempo_choice:'automatic', custom_pct:50, target_bpm:140, key_lock:true, ...(state._woForm||{}), playlist: el.dataset.slug}; },
   'pl-new': ()=>modal(()=>plModal(null)), 'pl-edit': (el)=>modal(()=>plModal(state.pageData.playlists.pls.find(p=>p.id===Number(el.dataset.id)))),
   'pl-del': async(el)=>{ if(await confirmDlg('Delete this playlist? Tracks stay in the library.','Delete',true)){ const r=await act(()=>del(`${P()}/playlists/${el.dataset.id}`),'Deleted'); if(r){ state._pl=null; delete state.pageData.playlists; render(); } } },
   'pl-rm': (el)=>act(()=>del(`${P()}/playlists/${state._pl}/tracks/${el.dataset.id}`)).then(()=>{ delete state.pageData.playlists; render(); }),
@@ -762,26 +778,83 @@ Object.assign(CHANGES, {
 /* ======================= WORKOUT DJ ======================= */
 const WORKOUT_LABELS = {general:'General Workout',strength:'Strength',treadmill:'Treadmill / Run',cycling:'Cycling',rowing:'Rowing',hiit:'HIIT'};
 const MIX_STATUS_PILL = {creating:['slate','Creating'],recording:['blue','Recording'],mastering:['amber','Mastering'],saving:['amber','Saving'],ready:['green','Ready'],failed:['red','Failed']};
+const TEMPO_LABEL = (m) => { if(!m.tempo_mode || m.tempo_mode==='original') return 'original tempo';
+  if(m.tempo_mode==='target_bpm') return `target ${m.target_bpm||'?'} BPM`;
+  const pct = m.tempo_boost_pct; return pct?`tempo ${pct>0?'+':''}${pct}%`:'original tempo'; };
 function mixRow(m){
   const [cls,lbl]=MIX_STATUS_PILL[m.status]||['slate',m.status]; const busy = m.status==='recording'||m.status==='mastering'||m.status==='creating';
-  return `<div class="row" data-key="mix-${m.id}" style="align-items:center">
-    <div class="tt" style="flex:1;min-width:0"><b>${h(m.title)}</b><span>${WORKOUT_LABELS[m.workout_type]||h(m.workout_type||'')} · ${h(m.intensity||'')}${m.measured_lufs!=null?` · ${m.measured_lufs.toFixed(1)} LUFS`:''}</span></div>
-    <span class="dur">${m.actual_duration_sec?fmtDur(m.actual_duration_sec):(m.target_duration_sec?'~'+fmtDur(m.target_duration_sec):'')}</span>
+  const open = state._mixRecipeOpen===m.id;
+  return `<div data-key="mix-${m.id}"><div class="row" style="align-items:center">
+    <div class="tt" style="flex:1;min-width:0"><b>${h(m.title)}</b><span>${WORKOUT_LABELS[m.workout_type]||h(m.workout_type||'')} · ${h(m.intensity||'')} · ${TEMPO_LABEL(m)}${m.measured_lufs!=null?` · ${m.measured_lufs.toFixed(1)} LUFS`:''}</span></div>
+    <span class="dur">${m.actual_duration_sec?fmtLong(m.actual_duration_sec):(m.target_duration_sec?'~'+fmtLong(m.target_duration_sec):'')}</span>
     <span class="pill ${cls}">${lbl}${busy?' …':''}</span>
-    <span class="acts">${m.status==='ready'?`<audio controls preload="none" style="height:32px;max-width:220px" src="/api/dj/mixes/${m.id}/audio.wav"></audio><a class="btn xs icon ghost" href="/api/dj/mixes/${m.id}/download" title="Download">${I.upload}</a>`:''}<button class="btn xs icon red" data-act="wo-delete" data-id="${m.id}" title="Delete">${I.trash}</button></span>
-  </div>`;
+    <span class="acts">${m.status==='ready'?`<button class="btn xs" data-act="mix-recipe-toggle" data-id="${m.id}">${open?'Hide':'Recipe'}</button><audio controls preload="none" style="height:32px;max-width:220px" src="/api/dj/mixes/${m.id}/audio.wav"></audio><a class="btn xs icon ghost" href="/api/dj/mixes/${m.id}/download" title="Download">${I.upload}</a>`:''}<button class="btn xs icon red" data-act="wo-delete" data-id="${m.id}" title="Delete">${I.trash}</button></span>
+  </div>
+  ${open?`<div class="small muted" style="padding:4px 0 10px 4px">${(state._mixRecipeData&&state._mixRecipeData[m.id])?
+      (state._mixRecipeData[m.id].length?state._mixRecipeData[m.id].map(t=>`<div>${h(t.title)} — source ${t.source_bpm||'?'} BPM → playback ${t.effective_bpm?Math.round(t.effective_bpm*10)/10:'?'} BPM (${t.tempo_adjust_pct>0?'+':''}${t.tempo_adjust_pct||0}%)${t.key_lock?' · key lock on':''}${t.source_key?' · '+h(t.source_key):''} · in at ${fmtDur(t.transition_in_sec||0)}</div>`).join(''):'No recipe recorded for this mix.')
+    :'Loading…'}</div>`:''}</div>`;
 }
+function profileTempoLabel(p){ if(!p.tempo_mode||p.tempo_mode==='automatic') return 'Automatic (from intensity)'; if(p.tempo_mode==='original') return 'Original — no acceleration';
+  if(p.tempo_mode==='target_bpm') return `Target ${p.target_bpm||'?'} BPM`; return `Boost ${p.tempo_boost_pct>0?'+':''}${p.tempo_boost_pct||0}%`; }
+function profileRow(p){ return `<div class="row" data-key="profile-${p.id}">
+  <div class="tt" style="flex:1;min-width:0"><b>${h(p.name)}${p.enabled?'':' (disabled)'}</b><span>${WORKOUT_LABELS[p.workout_type]||h(p.workout_type)} · ${h(p.default_intensity)} · ${fmtLong(p.default_duration_sec)} · ${profileTempoLabel(p)} · ${h(p.transition_type)} transitions</span></div>
+  <span class="acts"><button class="btn xs" data-act="profile-edit" data-id="${p.id}">${I.edit} Edit</button><button class="btn xs" data-act="profile-duplicate" data-id="${p.id}">${I.copy} Duplicate</button><button class="btn xs" data-act="profile-toggle" data-id="${p.id}">${p.enabled?'Disable':'Enable'}</button><button class="btn xs icon red" data-act="profile-del" data-id="${p.id}" title="Delete">${I.trash}</button></span></div>`; }
+const PROFILE_EDIT = {active:false};
+function profileEditOpen(p){ p=p||{}; Object.assign(PROFILE_EDIT,{active:true,id:p.id||null,name:p.name||'',workout_type:p.workout_type||'general',
+  default_duration_sec:p.default_duration_sec||1800,default_intensity:p.default_intensity||'moderate',transition_duration_sec:p.transition_duration_sec||8,
+  transition_type:p.transition_type||'blend',tempo_mode:p.tempo_mode||'automatic',tempo_boost_pct:p.tempo_boost_pct||50,target_bpm:p.target_bpm||140,
+  mastering_preset:p.mastering_preset||'workout_streaming',enabled:p.enabled!==false,saving:false});
+  modal(()=>profileEditorHtml()); }
+function profileEditorHtml(){ const e=PROFILE_EDIT;
+  return `<h3>${I.tag} ${e.id?'Edit':'New'} workout profile<button class="btn xs ghost icon x" data-act="close-modal">${I.x}</button></h3>
+  <form class="form" data-form="profile-save">
+    <label class="wide">Name<input class="inp" name="name" value="${h(e.name)}" required></label>
+    <label>Workout type<select class="sel" name="workout_type">${Object.entries(WORKOUT_LABELS).map(([k,l])=>`<option value="${k}" ${e.workout_type===k?'selected':''}>${l}</option>`).join('')}</select></label>
+    <label>Default intensity<select class="sel" name="default_intensity">${['easy','moderate','high','intense'].map(x=>`<option value="${x}" ${e.default_intensity===x?'selected':''}>${x[0].toUpperCase()+x.slice(1)}</option>`).join('')}</select></label>
+    <label>Default duration (minutes)<input class="inp" type="number" name="duration_min" min="1" max="240" value="${Math.round(e.default_duration_sec/60)}"></label>
+    <label>Transition style<select class="sel" name="transition_type">${['blend','echo-out','cut','filter-sweep'].map(x=>`<option value="${x}" ${e.transition_type===x?'selected':''}>${x}</option>`).join('')}</select></label>
+    <label>Tempo mode<select class="sel" name="tempo_mode" data-change="profile-field">${[['automatic','Automatic (from intensity)'],['original','Original — no acceleration'],['boost','Tempo Boost %'],['target_bpm','Target BPM']].map(([v,l])=>`<option value="${v}" ${e.tempo_mode===v?'selected':''}>${l}</option>`).join('')}</select></label>
+    ${e.tempo_mode==='boost'?`<label>Tempo boost (%)<input class="inp" type="number" name="tempo_boost_pct" min="-50" max="100" value="${h(e.tempo_boost_pct)}"></label>`:''}
+    ${e.tempo_mode==='target_bpm'?`<label>Target BPM<input class="inp" type="number" name="target_bpm" min="60" max="220" value="${h(e.target_bpm)}"></label>`:''}
+    <label>Mastering preset<select class="sel" name="mastering_preset">${['workout_streaming','club','podcast','broadcast'].map(x=>`<option value="${x}" ${e.mastering_preset===x?'selected':''}>${x}</option>`).join('')}</select></label>
+    <label>Enabled<select class="sel" name="enabled"><option value="1" ${e.enabled?'selected':''}>Yes</option><option value="0" ${!e.enabled?'selected':''}>No</option></select></label>
+    <div class="row-actions"><button type="button" class="btn" data-act="close-modal">Cancel</button><button class="btn gold" type="submit" ${e.saving?'disabled':''}>${e.saving?'Saving…':'Save Profile'}</button></div>
+  </form>`; }
+Object.assign(ACTIONS, {
+  'profile-new': ()=>profileEditOpen(null),
+  'profile-edit': (el)=>profileEditOpen(state.pageData.workout.profiles.find(x=>x.id===Number(el.dataset.id))),
+  'profile-duplicate': async(el)=>{ const p=state.pageData.workout.profiles.find(x=>x.id===Number(el.dataset.id)); if(!p) return;
+    const body={...p, name:p.name+' (copy)'}; delete body.id; delete body.created_at; delete body.updated_at;
+    await act(()=>post('/api/dj/profiles',body),'Profile duplicated'); },
+  'profile-toggle': async(el)=>{ const p=state.pageData.workout.profiles.find(x=>x.id===Number(el.dataset.id)); if(!p) return;
+    await act(()=>put(`/api/dj/profiles/${p.id}`,{...p,enabled:!p.enabled}), p.enabled?'Profile disabled':'Profile enabled'); },
+  'profile-del': async(el)=>{ if(await confirmDlg('Delete this workout profile? Mixes already created with it are unaffected.','Delete',true)) act(()=>del(`/api/dj/profiles/${el.dataset.id}`),'Profile deleted'); },
+});
+Object.assign(CHANGES, {
+  'profile-field': (el)=>{ PROFILE_EDIT[el.name]=el.value; modal(()=>profileEditorHtml()); },
+});
+Object.assign(FORMS, {
+  'profile-save': async(f,b)=>{ const e=PROFILE_EDIT; e.saving=true; modal(()=>profileEditorHtml());
+    const body={name:b.name.trim(),workout_type:b.workout_type,default_intensity:b.default_intensity,
+      default_duration_sec:Number(b.duration_min)*60,transition_type:b.transition_type,transition_duration_sec:e.transition_duration_sec,
+      tempo_mode:b.tempo_mode,tempo_boost_pct:b.tempo_boost_pct?Number(b.tempo_boost_pct):null,target_bpm:b.target_bpm?Number(b.target_bpm):null,
+      mastering_preset:b.mastering_preset,enabled:b.enabled==='1'};
+    const r=await act(()=>e.id?put(`/api/dj/profiles/${e.id}`,body):post('/api/dj/profiles',body),'Profile saved',{noRefresh:true});
+    e.saving=false; if(r){ delete state.pageData.workout; closeModal(); render(); } else modal(()=>profileEditorHtml()); },
+});
 pages.workout = { live:true, async load(){
-  const [mixes, analyzeStatus, pls] = await Promise.all([
-    api(`/api/dj/mixes?station=${S()}`), api('/api/dj/analyze/status'), api(`${P()}/playlists`)
+  const [mixes, analyzeStatus, pls, profiles] = await Promise.all([
+    api(`/api/dj/mixes?station=${S()}`), api('/api/dj/analyze/status'), api(`${P()}/playlists`), api('/api/dj/profiles')
   ]);
-  return {mixes, analyzeStatus, workoutPlaylists: pls.filter(p=>p.kind==='workout')};
+  return {mixes, analyzeStatus, workoutPlaylists: pls.filter(p=>p.kind==='workout'), profiles};
 }, view(d){
-  const wf = state._woForm || (state._woForm = {playlist:(d.workoutPlaylists[0]||{}).slug||'workout', workout_type:'general', intensity:'moderate', duration_min:5});
+  const wf = state._woForm || (state._woForm = {playlist:(d.workoutPlaylists[0]||{}).slug||'workout', workout_type:'general', intensity:'moderate',
+    duration_choice:'5', custom_minutes:75, tempo_choice:'automatic', custom_pct:50, target_bpm:140, key_lock:true});
   const pendingAnalyze = d.analyzeStatus.running;
+  const durH = wf.duration_choice==='custom' ? Math.floor(Number(wf.custom_minutes||0)/60)+'h '+(Number(wf.custom_minutes||0)%60)+'m' : '';
   return `<div class="page-h"><h2>Workout DJ</h2><div class="right"><a class="btn sm" href="/dj/index.html" target="_blank" rel="noopener">${I.headphones} Full DJ Console</a></div></div>
   <div class="panel" style="padding:16px 18px;margin-bottom:14px">
-    <p class="small muted" style="margin:0 0 12px;line-height:1.55">Auto-DJ builds a brand-new workout mix from your Library — beatmatched, transitioned and mastered automatically — and saves it as a finished recording under Mixes. Library tracks and playlists are never modified or duplicated.</p>
+    <p class="small muted" style="margin:0 0 12px;line-height:1.55">Auto-DJ builds a brand-new workout mix from your Library — beatmatched, tempo-accelerated, transitioned and mastered automatically — and saves it as a finished recording under Mixes. Library tracks and playlists are never modified or duplicated.</p>
     <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
       <div class="stat"><div class="k">Workout playlists</div><div class="v">${d.workoutPlaylists.length}</div></div>
       <div class="stat"><div class="k">Mixes saved</div><div class="v">${d.mixes.length}</div></div>
@@ -791,10 +864,16 @@ pages.workout = { live:true, async load(){
   <div class="two">
     <div class="panel"><div class="panel-h"><h3>${ic(I.plus,'gold')}CREATE WORKOUT MIX</h3></div><div class="panel-b">
       ${d.workoutPlaylists.length ? `<form data-form="wo-create" class="form">
+        ${d.profiles.length?`<label class="wide">Load from profile <span class="muted2">(fills in the fields below — still editable)</span><select class="sel" data-change="wo-load-profile"><option value="">— choose a profile —</option>${d.profiles.map(p=>`<option value="${p.id}">${h(p.name)} (${WORKOUT_LABELS[p.workout_type]||h(p.workout_type)})</option>`).join('')}</select></label>`:''}
         <label>Playlist<select class="sel" name="playlist">${d.workoutPlaylists.map(p=>`<option value="${h(p.slug)}" ${wf.playlist===p.slug?'selected':''}>${h(p.name)} (${p.track_count||0} tracks)</option>`).join('')}</select></label>
         <label>Workout type<select class="sel" name="workout_type">${Object.entries(WORKOUT_LABELS).map(([k,l])=>`<option value="${k}" ${wf.workout_type===k?'selected':''}>${l}</option>`).join('')}</select></label>
         <label>Intensity<select class="sel" name="intensity">${['easy','moderate','high','intense'].map(x=>`<option value="${x}" ${wf.intensity===x?'selected':''}>${x[0].toUpperCase()+x.slice(1)}</option>`).join('')}</select></label>
-        <label>Duration<select class="sel" name="duration_min">${[5,10,15,20,30,45,60].map(x=>`<option value="${x}" ${Number(wf.duration_min)===x?'selected':''}>${x} minutes</option>`).join('')}</select></label>
+        <label>Duration<select class="sel" name="duration_choice" data-change="wo-field">${[['5','5 minutes'],['10','10 minutes'],['15','15 minutes'],['20','20 minutes'],['30','30 minutes'],['45','45 minutes'],['60','60 minutes'],['90','90 minutes'],['120','120 minutes'],['custom','Custom…']].map(([v,l])=>`<option value="${v}" ${wf.duration_choice===v?'selected':''}>${l}</option>`).join('')}</select></label>
+        ${wf.duration_choice==='custom'?`<label>Custom duration (minutes)<input class="inp" type="number" name="custom_minutes" min="1" max="240" step="1" value="${h(wf.custom_minutes)}" data-input="wo-field"><small class="muted2">${durH}</small></label>`:''}
+        <label>Tempo<select class="sel" name="tempo_choice" data-change="wo-field">${[['automatic','Automatic (from intensity)'],['original','Original — no acceleration'],['25','Tempo Boost +25%'],['50','Tempo Boost +50%'],['75','Tempo Boost +75%'],['100','Tempo Boost +100%'],['custom','Custom %…'],['target_bpm','Target BPM…']].map(([v,l])=>`<option value="${v}" ${wf.tempo_choice===v?'selected':''}>${l}</option>`).join('')}</select></label>
+        ${wf.tempo_choice==='custom'?`<label>Custom tempo boost (%)<input class="inp" type="number" name="custom_pct" min="-50" max="100" step="1" value="${h(wf.custom_pct)}" data-input="wo-field"></label>`:''}
+        ${wf.tempo_choice==='target_bpm'?`<label>Target BPM<input class="inp" type="number" name="target_bpm" min="60" max="220" step="1" value="${h(wf.target_bpm)}" data-input="wo-field"></label>`:''}
+        <label style="display:flex;align-items:center;gap:8px;margin-top:22px"><input type="checkbox" name="key_lock" ${wf.key_lock?'checked':''} data-input="wo-field" style="width:16px;height:16px"> Preserve pitch/key (key lock)</label>
         <div class="wide row-actions"><button class="btn gold" type="submit">${I.play} Create &amp; Generate Mix</button></div>
       </form>` : empty(I.list,'No workout playlist yet','Create a playlist with kind "workout" on the Playlists page, add tracks to it, then come back here.',`<a class="btn sm gold" href="#/playlists">${I.list} Playlists</a>`)}
     </div></div>
@@ -804,16 +883,41 @@ pages.workout = { live:true, async load(){
     </div></div>
   </div>
   <h3 style="margin:18px 0 8px;font:800 15px var(--display)">${ic(I.list,'gold')}MIXES (${d.mixes.length})</h3>
-  <div class="panel"><div class="panel-b">${d.mixes.length?d.mixes.map(mixRow).join(''):empty(I.list,'No mixes yet','Create your first workout mix above.')}</div></div>`;
+  <div class="panel" style="margin-bottom:18px"><div class="panel-b">${d.mixes.length?d.mixes.map(mixRow).join(''):empty(I.list,'No mixes yet','Create your first workout mix above.')}</div></div>
+  <div class="page-h" style="margin-bottom:8px"><h3 style="margin:0;font:800 15px var(--display);display:flex;align-items:center;gap:8px">${ic(I.tag,'gold')}WORKOUT PROFILES (${d.profiles.length})</h3><div class="right"><button class="btn sm gold" data-act="profile-new">${I.plus} New Profile</button></div></div>
+  <div class="panel"><div class="panel-b" style="gap:0">${d.profiles.length?d.profiles.map(profileRow).join(''):empty(I.tag,'No profiles yet','Profiles store reusable defaults (duration, tempo, transitions) for a workout type.')}</div></div>`;
 } };
+Object.assign(CHANGES, {
+  'wo-field': (el)=>{ const wf=state._woForm; if(!wf) return; const k=el.name; wf[k]= el.type==='checkbox'?el.checked:el.value; render(); },
+  'wo-load-profile': (el)=>{ if(!el.value) return; const p=state.pageData.workout.profiles.find(x=>x.id===Number(el.value)); if(!p) return;
+    const mins=Math.round((p.default_duration_sec||300)/60); const known=[5,10,15,20,30,45,60,90,120];
+    const tempoChoice = p.tempo_mode==='boost' ? String(p.tempo_boost_pct||0) : (p.tempo_mode||'automatic');
+    state._woForm = {...state._woForm, workout_type:p.workout_type, intensity:p.default_intensity,
+      duration_choice: known.includes(mins)?String(mins):'custom', custom_minutes:mins,
+      tempo_choice: tempoChoice, custom_pct:p.tempo_boost_pct||50, target_bpm:p.target_bpm||140};
+    render(); },
+});
 Object.assign(FORMS, {
   'wo-create': async(f,b)=>{
-    state._woForm = {playlist:b.playlist, workout_type:b.workout_type, intensity:b.intensity, duration_min:b.duration_min};
-    const target_duration_sec = Number(b.duration_min)*60;
+    const duration_min = b.duration_choice==='custom' ? Number(b.custom_minutes||0) : Number(b.duration_choice);
+    if(!duration_min || duration_min<=0){ toast('Enter a valid duration first','err'); return; }
+    state._woForm = {playlist:b.playlist, workout_type:b.workout_type, intensity:b.intensity,
+      duration_choice:b.duration_choice, custom_minutes:b.custom_minutes||75,
+      tempo_choice:b.tempo_choice, custom_pct:b.custom_pct||50, target_bpm:b.target_bpm||140, key_lock:b.key_lock==='on'};
+    const target_duration_sec = duration_min*60;
+    // tempo_choice is either a mode keyword (automatic/original/custom/target_bpm) or a bare
+    // number string ("25"/"50"/"75"/"100") standing for a fixed Tempo Boost percentage.
+    const tc = b.tempo_choice;
+    const isNumeric = /^-?\d+(\.\d+)?$/.test(tc);
+    const tempo_mode = isNumeric ? 'boost' : tc;
+    const tempo_boost_pct = isNumeric ? Number(tc) : (tc==='custom' ? Number(b.custom_pct||0) : null);
+    const target_bpm = tc==='target_bpm' ? Number(b.target_bpm||0) : null;
+    const key_lock = b.key_lock==='on';
     const btn = f.querySelector('button[type=submit]'); btn.disabled=true; btn.textContent='Starting…';
     try {
       const mix = await post('/api/dj/mixes', {station:S(), workout_type:b.workout_type, intensity:b.intensity, target_duration_sec});
-      await post(`/api/dj/mixes/${mix.id}/generate`, {playlist:b.playlist, transition_sec:8, transition_type:'blend'});
+      await post(`/api/dj/mixes/${mix.id}/generate`, {playlist:b.playlist, transition_sec:8, transition_type:'blend',
+        tempo_mode, tempo_boost_pct, target_bpm, key_lock});
       toast('Workout mix started — recording in real time, this takes about as long as the mix itself.','ok');
       delete state.pageData.workout; render();
     } catch(e) { toast(e.message,'err'); btn.disabled=false; btn.textContent='Create & Generate Mix'; }
@@ -822,6 +926,9 @@ Object.assign(FORMS, {
 Object.assign(ACTIONS, {
   'wo-analyze': ()=>act(()=>post(`/api/dj/analyze?station=${S()}&playlist=${(state._woForm&&state._woForm.playlist)||'workout'}`), 'Analysis started'),
   'wo-delete': async(el)=>{ if(await confirmDlg('Delete this mix? The original Library tracks it was built from are never affected.','Delete',true)) act(()=>del(`/api/dj/mixes/${el.dataset.id}`),'Mix deleted'); },
+  'mix-recipe-toggle': async(el)=>{ const id=Number(el.dataset.id); if(state._mixRecipeOpen===id){ state._mixRecipeOpen=null; render(); return; }
+    state._mixRecipeOpen=id; render();
+    if(!(state._mixRecipeData && state._mixRecipeData[id])){ const m=await api(`/api/dj/mixes/${id}`); state._mixRecipeData=state._mixRecipeData||{}; state._mixRecipeData[id]=m.recipe||[]; render(); } },
 });
 
 /* ======================= ALERTS PAGE ======================= */

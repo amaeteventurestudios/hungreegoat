@@ -109,7 +109,8 @@ def profile_upsert(data: dict, pid: int | None = None) -> dict:
     now = time.time()
     fields = ("name", "workout_type", "default_duration_sec", "default_intensity", "double_time",
               "max_tempo_adjust_pct", "transition_duration_sec", "transition_type", "energy_curve",
-              "artist_repeat_gap", "recent_history_window", "mastering_preset", "enabled")
+              "artist_repeat_gap", "recent_history_window", "mastering_preset", "enabled",
+              "tempo_mode", "tempo_boost_pct", "target_bpm")
     if pid:
         cur = profile_get(pid)
         if not cur:
@@ -124,13 +125,15 @@ def profile_upsert(data: dict, pid: int | None = None) -> dict:
         cur = c.execute(
             "INSERT INTO workout_profiles(name,workout_type,default_duration_sec,default_intensity,double_time,"
             "max_tempo_adjust_pct,transition_duration_sec,transition_type,energy_curve,artist_repeat_gap,"
-            "recent_history_window,mastering_preset,enabled,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "recent_history_window,mastering_preset,enabled,tempo_mode,tempo_boost_pct,target_bpm,created_at,updated_at) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (data.get("name", "Workout"), data.get("workout_type", "general"), data.get("default_duration_sec", 1800),
              data.get("default_intensity", "moderate"), int(data.get("double_time", True)),
              data.get("max_tempo_adjust_pct", 6), data.get("transition_duration_sec", 8),
              data.get("transition_type", "blend"), data.get("energy_curve", "warmup,build,peak,cooldown"),
              data.get("artist_repeat_gap", 3), data.get("recent_history_window", 20),
-             data.get("mastering_preset", "workout_streaming"), int(data.get("enabled", True)), now, now))
+             data.get("mastering_preset", "workout_streaming"), int(data.get("enabled", True)),
+             data.get("tempo_mode", "automatic"), data.get("tempo_boost_pct"), data.get("target_bpm"), now, now))
     return profile_get(cur.lastrowid)
 
 
@@ -210,18 +213,19 @@ def mix_set_status(mid: int, status: str, **fields) -> dict:
 
 
 def mix_set_recipe(mid: int, tracks: list[dict]) -> None:
-    """tracks: [{track_id, deck, source_bpm, effective_bpm, tempo_adjust_pct, source_key,
-    start_offset_sec, end_offset_sec, transition_in_sec, transition_duration_sec}, ...]
-    in final playback order."""
+    """tracks: [{track_id, deck, source_bpm, effective_bpm, tempo_adjust_pct, key_lock,
+    source_key, start_offset_sec, end_offset_sec, transition_in_sec, transition_duration_sec},
+    ...] in final playback order."""
     with db.tx() as c:
         c.execute("DELETE FROM mix_tracks WHERE mix_id=?", (mid,))
         for i, t in enumerate(tracks):
             c.execute(
                 "INSERT INTO mix_tracks(mix_id,position,track_id,deck,source_bpm,effective_bpm,tempo_adjust_pct,"
-                "source_key,start_offset_sec,end_offset_sec,transition_in_sec,transition_duration_sec) "
-                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                "key_lock,source_key,start_offset_sec,end_offset_sec,transition_in_sec,transition_duration_sec) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (mid, i, t["track_id"], t.get("deck"), t.get("source_bpm"), t.get("effective_bpm"),
-                 t.get("tempo_adjust_pct"), t.get("source_key"), t.get("start_offset_sec", 0),
+                 t.get("tempo_adjust_pct"), int(t["key_lock"]) if t.get("key_lock") is not None else None,
+                 t.get("source_key"), t.get("start_offset_sec", 0),
                  t.get("end_offset_sec"), t.get("transition_in_sec"), t.get("transition_duration_sec")))
 
 

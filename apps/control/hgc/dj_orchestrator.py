@@ -192,15 +192,45 @@ async def _wait_autopilot_done(page, timeout_sec: float):
     raise TimeoutError("autopilot did not finish within timeout")
 
 
+# Musically chosen from listening to the real catalog (see the CRITICAL tempo-acceleration
+# report) — a workout at "moderate" wants a real but gentle lift; "intense" is the range the
+# owner manually dialed in on the full console (+50%) and liked. Only used to resolve
+# tempo_mode="automatic"; every other mode is an explicit operator choice.
+INTENSITY_BOOST_PCT = {"easy": 0, "moderate": 25, "high": 50, "intense": 75}
+
+
+def _resolve_tempo(tempo_mode: str, intensity: str, tempo_boost_pct: float | None, target_bpm: float | None):
+    """Turns the request-time tempo choice into the concrete (mode, boost_pct, target_bpm)
+    the browser side actually applies — 'automatic' and 'custom' are resolved here, never
+    passed through, so dj-autopilot.js only ever has to handle 'original'/'boost'/'target_bpm'."""
+    if tempo_mode == "original":
+        return "original", 0.0, None
+    if tempo_mode == "target_bpm":
+        if not target_bpm or target_bpm <= 0:
+            raise ValueError("target_bpm mode requires a positive target_bpm")
+        return "target_bpm", None, float(target_bpm)
+    if tempo_mode in ("boost", "custom"):
+        pct = float(tempo_boost_pct) if tempo_boost_pct is not None else 0.0
+        return "boost", pct, None
+    # "automatic" (or anything unrecognized — fail toward the safe/original behavior's sibling
+    # rather than toward an unexpectedly large, unrequested boost)
+    return "boost", float(INTENSITY_BOOST_PCT.get(intensity, 25)), None
+
+
 async def _generate(mid: int, station: str, playlist: str, duration: float,
-                     transition_sec: float, transition_type: str) -> dict:
+                     transition_sec: float, transition_type: str,
+                     tempo_mode: str = "automatic", tempo_boost_pct: float | None = None,
+                     target_bpm: float | None = None, key_lock: bool = True) -> dict:
     from playwright.async_api import async_playwright
 
     m = dj.mix_get(mid)
     if not m:
         raise KeyError(f"no such mix {mid}")
 
-    dj.mix_set_status(mid, "recording")
+    resolved_mode, resolved_boost, resolved_target = _resolve_tempo(tempo_mode, m.get("intensity") or "moderate", tempo_boost_pct, target_bpm)
+    _log(f"tempo: requested mode={tempo_mode} -> resolved mode={resolved_mode} boost_pct={resolved_boost} target_bpm={resolved_target} key_lock={key_lock}")
+
+    dj.mix_set_status(mid, "recording", tempo_mode=resolved_mode, tempo_boost_pct=resolved_boost, target_bpm=resolved_target)
     dj.ensure_dirs()
 
     raw_webm = config.MIXES_RAW_DIR / f"mix-{mid}-raw.webm"
@@ -231,11 +261,26 @@ async def _generate(mid: int, station: str, playlist: str, duration: float,
         downloads: list = []
         page.on("download", lambda d: downloads.append(d))
 
-        url = (f"{BASE_URL}/dj/index.html?autopilot=1&duration={duration}"
-               f"&transitionSec={transition_sec}&transitionType={transition_type}")
+        # Real-time headless recording on this Pi consistently lands short of the requested
+        # wall-clock duration under normal production load (measured directly, not assumed:
+        # three independent 300s-target runs came back at 250.9s/83.6%, 257.8s/85.9%, and
+        # 241.1s/80.4% with tempo acceleration active — tempo's extra per-sample time-stretch
+        # work makes the shortfall worse, not better). REC_PADDING requests MORE wall-clock
+        # recording time than asked for to compensate, and Stage 2 below trims the result back
+        # down to the real target if it overshoots — this is deliberately NOT presented as an
+        # exact fix (the shortfall ratio varies with live system load, ~80-86% observed, not a
+        # single stable constant), only as a measured, disclosed mitigation; see docs/dj-studio.md
+        # for the deterministic/offline-rendering path that would remove this class of error
+        # entirely.
+        REC_PADDING = 1.25
+        recording_duration = duration * REC_PADDING
+        url = (f"{BASE_URL}/dj/index.html?autopilot=1&duration={recording_duration}"
+               f"&transitionSec={transition_sec}&transitionType={transition_type}"
+               f"&tempoMode={resolved_mode}&tempoBoostPct={resolved_boost or 0}"
+               f"&targetBpm={resolved_target or ''}&keyLock={1 if key_lock else 0}")
         await page.goto(url)
 
-        state = await _wait_autopilot_done(page, timeout_sec=duration + 180)
+        state = await _wait_autopilot_done(page, timeout_sec=recording_duration + 180)
         if state["phase"] == "error":
             raise RuntimeError(f"autopilot error: {state.get('error')}")
 
@@ -258,10 +303,27 @@ async def _generate(mid: int, station: str, playlist: str, duration: float,
     _log(f"recorded raw mix: {raw_webm} ({raw_webm.stat().st_size} bytes)")
     dj.mix_set_status(mid, "mastering", actual_duration_sec=actual_duration, engine_version=dj.ENGINE_VERSION)
 
-    # --- Stage 2: webm -> wav ----------------------------------------------------------------
+    # --- Stage 2: webm -> wav, then trim back to the real requested duration if the padded
+    # recording (see REC_PADDING above) overshot it, with a short fade so the cut is never
+    # abrupt. Left alone (not trimmed further) if it still came in under target even with
+    # the padding — that shortfall is real and reported via actual_duration_sec, not hidden.
     _convert_webm_to_wav(raw_webm, raw_wav)
     raw_probe = _ffprobe(raw_wav)
-    _log(f"raw wav: {raw_probe}")
+    _log(f"raw wav (pre-trim): {raw_probe}")
+    if raw_probe["duration"] > duration + 1.0:
+        trimmed = config.MIXES_RAW_DIR / f"mix-{mid}-raw-trimmed.wav"
+        fade_start = max(0.0, duration - 2.0)
+        r = subprocess.run(
+            ["ffmpeg", "-y", "-nostdin", "-i", str(raw_wav), "-t", str(duration),
+             "-af", f"afade=t=out:st={fade_start}:d={duration - fade_start}",
+             "-ar", "44100", "-ac", "2", str(trimmed)],
+            capture_output=True, text=True, timeout=120)
+        if r.returncode == 0 and trimmed.is_file():
+            trimmed.replace(raw_wav)
+            raw_probe = _ffprobe(raw_wav)
+            _log(f"raw wav (trimmed to target + fade): {raw_probe}")
+        else:
+            _log(f"trim pass failed, keeping untrimmed recording: {r.stderr[-500:]}")
 
     # --- Stage 3: offline mastering via the real vendored DSP -------------------------------
     # render.html is loaded over HTTP (like the analyze step) rather than file:// — Chromium's
@@ -313,9 +375,11 @@ async def _generate(mid: int, station: str, playlist: str, duration: float,
 
     recipe_rows = [
         {
-            "track_id": int(r["id"]), "deck": "A" if i % 2 == 0 else "B",
-            "source_bpm": r.get("bpm"), "effective_bpm": r.get("bpm"),
-            "tempo_adjust_pct": 0, "source_key": r.get("key"),
+            "track_id": int(r["id"]), "deck": r.get("deck", "A" if i % 2 == 0 else "B"),
+            "source_bpm": r.get("bpm"), "effective_bpm": r.get("effectiveBpm", r.get("bpm")),
+            "tempo_adjust_pct": round((r.get("tempoMultiplier", 1) - 1) * 100, 2),
+            "key_lock": bool(r.get("keyLock", key_lock)),
+            "source_key": r.get("key"),
             "start_offset_sec": r.get("startedAtSec", 0),
             "end_offset_sec": None, "transition_in_sec": r.get("startedAtSec", 0),
             "transition_duration_sec": transition_sec,
@@ -356,6 +420,10 @@ def main() -> int:
     g.add_argument("--duration", type=float, default=300)
     g.add_argument("--transition-sec", type=float, default=8)
     g.add_argument("--transition-type", default="blend")
+    g.add_argument("--tempo-mode", default="automatic", choices=["automatic", "original", "boost", "target_bpm", "custom"])
+    g.add_argument("--tempo-boost-pct", type=float, default=None)
+    g.add_argument("--target-bpm", type=float, default=None)
+    g.add_argument("--key-lock", type=int, default=1)
 
     args = ap.parse_args()
 
@@ -367,7 +435,8 @@ def main() -> int:
     if args.cmd == "generate":
         try:
             result = asyncio.run(_generate(args.mix_id, args.station, args.playlist,
-                                            args.duration, args.transition_sec, args.transition_type))
+                                            args.duration, args.transition_sec, args.transition_type,
+                                            args.tempo_mode, args.tempo_boost_pct, args.target_bpm, bool(args.key_lock)))
         except Exception as e:
             _log(f"generate failed: {e}")
             try:

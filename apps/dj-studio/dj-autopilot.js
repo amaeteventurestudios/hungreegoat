@@ -5,7 +5,10 @@
 // page is loaded with ?autopilot=1 — the normal interactive app (and every upstream module)
 // behaves exactly as authored otherwise.
 //
-// Reads from the URL: duration (seconds, target mix length), transitionSec, transitionType.
+// Reads from the URL: duration (seconds, target mix length), transitionSec, transitionType,
+// tempoMode ('original'|'boost'|'target_bpm' — already resolved server-side, see
+// dj_orchestrator.py _resolve_tempo; 'automatic'/'custom' never reach this file),
+// tempoBoostPct, targetBpm, keyLock ('1'|'0').
 // Writes to window.__hgcAutopilot: { phase, elapsed, targetDurationSec, recipe[], error }
 // which dj_orchestrator.py polls via Playwright's page.evaluate().
 (function () {
@@ -14,8 +17,31 @@
 
     const targetDurationSec = parseFloat(params.get('duration') || '300');
     const fadeOutSec = Math.min(4, targetDurationSec / 10);
+    const tempoMode = params.get('tempoMode') || 'original';
+    const tempoBoostPct = parseFloat(params.get('tempoBoostPct') || '0');
+    const targetBpm = parseFloat(params.get('targetBpm') || '0') || null;
+    const keyLockOn = params.get('keyLock') !== '0';
 
-    window.__hgcAutopilot = { phase: 'waiting-for-app', elapsed: 0, targetDurationSec, error: null, recipe: [] };
+    // The one real DSP decision this file makes: how fast a track's source BPM maps to its
+    // actual playback rate — everything else (the time-stretch/key-lock itself) is Deck.js's
+    // own existing Deck.setPlaybackRate()/setKeyLock(), which is exactly the same code path
+    // the owner used manually in the full console to get the result they liked at +50%. This
+    // is deliberately NOT "double-time interpretation" (relabeling a slow track without
+    // touching its audio) — Deck.setPlaybackRate() genuinely changes playback speed.
+    function computeMultiplier(sourceBpm) {
+        if (!sourceBpm || tempoMode === 'original') return 1;
+        if (tempoMode === 'target_bpm' && targetBpm) return targetBpm / sourceBpm;
+        return 1 + (tempoBoostPct / 100);
+    }
+    function applyTempo(deck, sourceBpm) {
+        const multiplier = computeMultiplier(sourceBpm);
+        deck.setKeyLock(keyLockOn);
+        deck.setPlaybackRate(multiplier);   // Deck.js itself clamps to [0.5, 2.0]
+        return { multiplier: deck.currentRate, effectiveBpm: sourceBpm ? sourceBpm * deck.currentRate : null };
+    }
+
+    window.__hgcAutopilot = { phase: 'waiting-for-app', elapsed: 0, targetDurationSec, error: null, recipe: [],
+        tempo: { mode: tempoMode, boostPct: tempoBoostPct, targetBpm, keyLock: keyLockOn } };
 
     function waitFor(cond, timeoutMs) {
         return new Promise((resolve, reject) => {
@@ -56,17 +82,28 @@
         const first = dj.library.tracks[0];
         dj.flowMode.enable();
         dj.flowMode.start(first);
+        // FlowMode.start() loads deck A directly (see the ordering note below on why this
+        // can't go through the wrapped _loadTrackToDeck for the first track) — apply tempo
+        // to it here, once, the same way every later transition applies it to its own deck.
+        const firstTempo = applyTempo(dj.decks.A, first.bpm);
         window.__hgcAutopilot.recipe.push({ id: first.id, title: first.title, artist: first.artist,
-            bpm: first.bpm, key: first.key, startedAtSec: 0 });
+            bpm: first.bpm, key: first.key, deck: 'A', startedAtSec: 0,
+            effectiveBpm: firstTempo.effectiveBpm, tempoMultiplier: firstTempo.multiplier, keyLock: keyLockOn });
 
-        // FlowMode's own _loadTrackToDeck is called for the first track and every subsequent
-        // transition — wrap it (don't replace its behavior) purely to log the recipe.
+        // FlowMode's own _loadTrackToDeck is called for every subsequent transition (not the
+        // first track — start() above calls it directly, before this wrapper is installed) —
+        // wrap it to apply tempo to the newly-loading deck and log the recipe. AutoTransition
+        // itself (not this file) is what then calls targetDeck.play() and crossfades, so the
+        // accelerated rate is already set by the time that happens — the mix never drops back
+        // to a track's original speed mid-transition.
         const origLoad = dj.flowMode._loadTrackToDeck.bind(dj.flowMode);
         dj.flowMode._loadTrackToDeck = function (deck, track) {
             const ok = origLoad(deck, track);
             if (ok && track !== first) {
+                const t = applyTempo(deck, track.bpm);
                 window.__hgcAutopilot.recipe.push({ id: track.id, title: track.title, artist: track.artist,
-                    bpm: track.bpm, key: track.key, startedAtSec: (Date.now() - t0) / 1000 });
+                    bpm: track.bpm, key: track.key, deck: deck.id, startedAtSec: (Date.now() - t0) / 1000,
+                    effectiveBpm: t.effectiveBpm, tempoMultiplier: t.multiplier, keyLock: keyLockOn });
             }
             return ok;
         };
