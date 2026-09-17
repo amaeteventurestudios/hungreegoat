@@ -1,0 +1,75 @@
+/* HUNGREE Goat theme override for the vendored Aurdour console — HUNGREE Goat file, not
+   upstream. Loaded after styles.css and after packages/brand/tokens.css: Aurdour's own
+   styles.css already keys almost everything off :root custom properties (--bg-app,
+   --accent-a, --text-primary, ...), so re-skinning is a values-only override, no upstream
+   selector needed to change. See NOTICE.md. */
+:root {
+  --bg-app: var(--hg-ink);
+  --bg-deck: var(--hg-navy);
+  --bg-mixer: var(--hg-navy2);
+  --bg-library: var(--hg-navy);
+  --bg-control: var(--hg-slate);
+  --bg-input: rgba(8, 14, 26, 0.9);
+  --bg-glass: rgba(7, 13, 24, 0.82);
+
+  --text-primary: var(--hg-text);
+  --text-secondary: var(--hg-muted);
+  --text-dim: var(--hg-muted2);
+
+  /* Deck A keeps the cool accent, Deck B takes the HUNGREE Goat gold instead of upstream's
+     orange — the two decks stay visually distinct, gold reads as "primary" as it does
+     everywhere else in Control. */
+  --accent-a: var(--hg-cyan);
+  --accent-b: var(--hg-gold);
+
+  --color-play: var(--hg-green);
+  --color-cue: var(--hg-gold3);
+  --color-sync: var(--hg-cyan2);
+  --color-loop: var(--hg-blue2);
+  --color-fx: var(--hg-cyan);
+
+  --meter-green: var(--hg-green);
+  --meter-yellow: var(--hg-gold);
+  --meter-red: var(--hg-red);
+
+  --fader-track: var(--hg-slate2);
+  --fader-thumb: var(--hg-gold3);
+
+  --border-subtle: var(--hg-line);
+  --border-active: var(--hg-line-gold);
+
+  --glow-a: rgba(56, 214, 232, 0.15);
+  --glow-b: rgba(242, 193, 78, 0.18);
+
+  --font-display: var(--hg-display);
+  --font-ui: var(--hg-sans);
+
+  --radius-md: var(--hg-r2);
+  --radius-lg: var(--hg-r);
+}
+
+/* HUNGREE Goat header bar, prepended by index.html — same visual language as Control's
+   .top/.bar (logo far left, gold wordmark, nav back to Control), independent of upstream
+   markup below it. */
+.hgc-dj-header {
+  display: flex; align-items: center; gap: 12px; padding: 10px 18px;
+  background: rgba(7, 13, 24, 0.92); border-bottom: 1px solid var(--hg-line-gold);
+  position: sticky; top: 0; z-index: 500; backdrop-filter: blur(10px);
+}
+.hgc-dj-header img { width: 34px; height: 34px; object-fit: contain; }
+.hgc-dj-header b { font: 800 14px var(--hg-display); letter-spacing: .03em; color: var(--hg-gold); }
+.hgc-dj-header small { display: block; font: 600 9px var(--hg-display); letter-spacing: .16em; color: var(--hg-muted2); }
+.hgc-dj-header .hgc-dj-back {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 6px; padding: 0 14px; height: 32px;
+  border-radius: 10px; border: 1px solid var(--hg-line2); background: rgba(14,26,42,.85); color: var(--hg-text);
+  font: 700 12px var(--hg-sans); text-decoration: none;
+}
+.hgc-dj-header .hgc-dj-back:hover { border-color: var(--hg-line-gold); }
+.hgc-dj-header .hgc-dj-mode {
+  display: inline-flex; gap: 4px; margin-left: 14px;
+}
+.hgc-dj-header .hgc-dj-mode a {
+  padding: 0 12px; height: 32px; display: inline-flex; align-items: center; border-radius: 10px;
+  font: 700 12px var(--hg-sans); text-decoration: none; color: var(--hg-muted); border: 1px solid transparent;
+}
+.hgc-dj-header .hgc-dj-mode a.active { background: rgba(242,193,78,.14); color: var(--hg-gold3); border-color: var(--hg-line-gold); }

@@ -52,6 +52,9 @@ def _startup() -> None:
     auth.bootstrap()
     from . import skins as _skins_mod
     _skins_mod.ensure_seeded()
+    from . import dj as _dj_mod
+    _dj_mod.ensure_dirs()
+    _dj_mod.ensure_default_profiles()
     for sid in config.STATION_IDS:
         scheduler.ensure_defaults(sid)
         try:
@@ -930,7 +933,7 @@ def _slug(name: str) -> str:
 @app.post("/api/stations/{sid}/playlists")
 def create_playlist(sid: str, body: PlaylistBody, user: str = Depends(current_user)):
     _sid(sid)
-    if body.kind not in ("music", "jingles", "station_ids", "fallback"):
+    if body.kind not in ("music", "jingles", "station_ids", "fallback", "workout"):
         raise HTTPException(400, "bad kind")
     slug = _slug(body.name)
     if db.q1("SELECT 1 FROM playlists WHERE station=? AND slug=?", (sid, slug)):
@@ -1789,6 +1792,300 @@ def broadcast_collection_delete(cid: str, user: str = Depends(current_user)):
     return {"ok": True}
 
 
+# ---------------------------------------------------------------------------
+# HUNGREE Goat DJ Studio: Auto-DJ, Workout Profiles, Mastering, Mixes
+from . import dj as dj_mod  # noqa: E402
+
+
+@app.get("/api/dj/manifest")
+def dj_manifest(station: str = "lofi", playlist: str = "workout", user: str = Depends(current_user)):
+    _sid(station)
+    try:
+        return dj_mod.manifest(station, playlist)
+    except KeyError:
+        raise HTTPException(404, "no such playlist")
+
+
+class WorkoutProfileBody(BaseModel):
+    name: str
+    workout_type: str = "general"
+    default_duration_sec: int = 1800
+    default_intensity: str = "moderate"
+    double_time: bool = True
+    max_tempo_adjust_pct: float = 6
+    transition_duration_sec: float = 8
+    transition_type: str = "blend"
+    energy_curve: str = "warmup,build,peak,cooldown"
+    artist_repeat_gap: int = 3
+    recent_history_window: int = 20
+    mastering_preset: str = "workout_streaming"
+    enabled: bool = True
+
+
+@app.get("/api/dj/profiles")
+def dj_profiles_list(user: str = Depends(current_user)):
+    return dj_mod.profile_list()
+
+
+@app.post("/api/dj/profiles")
+def dj_profiles_create(body: WorkoutProfileBody, user: str = Depends(current_user)):
+    try:
+        return dj_mod.profile_upsert(body.model_dump())
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.put("/api/dj/profiles/{pid}")
+def dj_profiles_update(pid: int, body: WorkoutProfileBody, user: str = Depends(current_user)):
+    try:
+        return dj_mod.profile_upsert(body.model_dump(), pid)
+    except KeyError:
+        raise HTTPException(404)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.delete("/api/dj/profiles/{pid}")
+def dj_profiles_delete(pid: int, user: str = Depends(current_user)):
+    try:
+        dj_mod.profile_delete(pid)
+    except KeyError:
+        raise HTTPException(404)
+    return {"ok": True}
+
+
+@app.get("/api/dj/mixes")
+def dj_mixes_list(station: str | None = None, user: str = Depends(current_user)):
+    return dj_mod.mix_list(station)
+
+
+@app.get("/api/dj/mixes/{mid}")
+def dj_mix_get(mid: int, user: str = Depends(current_user)):
+    m = dj_mod.mix_get(mid)
+    if not m:
+        raise HTTPException(404)
+    m = dict(m)
+    m["recipe"] = dj_mod.mix_recipe(mid)
+    return m
+
+
+class MixCreateBody(BaseModel):
+    station: str = "lofi"
+    title: str | None = None
+    playlist_id: int | None = None
+    profile_id: int | None = None
+    workout_type: str = "general"
+    intensity: str = "moderate"
+    target_duration_sec: float = 300
+    mastering_preset: str = "workout_streaming"
+
+
+@app.post("/api/dj/mixes")
+def dj_mix_create(body: MixCreateBody, user: str = Depends(current_user)):
+    _sid(body.station)
+    title = body.title or dj_mod.mix_title(body.workout_type, body.intensity, body.target_duration_sec)
+    m = dj_mod.mix_create(station=body.station, title=title, playlist_id=body.playlist_id, profile_id=body.profile_id,
+                          workout_type=body.workout_type, intensity=body.intensity,
+                          target_duration_sec=body.target_duration_sec, mastering_preset=body.mastering_preset)
+    db.log_event("info", "system", f"DJ mix started: {title}", body.station)
+    return m
+
+
+class MixGenerateBody(BaseModel):
+    playlist: str = "workout"
+    transition_sec: float = 8
+    transition_type: str = "blend"
+
+
+@app.post("/api/dj/mixes/{mid}/generate")
+def dj_mix_generate(mid: int, body: MixGenerateBody, user: str = Depends(current_user)):
+    """Kick off the real record -> master -> save pipeline in a background subprocess (see
+    hgc/dj_orchestrator.py). Progress is just the mix's own `status` column (creating ->
+    recording -> mastering -> ready/failed) — poll GET /api/dj/mixes/{mid}, no separate
+    job-state endpoint needed."""
+    m = dj_mod.mix_get(mid)
+    if not m:
+        raise HTTPException(404)
+    if m["status"] in ("recording", "mastering"):
+        return m
+
+    def run():
+        import subprocess, sys
+        try:
+            r = subprocess.run(
+                [sys.executable, "-m", "hgc.dj_orchestrator", "generate",
+                 "--mix-id", str(mid), "--station", m["station"], "--playlist", body.playlist,
+                 "--duration", str(m["target_duration_sec"]),
+                 "--transition-sec", str(body.transition_sec), "--transition-type", body.transition_type],
+                cwd=str(config.APP_DIR), capture_output=True, text=True,
+                timeout=max(600, m["target_duration_sec"] * 2 + 300))
+            if r.returncode != 0:
+                db.log_event("error", "system", f"DJ mix generate failed (#{mid}): {r.stderr[-800:]}", m["station"])
+        except Exception as e:
+            db.log_event("error", "system", f"DJ mix generate error (#{mid}): {e}", m["station"])
+    threading.Thread(target=run, daemon=True).start()
+    return dj_mod.mix_get(mid)
+
+
+class MixStatusBody(BaseModel):
+    status: str
+    actual_duration_sec: float | None = None
+    measured_lufs: float | None = None
+    measured_true_peak_db: float | None = None
+    sample_rate: int | None = None
+    bit_depth: int | None = None
+    notes: str | None = None
+    title: str | None = None
+
+
+@app.put("/api/dj/mixes/{mid}")
+def dj_mix_update(mid: int, body: MixStatusBody, user: str = Depends(current_user)):
+    if not dj_mod.mix_get(mid):
+        raise HTTPException(404)
+    fields = {k: v for k, v in body.model_dump().items() if k != "status" and v is not None}
+    try:
+        return dj_mod.mix_set_status(mid, body.status, **fields)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+class MixRecipeBody(BaseModel):
+    tracks: list[dict]
+
+
+@app.post("/api/dj/mixes/{mid}/recipe")
+def dj_mix_recipe(mid: int, body: MixRecipeBody, user: str = Depends(current_user)):
+    if not dj_mod.mix_get(mid):
+        raise HTTPException(404)
+    dj_mod.mix_set_recipe(mid, body.tracks)
+    return {"ok": True}
+
+
+@app.post("/api/dj/mixes/{mid}/upload")
+async def dj_mix_upload(mid: int, raw: bool = False, file: UploadFile = File(...), user: str = Depends(current_user)):
+    """Save the mastered (or, with ?raw=1, pre-master) recording for a mix. Transactional in
+    spirit: the mix's `status` only becomes 'ready' via a separate PUT after this succeeds
+    and ffprobe confirms the file is really decodable — never on upload alone."""
+    m = dj_mod.mix_get(mid)
+    if not m:
+        raise HTTPException(404)
+    data = await file.read()
+    if len(data) < 44:  # smaller than a bare WAV header — definitely not real audio
+        raise HTTPException(400, "file too small to be real audio")
+    ext = Path(file.filename or "mix.wav").suffix.lower() or ".wav"
+    target_dir = config.MIXES_RAW_DIR if raw else config.MIXES_DIR
+    name = f"mix-{mid}{'-raw' if raw else ''}{ext}"
+    dest = target_dir / name
+    tmp = dest.with_suffix(".tmp")
+    tmp.write_bytes(data)
+    import subprocess
+    r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration,size", "-select_streams", "a:0",
+                        "-show_entries", "stream=sample_rate,channels", "-of", "json", str(tmp)],
+                       capture_output=True, text=True, timeout=30)
+    try:
+        probe = json.loads(r.stdout or "{}")
+    except json.JSONDecodeError:
+        probe = {}
+    if r.returncode != 0 or not probe.get("streams"):
+        tmp.unlink(missing_ok=True)
+        raise HTTPException(400, "uploaded file is not decodable audio")
+    tmp.replace(dest)
+    field = "raw_filename" if raw else "filename"
+    dj_mod.mix_set_status(mid, m["status"], **{field: name, "file_size": len(data)})
+    return {"ok": True, "file": name, "probe": {
+        "duration": float((probe.get("format") or {}).get("duration") or 0),
+        "sample_rate": int((probe["streams"][0]).get("sample_rate") or 0),
+        "channels": int((probe["streams"][0]).get("channels") or 0),
+    }}
+
+
+@app.get("/api/dj/mixes/{mid}/audio.wav")
+def dj_mix_audio(mid: int, request: Request, user: str = Depends(current_user)):
+    m = dj_mod.mix_get(mid)
+    if not m or not m.get("filename"):
+        raise HTTPException(404)
+    p = config.MIXES_DIR / m["filename"]
+    if not p.is_file():
+        raise HTTPException(404)
+    size = p.stat().st_size
+    hdr = {"Accept-Ranges": "bytes", "Cache-Control": "private, max-age=86400", "Content-Type": "audio/wav"}
+    rng = request.headers.get("range")
+    if rng and rng.startswith("bytes="):
+        a, _, b = rng[6:].partition("-")
+        start = int(a) if a else max(0, size - int(b or 0)); end = int(b) if (b and a) else size - 1
+        end = min(end, size - 1)
+        if start > end:
+            raise HTTPException(416)
+        def gen():
+            with open(p, "rb") as f:
+                f.seek(start); left = end - start + 1
+                while left > 0:
+                    chunk = f.read(min(65536, left)); left -= len(chunk)
+                    if not chunk:
+                        break
+                    yield chunk
+        hdr.update({"Content-Range": f"bytes {start}-{end}/{size}", "Content-Length": str(end - start + 1)})
+        return StreamingResponse(gen(), status_code=206, headers=hdr)
+    return FileResponse(p, media_type="audio/wav", headers=hdr)
+
+
+@app.get("/api/dj/mixes/{mid}/download")
+def dj_mix_download(mid: int, user: str = Depends(current_user)):
+    m = dj_mod.mix_get(mid)
+    if not m or not m.get("filename"):
+        raise HTTPException(404)
+    p = config.MIXES_DIR / m["filename"]
+    if not p.is_file():
+        raise HTTPException(404)
+    return FileResponse(p, media_type="audio/wav", filename=dj_mod.safe_download_filename(m))
+
+
+@app.delete("/api/dj/mixes/{mid}")
+def dj_mix_delete(mid: int, user: str = Depends(current_user)):
+    try:
+        dj_mod.mix_delete(mid)
+    except KeyError:
+        raise HTTPException(404)
+    db.log_event("info", "system", f"DJ mix deleted: #{mid}")
+    return {"ok": True}
+
+
+_DJ_ANALYSIS_STATE: dict = {"running": False, "total": 0, "done": 0, "playlist": None}
+
+
+@app.post("/api/dj/analyze")
+def dj_analyze_start(station: str = "lofi", playlist: str = "workout", user: str = Depends(current_user)):
+    _sid(station)
+    if _DJ_ANALYSIS_STATE["running"]:
+        return _DJ_ANALYSIS_STATE
+    try:
+        pending = dj_mod.analysis_pending(station, playlist)
+    except KeyError:
+        raise HTTPException(404, "no such playlist")
+    _DJ_ANALYSIS_STATE.update(running=True, total=len(pending), done=0, playlist=playlist)
+
+    def run():
+        try:
+            import subprocess, sys
+            r = subprocess.run([sys.executable, "-m", "hgc.dj_orchestrator", "analyze", "--station", station, "--playlist", playlist],
+                               cwd=str(config.APP_DIR), capture_output=True, text=True, timeout=1800)
+            if r.returncode != 0:
+                db.log_event("error", "system", f"DJ analysis failed: {r.stderr[-500:]}", station)
+            else:
+                _DJ_ANALYSIS_STATE["done"] = _DJ_ANALYSIS_STATE["total"]
+        except Exception as e:
+            db.log_event("error", "system", f"DJ analysis error: {e}", station)
+        finally:
+            _DJ_ANALYSIS_STATE["running"] = False
+    threading.Thread(target=run, daemon=True).start()
+    return _DJ_ANALYSIS_STATE
+
+
+@app.get("/api/dj/analyze/status")
+def dj_analyze_status(user: str = Depends(current_user)):
+    return _DJ_ANALYSIS_STATE
+
+
 @app.post("/api/library/prepare-mp3")
 def prepare_mp3(user: str = Depends(current_user)):
     """Pre-transcode the whole catalog for Explore mode (runs in the background)."""
@@ -1812,6 +2109,14 @@ app.include_router(public_api.router)
 # ---------------------------------------------------------------------------
 # Static frontend
 app.mount("/assets", StaticFiles(directory=str(config.STATIC_DIR / "assets")), name="assets")
+# HUNGREE Goat DJ Studio (vendored Aurdour + mastering DSP — see apps/dj-studio/NOTICE.md).
+# Same origin as Control on purpose: shares the hgc_session cookie (no second login), and
+# every sensitive call it makes (manifest, mix save/audio) goes through the authenticated
+# /api/dj/* routes above — the static shell itself carries no secrets, same as Control's own.
+# Prepared to also be reachable as dj.hungreegoat.com once the gateway routes that hostname
+# here (see infra/gateway/nginx/control.hungreegoat.com.conf for the existing pattern).
+if config.DJ_STUDIO_DIR.exists():
+    app.mount("/dj", StaticFiles(directory=str(config.DJ_STUDIO_DIR), html=True), name="dj-studio")
 
 
 def _index() -> HTMLResponse:

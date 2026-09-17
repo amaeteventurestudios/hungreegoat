@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AURDOUR DJ - Now Playing Overlay</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: transparent;
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+        }
+
+        .overlay-container {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .now-playing {
+            background: rgba(13, 13, 26, 0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(139, 92, 246, 0.2);
+            border-radius: 12px;
+            padding: 16px 24px;
+            min-width: 320px;
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .now-playing.visible {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .np-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.55rem;
+            font-weight: 700;
+            letter-spacing: 0.15em;
+            color: #8b5cf6;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+        }
+
+        .np-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #ffffff;
+            margin-bottom: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+        }
+
+        .np-title.scrolling {
+            animation: scroll-text 8s linear infinite;
+        }
+
+        .np-artist {
+            font-size: 0.85rem;
+            color: #8888aa;
+        }
+
+        .np-deck {
+            position: absolute;
+            top: 12px;
+            right: 16px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            font-weight: 800;
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        .np-deck.deck-a {
+            background: rgba(0, 212, 255, 0.15);
+            color: #00d4ff;
+        }
+
+        .np-deck.deck-b {
+            background: rgba(255, 107, 53, 0.15);
+            color: #ff6b35;
+        }
+
+        /* Live indicator */
+        .live-badge {
+            display: none;
+            align-items: center;
+            gap: 6px;
+            background: rgba(255, 0, 0, 0.15);
+            border: 1px solid rgba(255, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 6px 14px;
+            width: fit-content;
+        }
+
+        .live-badge.visible { display: flex; }
+
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            background: #ff0000;
+            border-radius: 50%;
+            animation: pulse-dot 1.5s ease-in-out infinite;
+        }
+
+        .live-text {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.65rem;
+            font-weight: 700;
+            color: #ff4444;
+            letter-spacing: 0.1em;
+        }
+
+        /* Reactions */
+        .reactions-area {
+            position: fixed;
+            bottom: 0;
+            right: 20px;
+            width: 200px;
+            height: 100vh;
+            pointer-events: none;
+        }
+
+        .reaction-float {
+            position: absolute;
+            bottom: 0;
+            font-size: 2rem;
+            animation: float-up 2.5s ease-out forwards;
+            pointer-events: none;
+        }
+
+        @keyframes float-up {
+            0% { opacity: 1; transform: translateY(0) scale(1); }
+            100% { opacity: 0; transform: translateY(-300px) scale(0.5); }
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        @keyframes scroll-text {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
+    </style>
+</head>
+<body>
+    <div class="overlay-container">
+        <div class="live-badge" id="live-badge">
+            <div class="live-dot"></div>
+            <span class="live-text">LIVE</span>
+        </div>
+
+        <div class="now-playing" id="np-a">
+            <div class="np-label">Now Playing</div>
+            <div class="np-deck deck-a">A</div>
+            <div class="np-title" id="np-a-title">-</div>
+            <div class="np-artist" id="np-a-artist">-</div>
+        </div>
+
+        <div class="now-playing" id="np-b">
+            <div class="np-label">Next Up</div>
+            <div class="np-deck deck-b">B</div>
+            <div class="np-title" id="np-b-title">-</div>
+            <div class="np-artist" id="np-b-artist">-</div>
+        </div>
+    </div>
+
+    <div class="reactions-area" id="reactions-area"></div>
+
+    <script>
+        // Listen for BroadcastChannel messages from the main DJ page
+        const channel = new BroadcastChannel('aurdour-dj');
+
+        channel.onmessage = (e) => {
+            const data = e.data;
+
+            switch (data.type) {
+                case 'track_update':
+                    updateTrack(data.deck, data.metadata);
+                    break;
+                case 'now_playing':
+                    updateNowPlaying(data.title, data.artist);
+                    break;
+                case 'live_status':
+                    document.getElementById('live-badge').classList.toggle('visible', data.isLive);
+                    break;
+                case 'play_state':
+                    updatePlayState(data.deck, data.isPlaying);
+                    break;
+                case 'crossfader_position':
+                    // Crossfader position available for overlay use
+                    break;
+                case 'transition_state':
+                    // Transition state available for overlay use
+                    break;
+            }
+        };
+
+        function updateTrack(deck, meta) {
+            if (!meta) return;
+            const prefix = `np-${deck.toLowerCase()}`;
+            const card = document.getElementById(prefix);
+            const titleEl = document.getElementById(`${prefix}-title`);
+            const artistEl = document.getElementById(`${prefix}-artist`);
+
+            if (titleEl) titleEl.textContent = meta.title || '-';
+            if (artistEl) artistEl.textContent = meta.artist || '-';
+            if (card) card.classList.add('visible');
+        }
+
+        function updateNowPlaying(title, artist) {
+            const titleEl = document.getElementById('np-a-title');
+            const artistEl = document.getElementById('np-a-artist');
+            const card = document.getElementById('np-a');
+
+            if (titleEl) titleEl.textContent = title || '-';
+            if (artistEl) artistEl.textContent = artist || '-';
+            if (card) card.classList.add('visible');
+        }
+
+        function updatePlayState(deck, isPlaying) {
+            const prefix = `np-${deck.toLowerCase()}`;
+            const card = document.getElementById(prefix);
+            if (card) {
+                card.classList.toggle('visible', isPlaying);
+            }
+        }
+
+        // Send reactions back to main page
+        function sendReaction(emoji) {
+            channel.postMessage({ type: 'reaction', emoji });
+        }
+    </script>
+</body>
+</html>

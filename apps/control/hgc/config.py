@@ -13,6 +13,7 @@ MEDIA = Path(os.environ.get("HGC_MEDIA", "/media/hungree-goat"))
 
 APP_DIR = HOME / "app"
 STATIC_DIR = APP_DIR / "static"
+DJ_STUDIO_DIR = APP_DIR / "dj-studio"  # vendored Aurdour + mastering DSP; see apps/dj-studio/NOTICE.md
 DATA_DIR = HOME / "data"
 RUN_DIR = HOME / "run"
 LOG_DIR = HOME / "logs"
@@ -35,6 +36,11 @@ FALLBACK_DIR = MEDIA / "fallback"
 JINGLES_DIR = MEDIA / "jingles"
 STATION_IDS_DIR = MEDIA / "station-ids"
 PLAYLISTS_DIR = MEDIA / "playlists"
+# DJ Studio: finished/raw mixes. Deliberately NOT under MUSIC_DIR/MEDIA/music — the library
+# scanner only ever walks each station's music_dir (see catalog.scan_station), so this tree
+# is structurally invisible to Library rescans without any extra exclusion logic.
+MIXES_DIR = MEDIA / "mixes"
+MIXES_RAW_DIR = MIXES_DIR / ".raw"
 
 # Derived artwork cache (square thumbnails/normalised covers) lives on the USB
 # drive so it survives reinstalls but never touches the originals.

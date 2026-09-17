@@ -1,0 +1,1767 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>HUNGREE Goat DJ Studio</title>
+    <meta name="description" content="Professional two-deck DJ platform with mixing, effects, streaming, and full offline travel mode">
+    <meta property="og:title" content="AURDOUR DJ">
+    <meta property="og:type" content="music.song">
+
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#070d18">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="AURDOUR DJ">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="msapplication-TileColor" content="#06060c">
+    <meta name="msapplication-navbutton-color" content="#00d4ff">
+    <meta name="format-detection" content="telephone=no">
+    <meta name="screen-orientation" content="landscape">
+
+    <!-- PWA Icon fallbacks for iOS -->
+    <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='30' fill='%2306060c'/%3E%3Ctext x='90' y='105' font-size='60' text-anchor='middle' fill='%2300d4ff' font-family='sans-serif' font-weight='800'%3EDJ%3C/text%3E%3C/svg%3E">
+
+    <link rel="stylesheet" href="brand/tokens.css">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="hungree-goat-theme.css"><!-- HUNGREE Goat re-skin, see NOTICE.md -->
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="dj-app">
+
+        <!-- ===== TOP BAR ===== -->
+        <header class="top-bar">
+            <div class="logo" style="display:flex;align-items:center;gap:10px"><img src="brand/logo.png" alt="" style="width:26px;height:26px;object-fit:contain"><span>HUNGREE GOAT <span class="logo-accent">DJ STUDIO</span></span></div><a href="/#/dj" class="btn-toolbar btn-sm" style="text-decoration:none;display:inline-flex;align-items:center" title="Back to Control">&larr; CONTROL</a>
+
+            <div class="toolbar-group pro-only">
+                <!-- Recording -->
+                <button class="btn-toolbar" id="rec-btn" title="Record mix (R)">REC</button>
+                <span class="toolbar-text" id="rec-time">0:00</span>
+                <select class="toolbar-select" id="rec-format" title="Recording format">
+                    <option value="webm">WebM</option>
+                    <option value="ogg">OGG</option>
+                    <option value="mp4">M4A</option>
+                </select>
+                <span class="toolbar-text rec-track-count" id="rec-track-count"></span>
+
+                <!-- Visualizer -->
+                <button class="btn-toolbar" id="viz-toggle" title="Toggle visualizer (V)">VIZ</button>
+                <button class="btn-toolbar btn-sm" id="viz-mode" title="Visualizer mode">BARS</button>
+
+                <!-- Live & Chat -->
+                <button class="btn-toolbar" id="live-toggle" title="Go live">GO LIVE</button>
+                <button class="btn-toolbar btn-sm" id="obs-setup-btn" title="OBS overlay setup">OBS</button>
+                <button class="btn-toolbar" id="stream-chat-toggle" title="Toggle stream chat panel">CHAT</button>
+
+                <!-- Plugins & Suggest -->
+                <button class="btn-toolbar" id="plugins-btn" title="Plugin manager">PLUGINS</button>
+                <button class="btn-toolbar" id="suggest-toggle" title="AI suggestions">SUGGEST</button>
+
+                <!-- Auto Transition -->
+                <button class="btn-toolbar" id="auto-trans-btn" title="Auto crossfade transition">AUTO</button>
+                <select class="toolbar-select" id="auto-trans-duration" title="Transition duration">
+                    <option value="4">4s</option>
+                    <option value="8" selected>8s</option>
+                    <option value="16">16s</option>
+                    <option value="32">32s</option>
+                </select>
+                <select class="toolbar-select" id="auto-trans-type" title="Transition type">
+                    <option value="blend">Blend</option>
+                    <option value="echo-out">Echo Out</option>
+                    <option value="cut">Cut</option>
+                    <option value="filter-sweep">Filter Sweep</option>
+                </select>
+                <select class="toolbar-select" id="auto-trans-curve" title="Crossfader curve">
+                    <option value="equal-power">S-Curve</option>
+                    <option value="linear">Linear</option>
+                    <option value="cut">Cut</option>
+                </select>
+            </div>
+
+            <div class="toolbar-group pro-only">
+                <!-- BPM Tap -->
+                <button class="btn-toolbar" id="bpm-tap-btn" title="Tap BPM (T)">TAP</button>
+                <span class="toolbar-text mono" id="bpm-tap-display">--- BPM</span>
+                <button class="btn-toolbar btn-sm" id="bpm-tap-reset" title="Reset BPM">RST</button>
+            </div>
+
+            <div class="toolbar-group pro-only">
+                <!-- MIDI -->
+                <span class="toolbar-label">MIDI</span>
+                <span class="toolbar-text" id="midi-status">--</span>
+                <span id="midi-devices"></span>
+                <button class="btn-toolbar btn-sm" id="midi-learn" title="MIDI learn">LEARN</button>
+            </div>
+
+            <div class="toolbar-group pro-only">
+                <!-- RGB / Quantize -->
+                <button class="btn-toolbar btn-sm" id="rgb-toggle" title="RGB waveform">RGB</button>
+                <button class="btn-toolbar btn-sm" id="quantize-toggle" title="Quantize to beat grid">QTZ</button>
+            </div>
+
+            <div class="toolbar-group pro-only">
+                <!-- Performance Monitor -->
+                <span class="toolbar-label">PERF</span>
+                <span class="toolbar-text mono" id="perf-latency">--ms</span>
+                <span class="toolbar-text mono" id="perf-cpu">--%</span>
+                <span class="toolbar-text mono" id="perf-buffer">--</span>
+            </div>
+
+            <!-- Always-visible controls -->
+            <div class="toolbar-spacer"></div>
+
+            <div class="toolbar-group simple-flow-group" data-tutorial="flow">
+                <button class="btn-toolbar btn-flow" id="flow-toggle-btn" title="Flow Mode — Auto-DJ picks tracks and mixes for you">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke-linejoin="round" stroke-linecap="round"/></svg>
+                    <span class="flow-btn-text">AUTO MIX</span>
+                </button>
+            </div>
+
+            <div class="toolbar-group pro-only">
+                <button class="btn-toolbar btn-four-deck" id="four-deck-toggle" title="Toggle 4-deck mode">4 DECK</button>
+            </div>
+
+            <div class="toolbar-group">
+                <button class="btn-toolbar btn-travel" id="travel-mode-btn" title="Travel Mode — touch-optimized for tablets and phones">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                        <path d="M2 17l10 5 10-5"/>
+                        <path d="M2 12l10 5 10-5"/>
+                    </svg>
+                    <span class="travel-btn-label">TRAVEL</span>
+                    <span class="travel-battery" id="travel-battery" style="display:none"></span>
+                </button>
+            </div>
+
+            <div class="toolbar-group">
+                <button class="btn-toolbar btn-pro-toggle" id="pro-mode-toggle" data-tutorial="pro" title="Toggle Pro Mode for advanced DJ controls">
+                    <svg class="pro-icon-off" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 6V3m0 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18z"/><path d="M12 12l4-2M12 12l-4-2M12 12v5"/></svg>
+                    <svg class="pro-icon-on hidden" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 6V3m0 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18z"/><path d="M12 12l4-2M12 12l-4-2M12 12v5"/></svg>
+                    <span class="pro-btn-label">PRO</span>
+                </button>
+            </div>
+
+            <div class="toolbar-group">
+                <button class="btn-toolbar btn-sm btn-help" id="shortcuts-btn" title="Keyboard shortcuts (? or H)">?</button>
+                <button class="btn-toolbar btn-sm" id="tutorial-restart" title="Restart tutorial" style="display:none"></button>
+            </div>
+
+            <div class="toolbar-group pro-only">
+                <button class="btn-toolbar btn-sm" id="settings-btn" title="Settings">SETTINGS</button>
+            </div>
+
+            <div class="master-section" data-tutorial="master">
+                <label class="master-label pro-only">BOOTH</label>
+                <input type="range" id="booth-volume" min="0" max="100" value="80" class="master-slider pro-only" title="Booth output volume">
+                <label class="master-label">MASTER</label>
+                <input type="range" id="master-volume" min="0" max="100" value="80" class="master-slider">
+                <canvas id="master-meter" width="200" height="16"></canvas>
+            </div>
+        </header>
+
+        <!-- Visualizer Canvas (fullscreen behind decks) -->
+        <canvas id="visualizer" class="visualizer hidden"></canvas>
+
+        <!-- Reactions overlay -->
+        <div id="reactions-container" class="reactions-container"></div>
+
+        <!-- OBS Overlay Setup Popup -->
+        <div id="obs-setup-popup" class="obs-setup-popup hidden">
+            <div class="obs-setup-content">
+                <div class="obs-setup-header">
+                    <span class="obs-setup-title">OBS Overlay Setup</span>
+                    <button class="obs-setup-close" id="obs-setup-close">&times;</button>
+                </div>
+                <div class="obs-setup-body">
+                    <p class="obs-setup-step"><strong>1.</strong> In OBS, click <strong>+</strong> under Sources &rarr; <strong>Browser</strong></p>
+                    <p class="obs-setup-step"><strong>2.</strong> Paste this URL:</p>
+                    <div class="obs-setup-url-row">
+                        <input type="text" class="obs-setup-url" id="obs-overlay-url" readonly>
+                        <button class="obs-setup-copy" id="obs-copy-url">COPY</button>
+                    </div>
+                    <p class="obs-setup-step"><strong>3.</strong> Set Width: <code>1920</code> &mdash; Height: <code>200</code></p>
+                    <p class="obs-setup-step"><strong>4.</strong> Check <strong>&ldquo;Shutdown source when not visible&rdquo;</strong></p>
+                    <p class="obs-setup-step"><strong>5.</strong> Scroll down and check <strong>&ldquo;Custom CSS&rdquo;</strong> &mdash; set <code>body { background: transparent; }</code></p>
+                    <div class="obs-setup-themes">
+                        <span class="obs-setup-themes-label">Theme:</span>
+                        <button class="obs-theme-btn active" data-theme="full">Full</button>
+                        <button class="obs-theme-btn" data-theme="minimal">Minimal</button>
+                        <button class="obs-theme-btn" data-theme="neon">Neon</button>
+                        <button class="obs-theme-btn" data-theme="classic">Classic</button>
+                    </div>
+                    <button class="obs-setup-preview" id="obs-preview-btn">Open Preview in New Tab</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chat panel (collapsible, legacy — main chat is in stream-panel) -->
+        <div class="chat-panel hidden" id="chat-panel">
+            <div class="chat-header">
+                <span>CHAT</span>
+                <button class="btn-toolbar btn-sm" id="chat-close">X</button>
+            </div>
+            <div class="chat-messages" id="chat-panel-messages"></div>
+            <div class="chat-requests" id="chat-panel-requests"></div>
+        </div>
+
+        <!-- ===== DECKS ROW ===== -->
+        <div class="decks-row">
+
+            <!-- ===== DECK A ===== -->
+            <section class="deck deck-a" id="deck-a" data-tutorial="deck">
+                <div class="deck-drop-overlay" id="deck-a-drop-overlay">
+                    <div class="drop-overlay-content">
+                        <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        <span class="drop-overlay-text">Drop audio file here</span>
+                    </div>
+                </div>
+                <div class="deck-drop-hint" id="deck-a-hint">
+                    <svg width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M9 19V6l12-3v13"/><circle cx="6" cy="18" r="3" fill="none"/><circle cx="18" cy="15" r="3" fill="none"/></svg>
+                    <span>Browse the library below to load a track</span>
+                    <span class="hint-sub">or drag & drop an audio file here</span>
+                </div>
+                <div class="deck-header">
+                    <span class="deck-label deck-label-a">A</span>
+                    <div class="track-info">
+                        <div class="track-title" id="deck-a-title">No Track Loaded</div>
+                        <div class="track-artist" id="deck-a-artist"></div>
+                    </div>
+                    <div class="track-meta">
+                        <span class="bpm-display" id="deck-a-bpm">--- BPM</span>
+                        <span class="bpm-pulse" id="deck-a-bpm-pulse"></span>
+                        <div class="key-row">
+                            <span class="key-display" id="deck-a-key">--</span>
+                            <span class="camelot-display" id="deck-a-camelot"></span>
+                            <span class="compat-badge" id="deck-a-compat" style="display:none"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="time-row">
+                    <span class="time-elapsed" id="deck-a-elapsed">0:00.0</span>
+                    <span class="time-remaining" id="deck-a-remaining">-0:00.0</span>
+                </div>
+                <div class="waveform-overview" id="deck-a-overview"></div>
+                <div class="waveform-main" id="deck-a-waveform"></div>
+
+                <!-- Grid toggle (PRO) -->
+                <div class="grid-toggle-row pro-only">
+                    <button class="btn-mini grid-btn active" id="grid-a" title="Toggle beat grid overlay (G)">GRID</button>
+                </div>
+
+                <!-- Pitch fader row (PRO) -->
+                <div class="pitch-row pro-only">
+                    <button class="btn-mini" id="keylock-a" title="Key Lock">KEY</button>
+                    <button class="btn-mini" id="slip-a" title="Slip Mode">SLIP</button>
+                    <input type="range" id="pitch-a" class="pitch-fader" min="-8" max="8" value="0" step="0.1">
+                    <span class="pitch-display" id="pitch-a-display">0.0%</span>
+                    <select class="toolbar-select" id="pitch-range-a" title="Pitch range">
+                        <option value="8">+-8%</option>
+                        <option value="16">+-16%</option>
+                        <option value="50">+-50%</option>
+                    </select>
+                </div>
+
+                <div class="transport-controls" data-tutorial="transport">
+                    <button class="btn-transport btn-cue" id="deck-a-cue">CUE</button>
+                    <button class="btn-transport btn-play" id="deck-a-play">
+                        <svg class="icon-play" width="18" height="18" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                        <svg class="icon-pause hidden" width="18" height="18" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
+                    </button>
+                    <button class="btn-transport btn-sync" id="deck-a-sync">SYNC</button>
+                </div>
+
+                <!-- Loop controls (PRO) -->
+                <div class="loop-controls pro-only">
+                    <button class="btn-mini loop-btn" id="loop-a-in">IN</button>
+                    <button class="btn-mini loop-btn" id="loop-a-out">OUT</button>
+                    <button class="btn-mini loop-btn" id="loop-a-toggle">LOOP</button>
+                    <button class="btn-mini loop-btn" id="loop-a-halve">1/2</button>
+                    <button class="btn-mini loop-btn" id="loop-a-double">x2</button>
+                    <div class="auto-loop-btns">
+                        <button class="btn-mini auto-loop" data-beats="1">1</button>
+                        <button class="btn-mini auto-loop" data-beats="2">2</button>
+                        <button class="btn-mini auto-loop" data-beats="4">4</button>
+                        <button class="btn-mini auto-loop" data-beats="8">8</button>
+                        <button class="btn-mini auto-loop" data-beats="16">16</button>
+                    </div>
+                </div>
+
+                <!-- Hot cue pads (PRO) -->
+                <div class="hot-cue-pads pro-only" id="deck-a-pads">
+                    <button class="cue-pad" data-pad="0">1</button>
+                    <button class="cue-pad" data-pad="1">2</button>
+                    <button class="cue-pad" data-pad="2">3</button>
+                    <button class="cue-pad" data-pad="3">4</button>
+                    <button class="cue-pad" data-pad="4">5</button>
+                    <button class="cue-pad" data-pad="5">6</button>
+                    <button class="cue-pad" data-pad="6">7</button>
+                    <button class="cue-pad" data-pad="7">8</button>
+                </div>
+
+                <!-- FX Section (PRO) -->
+                <div class="fx-section pro-only">
+                    <div class="fx-header">
+                        <button class="btn-mini" id="fx-a-toggle">FX</button>
+                        <select class="toolbar-select fx-select" id="fx-a-select">
+                            <option value="echo">Echo</option>
+                            <option value="reverb">Reverb</option>
+                            <option value="flanger">Flanger</option>
+                            <option value="filter">Filter</option>
+                            <option value="delay">Delay</option>
+                            <option value="phaser">Phaser</option>
+                            <option value="bitcrusher">Bitcrusher</option>
+                            <option value="distortion">Distortion</option>
+                            <option value="gate">Gate</option>
+                            <option value="pingpong">Ping-Pong</option>
+                            <option value="tapestop">Tape Stop</option>
+                        </select>
+                        <button class="btn-mini fx-tapestop-trigger" id="fx-a-tapestop-trigger" style="display:none" title="Trigger tape stop">STOP!</button>
+                    </div>
+                    <div class="fx-knobs">
+                        <div class="fx-knob-group">
+                            <label id="fx-a-p1-label">TIME</label>
+                            <input type="range" class="fx-knob" id="fx-a-param1" min="0" max="100" value="30">
+                        </div>
+                        <div class="fx-knob-group">
+                            <label id="fx-a-p2-label">FDBK</label>
+                            <input type="range" class="fx-knob" id="fx-a-param2" min="0" max="100" value="40">
+                        </div>
+                        <div class="fx-knob-group">
+                            <label>D/W</label>
+                            <input type="range" class="fx-knob" id="fx-a-wetdry" min="0" max="100" value="0">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Key Shift (PRO) -->
+                <div class="key-shift-section pro-only">
+                    <span class="key-shift-label">KEY</span>
+                    <button class="btn-mini key-shift-btn" id="keyshift-a-down" title="Key down 1 semitone">-</button>
+                    <span class="key-shift-display" id="keyshift-a-inline-display">0</span>
+                    <button class="btn-mini key-shift-btn" id="keyshift-a-up" title="Key up 1 semitone">+</button>
+                    <span class="key-shift-key" id="keyshift-a-key-display"></span>
+                </div>
+
+                <!-- Stems Section (PRO) -->
+                <div class="stems-section pro-only">
+                    <button class="btn-mini" id="stems-a-toggle">STEMS</button>
+                    <div class="stem-faders">
+                        <div class="stem-group"><label>BASS</label><input type="range" class="stem-fader" id="stem-a-bass" min="0" max="100" value="100"></div>
+                        <div class="stem-group"><label>DRUM</label><input type="range" class="stem-fader" id="stem-a-drums" min="0" max="100" value="100"></div>
+                        <div class="stem-group"><label>VOX</label><input type="range" class="stem-fader" id="stem-a-vocals" min="0" max="100" value="100"></div>
+                        <div class="stem-group"><label>OTH</label><input type="range" class="stem-fader" id="stem-a-other" min="0" max="100" value="100"></div>
+                    </div>
+                </div>
+
+                <!-- Jog Wheel + Nudge (always visible) -->
+                <div class="jog-section">
+                    <div class="jog-nudge">
+                        <button class="btn-mini nudge-btn" id="nudge-a-back" title="Nudge back">&lt;</button>
+                        <canvas class="jog-wheel" id="jog-a" width="120" height="120"></canvas>
+                        <button class="btn-mini nudge-btn" id="nudge-a-fwd" title="Nudge forward">&gt;</button>
+                    </div>
+                    <div class="beat-jump-btns pro-only">
+                        <button class="btn-mini beat-jump-btn" data-beats="0.25" data-dir="back">&lt;1/4</button>
+                        <button class="btn-mini beat-jump-btn" data-beats="0.5" data-dir="back">&lt;1/2</button>
+                        <button class="btn-mini beat-jump-btn" data-beats="1" data-dir="back">&lt;1</button>
+                        <button class="btn-mini beat-jump-btn" data-beats="2" data-dir="back">&lt;2</button>
+                        <button class="btn-mini beat-jump-btn" data-beats="4" data-dir="back">&lt;4</button>
+                        <button class="btn-mini beat-jump-btn" data-beats="8" data-dir="back">&lt;8</button>
+                        <button class="btn-mini beat-jump-btn" data-beats="16" data-dir="back">&lt;16</button>
+                        <button class="btn-mini beat-jump-btn" data-beats="32" data-dir="back">&lt;32</button>
+                        <span class="beat-position-indicator" id="beat-pos-a" title="Current beat position">--</span>
+                        <button class="btn-mini beat-jump-btn" data-beats="32" data-dir="fwd">32&gt;</button>
+                        <button class="btn-mini beat-jump-btn" data-beats="16" data-dir="fwd">16&gt;</button>
+                        <button class="btn-mini beat-jump-btn" data-beats="8" data-dir="fwd">8&gt;</button>
+                        <button class="btn-mini beat-jump-btn" data-beats="4" data-dir="fwd">4&gt;</button>
+                        <button class="btn-mini beat-jump-btn" data-beats="2" data-dir="fwd">2&gt;</button>
+                        <button class="btn-mini beat-jump-btn" data-beats="1" data-dir="fwd">1&gt;</button>
+                        <button class="btn-mini beat-jump-btn" data-beats="0.5" data-dir="fwd">1/2&gt;</button>
+                        <button class="btn-mini beat-jump-btn" data-beats="0.25" data-dir="fwd">1/4&gt;</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ===== MIXER ===== -->
+            <section class="mixer" id="mixer">
+                <!-- Channel A strip -->
+                <div class="channel-strip" id="channel-a">
+                    <div class="channel-label">A</div>
+                    <button class="btn-mini pfl-btn pro-only" id="pfl-a" title="Pre-fader listen (headphones)">PFL</button>
+                    <div class="eq-section pro-only">
+                        <div class="eq-group">
+                            <label>HI</label>
+                            <input type="range" class="eq-knob" id="eq-a-high" min="-24" max="6" value="0">
+                            <button class="eq-kill-btn" id="eq-kill-a-high" title="Kill HI band">K</button>
+                        </div>
+                        <div class="eq-group">
+                            <label>MID</label>
+                            <input type="range" class="eq-knob" id="eq-a-mid" min="-24" max="6" value="0">
+                            <button class="eq-kill-btn" id="eq-kill-a-mid" title="Kill MID band">K</button>
+                        </div>
+                        <div class="eq-group">
+                            <label>LOW</label>
+                            <input type="range" class="eq-knob" id="eq-a-low" min="-24" max="6" value="0">
+                            <button class="eq-kill-btn" id="eq-kill-a-low" title="Kill LOW band">K</button>
+                        </div>
+                    </div>
+                    <canvas class="level-meter" id="meter-a" width="24" height="160"></canvas>
+                    <input type="range" class="vol-fader" id="vol-a" min="0" max="100" value="80">
+                    <button class="btn-mini xf-assign-btn four-deck-only xf-side-a" id="xf-assign-a" title="Crossfader assignment (A or B side)">A</button>
+                </div>
+
+                <!-- Channel B strip -->
+                <div class="channel-strip" id="channel-b">
+                    <div class="channel-label">B</div>
+                    <button class="btn-mini pfl-btn pro-only" id="pfl-b" title="Pre-fader listen (headphones)">PFL</button>
+                    <div class="eq-section pro-only">
+                        <div class="eq-group">
+                            <label>HI</label>
+                            <input type="range" class="eq-knob" id="eq-b-high" min="-24" max="6" value="0">
+                            <button class="eq-kill-btn" id="eq-kill-b-high" title="Kill HI band">K</button>
+                        </div>
+                        <div class="eq-group">
+                            <label>MID</label>
+                            <input type="range" class="eq-knob" id="eq-b-mid" min="-24" max="6" value="0">
+                            <button class="eq-kill-btn" id="eq-kill-b-mid" title="Kill MID band">K</button>
+                        </div>
+                        <div class="eq-group">
+                            <label>LOW</label>
+                            <input type="range" class="eq-knob" id="eq-b-low" min="-24" max="6" value="0">
+                            <button class="eq-kill-btn" id="eq-kill-b-low" title="Kill LOW band">K</button>
+                        </div>
+                    </div>
+                    <canvas class="level-meter" id="meter-b" width="24" height="160"></canvas>
+                    <input type="range" class="vol-fader" id="vol-b" min="0" max="100" value="80">
+                    <button class="btn-mini xf-assign-btn four-deck-only xf-side-b" id="xf-assign-b" title="Crossfader assignment (A or B side)">B</button>
+                </div>
+
+                <!-- Channel C strip (4-deck mode) -->
+                <div class="channel-strip four-deck-only" id="channel-c">
+                    <div class="channel-label channel-label-c">C</div>
+                    <button class="btn-mini pfl-btn pro-only" id="pfl-c" title="Pre-fader listen (headphones)">PFL</button>
+                    <div class="eq-section pro-only">
+                        <div class="eq-group">
+                            <label>HI</label>
+                            <input type="range" class="eq-knob" id="eq-c-high" min="-24" max="6" value="0">
+                            <button class="eq-kill-btn" id="eq-kill-c-high" title="Kill HI band">K</button>
+                        </div>
+                        <div class="eq-group">
+                            <label>MID</label>
+                            <input type="range" class="eq-knob" id="eq-c-mid" min="-24" max="6" value="0">
+                            <button class="eq-kill-btn" id="eq-kill-c-mid" title="Kill MID band">K</button>
+                        </div>
+                        <div class="eq-group">
+                            <label>LOW</label>
+                            <input type="range" class="eq-knob" id="eq-c-low" min="-24" max="6" value="0">
+                            <button class="eq-kill-btn" id="eq-kill-c-low" title="Kill LOW band">K</button>
+                        </div>
+                    </div>
+                    <canvas class="level-meter" id="meter-c" width="24" height="160"></canvas>
+                    <input type="range" class="vol-fader" id="vol-c" min="0" max="100" value="80">
+                    <button class="btn-mini xf-assign-btn xf-side-a" id="xf-assign-c" title="Crossfader assignment (A or B side)">A</button>
+                </div>
+
+                <!-- Channel D strip (4-deck mode) -->
+                <div class="channel-strip four-deck-only" id="channel-d">
+                    <div class="channel-label channel-label-d">D</div>
+                    <button class="btn-mini pfl-btn pro-only" id="pfl-d" title="Pre-fader listen (headphones)">PFL</button>
+                    <div class="eq-section pro-only">
+                        <div class="eq-group">
+                            <label>HI</label>
+                            <input type="range" class="eq-knob" id="eq-d-high" min="-24" max="6" value="0">
+                            <button class="eq-kill-btn" id="eq-kill-d-high" title="Kill HI band">K</button>
+                        </div>
+                        <div class="eq-group">
+                            <label>MID</label>
+                            <input type="range" class="eq-knob" id="eq-d-mid" min="-24" max="6" value="0">
+                            <button class="eq-kill-btn" id="eq-kill-d-mid" title="Kill MID band">K</button>
+                        </div>
+                        <div class="eq-group">
+                            <label>LOW</label>
+                            <input type="range" class="eq-knob" id="eq-d-low" min="-24" max="6" value="0">
+                            <button class="eq-kill-btn" id="eq-kill-d-low" title="Kill LOW band">K</button>
+                        </div>
+                    </div>
+                    <canvas class="level-meter" id="meter-d" width="24" height="160"></canvas>
+                    <input type="range" class="vol-fader" id="vol-d" min="0" max="100" value="80">
+                    <button class="btn-mini xf-assign-btn xf-side-b" id="xf-assign-d" title="Crossfader assignment (A or B side)">B</button>
+                </div>
+
+                <!-- Phase Meter (PRO) -->
+                <div class="phase-section pro-only">
+                    <div class="hp-label">PHASE</div>
+                    <canvas id="meter-phase" class="phase-meter" width="140" height="12"></canvas>
+                    <canvas id="phase-meter-canvas" class="phase-meter phase-meter-sync" width="140" height="14" title="Beat phase alignment between decks"></canvas>
+                    <div class="phase-label-row">
+                        <span class="phase-label-a">A</span>
+                        <span class="phase-label-sync" id="phase-sync-label">--</span>
+                        <span class="phase-label-b">B</span>
+                    </div>
+                </div>
+
+                <!-- Mixer Tools (PRO) -->
+                <div class="mixer-tools-section pro-only">
+                    <div class="hp-label">FADER</div>
+                    <select class="toolbar-select" id="fader-curve-select" title="Channel fader curve">
+                        <option value="linear">Linear</option>
+                        <option value="logarithmic">Log</option>
+                    </select>
+                    <div class="mixer-tools-row">
+                        <button class="btn-mini mixer-tool-btn" id="limiter-toggle" title="Master limiter — prevents clipping">LIMIT</button>
+                        <button class="btn-mini mixer-tool-btn" id="autogain-toggle" title="Auto-gain — normalize track loudness on load">A.GAIN</button>
+                    </div>
+                </div>
+
+                <!-- Headphone / Cue controls (PRO) -->
+                <div class="headphone-section pro-only">
+                    <div class="hp-label">PHONES</div>
+                    <div class="hp-row">
+                        <label>CUE/MIX</label>
+                        <input type="range" id="cue-mix" min="0" max="100" value="0" class="hp-slider" title="Cue/Master mix">
+                    </div>
+                    <div class="hp-row">
+                        <label>VOL</label>
+                        <input type="range" id="cue-volume" min="0" max="100" value="80" class="hp-slider" title="Headphone volume">
+                    </div>
+                    <button class="btn-mini" id="split-cue" title="Split cue (L=cue R=master)">SPLIT</button>
+                    <select class="toolbar-select" id="setting-headphone-output" title="Headphone output device">
+                        <option value="">Default</option>
+                    </select>
+                </div>
+
+                <!-- Crossfader -->
+                <div class="crossfader-section" data-tutorial="crossfader">
+                    <div class="xf-endpoint xf-endpoint-a">
+                        <span class="xf-label">A</span>
+                    </div>
+                    <div class="xf-track-wrap">
+                        <input type="range" id="crossfader" min="0" max="100" value="50" class="crossfader">
+                        <span class="xf-hint">slide to blend</span>
+                    </div>
+                    <div class="xf-endpoint xf-endpoint-b">
+                        <span class="xf-label">B</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ===== DECK B ===== -->
+            <section class="deck deck-b" id="deck-b">
+                <div class="deck-drop-overlay" id="deck-b-drop-overlay">
+                    <div class="drop-overlay-content">
+                        <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        <span class="drop-overlay-text">Drop audio file here</span>
+                    </div>
+                </div>
+                <div class="deck-drop-hint" id="deck-b-hint">
+                    <svg width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M9 19V6l12-3v13"/><circle cx="6" cy="18" r="3" fill="none"/><circle cx="18" cy="15" r="3" fill="none"/></svg>
+                    <span>Load your second track here</span>
+                    <span class="hint-sub">to mix between Deck A and B</span>
+                </div>
+                <div class="deck-header">
+                    <span class="deck-label deck-label-b">B</span>
+                    <div class="track-info">
+                        <div class="track-title" id="deck-b-title">No Track Loaded</div>
+                        <div class="track-artist" id="deck-b-artist"></div>
+                    </div>
+                    <div class="track-meta">
+                        <span class="bpm-display" id="deck-b-bpm">--- BPM</span>
+                        <span class="bpm-pulse" id="deck-b-bpm-pulse"></span>
+                        <div class="key-row">
+                            <span class="key-display" id="deck-b-key">--</span>
+                            <span class="camelot-display" id="deck-b-camelot"></span>
+                            <span class="compat-badge" id="deck-b-compat" style="display:none"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="time-row">
+                    <span class="time-elapsed" id="deck-b-elapsed">0:00.0</span>
+                    <span class="time-remaining" id="deck-b-remaining">-0:00.0</span>
+                </div>
+                <div class="waveform-overview" id="deck-b-overview"></div>
+                <div class="waveform-main" id="deck-b-waveform"></div>
+
+                <!-- Grid toggle (PRO) -->
+                <div class="grid-toggle-row pro-only">
+                    <button class="btn-mini grid-btn active" id="grid-b" title="Toggle beat grid overlay (G)">GRID</button>
+                </div>
+
+                <!-- Pitch fader row (PRO) -->
+                <div class="pitch-row pro-only">
+                    <button class="btn-mini" id="keylock-b" title="Key Lock">KEY</button>
+                    <button class="btn-mini" id="slip-b" title="Slip Mode">SLIP</button>
+                    <input type="range" id="pitch-b" class="pitch-fader" min="-8" max="8" value="0" step="0.1">
+                    <span class="pitch-display" id="pitch-b-display">0.0%</span>
+                    <select class="toolbar-select" id="pitch-range-b" title="Pitch range">
+                        <option value="8">+-8%</option>
+                        <option value="16">+-16%</option>
+                        <option value="50">+-50%</option>
+                    </select>
+                </div>
+
+                <div class="transport-controls">
+                    <button class="btn-transport btn-cue" id="deck-b-cue">CUE</button>
+                    <button class="btn-transport btn-play" id="deck-b-play">
+                        <svg class="icon-play" width="18" height="18" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                        <svg class="icon-pause hidden" width="18" height="18" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
+                    </button>
+                    <button class="btn-transport btn-sync" id="deck-b-sync">SYNC</button>
+                </div>
+
+                <!-- Loop controls (PRO) -->
+                <div class="loop-controls pro-only">
+                    <button class="btn-mini loop-btn" id="loop-b-in">IN</button>
+                    <button class="btn-mini loop-btn" id="loop-b-out">OUT</button>
+                    <button class="btn-mini loop-btn" id="loop-b-toggle">LOOP</button>
+                    <button class="btn-mini loop-btn" id="loop-b-halve">1/2</button>
+                    <button class="btn-mini loop-btn" id="loop-b-double">x2</button>
+                    <div class="auto-loop-btns">
+                        <button class="btn-mini auto-loop" data-beats="1">1</button>
+                        <button class="btn-mini auto-loop" data-beats="2">2</button>
+                        <button class="btn-mini auto-loop" data-beats="4">4</button>
+                        <button class="btn-mini auto-loop" data-beats="8">8</button>
+                        <button class="btn-mini auto-loop" data-beats="16">16</button>
+                    </div>
+                </div>
+
+                <!-- Hot cue pads (PRO) -->
+                <div class="hot-cue-pads pro-only" id="deck-b-pads">
+                    <button class="cue-pad" data-pad="0">1</button>
+                    <button class="cue-pad" data-pad="1">2</button>
+                    <button class="cue-pad" data-pad="2">3</button>
+                    <button class="cue-pad" data-pad="3">4</button>
+                    <button class="cue-pad" data-pad="4">5</button>
+                    <button class="cue-pad" data-pad="5">6</button>
+                    <button class="cue-pad" data-pad="6">7</button>
+                    <button class="cue-pad" data-pad="7">8</button>
+                </div>
+
+                <!-- FX Section (PRO) -->
+                <div class="fx-section pro-only">
+                    <div class="fx-header">
+                        <button class="btn-mini" id="fx-b-toggle">FX</button>
+                        <select class="toolbar-select fx-select" id="fx-b-select">
+                            <option value="echo">Echo</option>
+                            <option value="reverb">Reverb</option>
+                            <option value="flanger">Flanger</option>
+                            <option value="filter">Filter</option>
+                            <option value="delay">Delay</option>
+                            <option value="phaser">Phaser</option>
+                            <option value="bitcrusher">Bitcrusher</option>
+                            <option value="distortion">Distortion</option>
+                            <option value="gate">Gate</option>
+                            <option value="pingpong">Ping-Pong</option>
+                            <option value="tapestop">Tape Stop</option>
+                        </select>
+                        <button class="btn-mini fx-tapestop-trigger" id="fx-b-tapestop-trigger" style="display:none" title="Trigger tape stop">STOP!</button>
+                    </div>
+                    <div class="fx-knobs">
+                        <div class="fx-knob-group">
+                            <label id="fx-b-p1-label">TIME</label>
+                            <input type="range" class="fx-knob" id="fx-b-param1" min="0" max="100" value="30">
+                        </div>
+                        <div class="fx-knob-group">
+                            <label id="fx-b-p2-label">FDBK</label>
+                            <input type="range" class="fx-knob" id="fx-b-param2" min="0" max="100" value="40">
+                        </div>
+                        <div class="fx-knob-group">
+                            <label>D/W</label>
+                            <input type="range" class="fx-knob" id="fx-b-wetdry" min="0" max="100" value="0">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Key Shift (PRO) -->
+                <div class="key-shift-section pro-only">
+                    <span class="key-shift-label">KEY</span>
+                    <button class="btn-mini key-shift-btn" id="keyshift-b-down" title="Key down 1 semitone">-</button>
+                    <span class="key-shift-display" id="keyshift-b-inline-display">0</span>
+                    <button class="btn-mini key-shift-btn" id="keyshift-b-up" title="Key up 1 semitone">+</button>
+                    <span class="key-shift-key" id="keyshift-b-key-display"></span>
+                </div>
+
+                <!-- Stems Section (PRO) -->
+                <div class="stems-section pro-only">
+                    <button class="btn-mini" id="stems-b-toggle">STEMS</button>
+                    <div class="stem-faders">
+                        <div class="stem-group"><label>BASS</label><input type="range" class="stem-fader" id="stem-b-bass" min="0" max="100" value="100"></div>
+                        <div class="stem-group"><label>DRUM</label><input type="range" class="stem-fader" id="stem-b-drums" min="0" max="100" value="100"></div>
+                        <div class="stem-group"><label>VOX</label><input type="range" class="stem-fader" id="stem-b-vocals" min="0" max="100" value="100"></div>
+                        <div class="stem-group"><label>OTH</label><input type="range" class="stem-fader" id="stem-b-other" min="0" max="100" value="100"></div>
+                    </div>
+                </div>
+
+                <!-- Jog Wheel + Nudge (always visible) -->
+                <div class="jog-section">
+                    <div class="jog-nudge">
+                        <button class="btn-mini nudge-btn" id="nudge-b-back" title="Nudge back">&lt;</button>
+                        <canvas class="jog-wheel" id="jog-b" width="120" height="120"></canvas>
+                        <button class="btn-mini nudge-btn" id="nudge-b-fwd" title="Nudge forward">&gt;</button>
+                    </div>
+                    <div class="beat-jump-btns pro-only">
+                        <button class="btn-mini beat-jump-btn" data-beats="0.25" data-dir="back">&lt;1/4</button>
+                        <button class="btn-mini beat-jump-btn" data-beats="0.5" data-dir="back">&lt;1/2</button>
+                        <button class="btn-mini beat-jump-btn" data-beats="1" data-dir="back">&lt;1</button>
+                        <button class="btn-mini beat-jump-btn" data-beats="2" data-dir="back">&lt;2</button>
+                        <button class="btn-mini beat-jump-btn" data-beats="4" data-dir="back">&lt;4</button>
+                        <button class="btn-mini beat-jump-btn" data-beats="8" data-dir="back">&lt;8</button>
+                        <button class="btn-mini beat-jump-btn" data-beats="16" data-dir="back">&lt;16</button>
+                        <button class="btn-mini beat-jump-btn" data-beats="32" data-dir="back">&lt;32</button>
+                        <span class="beat-position-indicator" id="beat-pos-b" title="Current beat position">--</span>
+                        <button class="btn-mini beat-jump-btn" data-beats="32" data-dir="fwd">32&gt;</button>
+                        <button class="btn-mini beat-jump-btn" data-beats="16" data-dir="fwd">16&gt;</button>
+                        <button class="btn-mini beat-jump-btn" data-beats="8" data-dir="fwd">8&gt;</button>
+                        <button class="btn-mini beat-jump-btn" data-beats="4" data-dir="fwd">4&gt;</button>
+                        <button class="btn-mini beat-jump-btn" data-beats="2" data-dir="fwd">2&gt;</button>
+                        <button class="btn-mini beat-jump-btn" data-beats="1" data-dir="fwd">1&gt;</button>
+                        <button class="btn-mini beat-jump-btn" data-beats="0.5" data-dir="fwd">1/2&gt;</button>
+                        <button class="btn-mini beat-jump-btn" data-beats="0.25" data-dir="fwd">1/4&gt;</button>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- ===== DECKS C & D (4-DECK MODE) ===== -->
+        <div class="decks-row decks-row-cd four-deck-only" id="decks-row-cd">
+
+            <!-- ===== DECK C ===== -->
+            <section class="deck deck-c" id="deck-c">
+                <div class="deck-drop-overlay" id="deck-c-drop-overlay">
+                    <div class="drop-overlay-content">
+                        <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        <span class="drop-overlay-text">Drop audio file here</span>
+                    </div>
+                </div>
+                <div class="deck-drop-hint" id="deck-c-hint">
+                    <svg width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M9 19V6l12-3v13"/><circle cx="6" cy="18" r="3" fill="none"/><circle cx="18" cy="15" r="3" fill="none"/></svg>
+                    <span>Load a track onto Deck C</span>
+                    <span class="hint-sub">or drag & drop an audio file here</span>
+                </div>
+                <div class="deck-header">
+                    <span class="deck-label deck-label-c">C</span>
+                    <div class="track-info">
+                        <div class="track-title" id="deck-c-title">No Track Loaded</div>
+                        <div class="track-artist" id="deck-c-artist"></div>
+                    </div>
+                    <div class="track-meta">
+                        <span class="bpm-display" id="deck-c-bpm">--- BPM</span>
+                        <span class="bpm-pulse" id="deck-c-bpm-pulse"></span>
+                        <div class="key-row">
+                            <span class="key-display" id="deck-c-key">--</span>
+                            <span class="camelot-display" id="deck-c-camelot"></span>
+                            <span class="compat-badge" id="deck-c-compat" style="display:none"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="time-row">
+                    <span class="time-elapsed" id="deck-c-elapsed">0:00.0</span>
+                    <span class="time-remaining" id="deck-c-remaining">-0:00.0</span>
+                </div>
+                <div class="waveform-overview" id="deck-c-overview"></div>
+                <div class="waveform-main" id="deck-c-waveform"></div>
+
+                <div class="pitch-row pro-only">
+                    <button class="btn-mini" id="keylock-c" title="Key Lock">KEY</button>
+                    <button class="btn-mini" id="slip-c" title="Slip Mode">SLIP</button>
+                    <input type="range" id="pitch-c" class="pitch-fader" min="-8" max="8" value="0" step="0.1">
+                    <span class="pitch-display" id="pitch-c-display">0.0%</span>
+                    <select class="toolbar-select" id="pitch-range-c" title="Pitch range">
+                        <option value="8">+-8%</option>
+                        <option value="16">+-16%</option>
+                        <option value="50">+-50%</option>
+                    </select>
+                </div>
+
+                <div class="transport-controls">
+                    <button class="btn-transport btn-cue" id="deck-c-cue">CUE</button>
+                    <button class="btn-transport btn-play" id="deck-c-play">
+                        <svg class="icon-play" width="18" height="18" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                        <svg class="icon-pause hidden" width="18" height="18" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
+                    </button>
+                    <button class="btn-transport btn-sync" id="deck-c-sync">SYNC</button>
+                </div>
+
+                <div class="loop-controls pro-only">
+                    <button class="btn-mini loop-btn" id="loop-c-in">IN</button>
+                    <button class="btn-mini loop-btn" id="loop-c-out">OUT</button>
+                    <button class="btn-mini loop-btn" id="loop-c-toggle">LOOP</button>
+                    <button class="btn-mini loop-btn" id="loop-c-halve">1/2</button>
+                    <button class="btn-mini loop-btn" id="loop-c-double">x2</button>
+                    <div class="auto-loop-btns">
+                        <button class="btn-mini auto-loop" data-beats="1">1</button>
+                        <button class="btn-mini auto-loop" data-beats="2">2</button>
+                        <button class="btn-mini auto-loop" data-beats="4">4</button>
+                        <button class="btn-mini auto-loop" data-beats="8">8</button>
+                        <button class="btn-mini auto-loop" data-beats="16">16</button>
+                    </div>
+                </div>
+
+                <div class="hot-cue-pads pro-only" id="deck-c-pads">
+                    <button class="cue-pad" data-pad="0">1</button>
+                    <button class="cue-pad" data-pad="1">2</button>
+                    <button class="cue-pad" data-pad="2">3</button>
+                    <button class="cue-pad" data-pad="3">4</button>
+                    <button class="cue-pad" data-pad="4">5</button>
+                    <button class="cue-pad" data-pad="5">6</button>
+                    <button class="cue-pad" data-pad="6">7</button>
+                    <button class="cue-pad" data-pad="7">8</button>
+                </div>
+            </section>
+
+            <!-- ===== DECK D ===== -->
+            <section class="deck deck-d" id="deck-d">
+                <div class="deck-drop-overlay" id="deck-d-drop-overlay">
+                    <div class="drop-overlay-content">
+                        <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        <span class="drop-overlay-text">Drop audio file here</span>
+                    </div>
+                </div>
+                <div class="deck-drop-hint" id="deck-d-hint">
+                    <svg width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M9 19V6l12-3v13"/><circle cx="6" cy="18" r="3" fill="none"/><circle cx="18" cy="15" r="3" fill="none"/></svg>
+                    <span>Load a track onto Deck D</span>
+                    <span class="hint-sub">or drag & drop an audio file here</span>
+                </div>
+                <div class="deck-header">
+                    <span class="deck-label deck-label-d">D</span>
+                    <div class="track-info">
+                        <div class="track-title" id="deck-d-title">No Track Loaded</div>
+                        <div class="track-artist" id="deck-d-artist"></div>
+                    </div>
+                    <div class="track-meta">
+                        <span class="bpm-display" id="deck-d-bpm">--- BPM</span>
+                        <span class="bpm-pulse" id="deck-d-bpm-pulse"></span>
+                        <div class="key-row">
+                            <span class="key-display" id="deck-d-key">--</span>
+                            <span class="camelot-display" id="deck-d-camelot"></span>
+                            <span class="compat-badge" id="deck-d-compat" style="display:none"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="time-row">
+                    <span class="time-elapsed" id="deck-d-elapsed">0:00.0</span>
+                    <span class="time-remaining" id="deck-d-remaining">-0:00.0</span>
+                </div>
+                <div class="waveform-overview" id="deck-d-overview"></div>
+                <div class="waveform-main" id="deck-d-waveform"></div>
+
+                <div class="pitch-row pro-only">
+                    <button class="btn-mini" id="keylock-d" title="Key Lock">KEY</button>
+                    <button class="btn-mini" id="slip-d" title="Slip Mode">SLIP</button>
+                    <input type="range" id="pitch-d" class="pitch-fader" min="-8" max="8" value="0" step="0.1">
+                    <span class="pitch-display" id="pitch-d-display">0.0%</span>
+                    <select class="toolbar-select" id="pitch-range-d" title="Pitch range">
+                        <option value="8">+-8%</option>
+                        <option value="16">+-16%</option>
+                        <option value="50">+-50%</option>
+                    </select>
+                </div>
+
+                <div class="transport-controls">
+                    <button class="btn-transport btn-cue" id="deck-d-cue">CUE</button>
+                    <button class="btn-transport btn-play" id="deck-d-play">
+                        <svg class="icon-play" width="18" height="18" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                        <svg class="icon-pause hidden" width="18" height="18" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
+                    </button>
+                    <button class="btn-transport btn-sync" id="deck-d-sync">SYNC</button>
+                </div>
+
+                <div class="loop-controls pro-only">
+                    <button class="btn-mini loop-btn" id="loop-d-in">IN</button>
+                    <button class="btn-mini loop-btn" id="loop-d-out">OUT</button>
+                    <button class="btn-mini loop-btn" id="loop-d-toggle">LOOP</button>
+                    <button class="btn-mini loop-btn" id="loop-d-halve">1/2</button>
+                    <button class="btn-mini loop-btn" id="loop-d-double">x2</button>
+                    <div class="auto-loop-btns">
+                        <button class="btn-mini auto-loop" data-beats="1">1</button>
+                        <button class="btn-mini auto-loop" data-beats="2">2</button>
+                        <button class="btn-mini auto-loop" data-beats="4">4</button>
+                        <button class="btn-mini auto-loop" data-beats="8">8</button>
+                        <button class="btn-mini auto-loop" data-beats="16">16</button>
+                    </div>
+                </div>
+
+                <div class="hot-cue-pads pro-only" id="deck-d-pads">
+                    <button class="cue-pad" data-pad="0">1</button>
+                    <button class="cue-pad" data-pad="1">2</button>
+                    <button class="cue-pad" data-pad="2">3</button>
+                    <button class="cue-pad" data-pad="3">4</button>
+                    <button class="cue-pad" data-pad="4">5</button>
+                    <button class="cue-pad" data-pad="5">6</button>
+                    <button class="cue-pad" data-pad="6">7</button>
+                    <button class="cue-pad" data-pad="7">8</button>
+                </div>
+            </section>
+        </div>
+
+        <!-- ===== AUX INPUTS + SAMPLER (PRO) ===== -->
+        <div class="aux-row pro-only">
+
+            <!-- MIC CHANNEL -->
+            <section class="aux-section mic-section">
+                <div class="aux-header">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                        <line x1="12" y1="19" x2="12" y2="23"/>
+                        <line x1="8" y1="23" x2="16" y2="23"/>
+                    </svg>
+                    <span class="aux-title">MIC</span>
+                    <span class="aux-status" id="mic-status">Off</span>
+                </div>
+                <div class="aux-controls">
+                    <button class="btn-aux" id="mic-toggle">CONNECT</button>
+                    <button class="btn-aux" id="mic-mute">MUTE</button>
+                </div>
+                <div class="aux-slider-row">
+                    <label>VOL</label>
+                    <input type="range" id="mic-volume" min="0" max="100" value="80" class="aux-slider">
+                    <canvas id="meter-mic" width="120" height="10"></canvas>
+                </div>
+                <div class="aux-eq">
+                    <div class="eq-group-inline"><label>HI</label><input type="range" class="eq-knob-sm" id="eq-mic-high" min="-24" max="6" value="0"></div>
+                    <div class="eq-group-inline"><label>MID</label><input type="range" class="eq-knob-sm" id="eq-mic-mid" min="-24" max="6" value="0"></div>
+                    <div class="eq-group-inline"><label>LOW</label><input type="range" class="eq-knob-sm" id="eq-mic-low" min="-24" max="6" value="0"></div>
+                </div>
+            </section>
+
+            <!-- SYSTEM AUDIO -->
+            <section class="aux-section system-section">
+                <div class="aux-header">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                        <line x1="8" y1="21" x2="16" y2="21"/>
+                        <line x1="12" y1="17" x2="12" y2="21"/>
+                    </svg>
+                    <span class="aux-title">SYSTEM AUDIO</span>
+                    <span class="aux-status" id="system-status">Off</span>
+                </div>
+                <div class="aux-controls">
+                    <button class="btn-aux" id="system-toggle">CAPTURE</button>
+                </div>
+                <div class="aux-slider-row">
+                    <label>VOL</label>
+                    <input type="range" id="system-volume" min="0" max="100" value="80" class="aux-slider">
+                    <canvas id="meter-system" width="120" height="10"></canvas>
+                </div>
+            </section>
+
+            <!-- SAMPLER -->
+            <section class="aux-section sampler-section">
+                <div class="aux-header">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+                        <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+                    </svg>
+                    <span class="aux-title">SAMPLER</span>
+                    <span class="sampler-bank-label" id="sampler-bank-display">BANK A</span>
+                    <div class="sampler-bank-btns">
+                        <button class="btn-mini sampler-bank-btn active" data-bank="A" style="color:#ff4444;border-color:#ff4444">A</button>
+                        <button class="btn-mini sampler-bank-btn" data-bank="B" style="color:#44aaff;border-color:#44aaff">B</button>
+                        <button class="btn-mini sampler-bank-btn" data-bank="C" style="color:#44ff88;border-color:#44ff88">C</button>
+                        <button class="btn-mini sampler-bank-btn" data-bank="D" style="color:#ff88ff;border-color:#ff88ff">D</button>
+                    </div>
+                    <div class="sampler-vol">
+                        <label>VOL</label>
+                        <input type="range" id="sampler-volume" min="0" max="100" value="80" class="aux-slider-sm">
+                    </div>
+                </div>
+                <div class="sampler-pads" id="sampler-pads">
+                    <div class="sample-pad" data-pad="0">
+                        <span class="sample-num">1</span><span class="sample-name"></span>
+                        <div class="pad-controls">
+                            <button class="btn-micro pad-loop-toggle" data-pad="0">1-SHOT</button>
+                            <div class="pad-pitch-row"><input type="range" class="pad-pitch" data-pad="0" min="-12" max="12" value="0" step="1"><span class="pad-pitch-display">0</span></div>
+                            <div class="pad-vol-row"><input type="range" class="pad-volume" data-pad="0" min="0" max="100" value="100"></div>
+                        </div>
+                    </div>
+                    <div class="sample-pad" data-pad="1">
+                        <span class="sample-num">2</span><span class="sample-name"></span>
+                        <div class="pad-controls">
+                            <button class="btn-micro pad-loop-toggle" data-pad="1">1-SHOT</button>
+                            <div class="pad-pitch-row"><input type="range" class="pad-pitch" data-pad="1" min="-12" max="12" value="0" step="1"><span class="pad-pitch-display">0</span></div>
+                            <div class="pad-vol-row"><input type="range" class="pad-volume" data-pad="1" min="0" max="100" value="100"></div>
+                        </div>
+                    </div>
+                    <div class="sample-pad" data-pad="2">
+                        <span class="sample-num">3</span><span class="sample-name"></span>
+                        <div class="pad-controls">
+                            <button class="btn-micro pad-loop-toggle" data-pad="2">1-SHOT</button>
+                            <div class="pad-pitch-row"><input type="range" class="pad-pitch" data-pad="2" min="-12" max="12" value="0" step="1"><span class="pad-pitch-display">0</span></div>
+                            <div class="pad-vol-row"><input type="range" class="pad-volume" data-pad="2" min="0" max="100" value="100"></div>
+                        </div>
+                    </div>
+                    <div class="sample-pad" data-pad="3">
+                        <span class="sample-num">4</span><span class="sample-name"></span>
+                        <div class="pad-controls">
+                            <button class="btn-micro pad-loop-toggle" data-pad="3">1-SHOT</button>
+                            <div class="pad-pitch-row"><input type="range" class="pad-pitch" data-pad="3" min="-12" max="12" value="0" step="1"><span class="pad-pitch-display">0</span></div>
+                            <div class="pad-vol-row"><input type="range" class="pad-volume" data-pad="3" min="0" max="100" value="100"></div>
+                        </div>
+                    </div>
+                    <div class="sample-pad" data-pad="4">
+                        <span class="sample-num">5</span><span class="sample-name"></span>
+                        <div class="pad-controls">
+                            <button class="btn-micro pad-loop-toggle" data-pad="4">1-SHOT</button>
+                            <div class="pad-pitch-row"><input type="range" class="pad-pitch" data-pad="4" min="-12" max="12" value="0" step="1"><span class="pad-pitch-display">0</span></div>
+                            <div class="pad-vol-row"><input type="range" class="pad-volume" data-pad="4" min="0" max="100" value="100"></div>
+                        </div>
+                    </div>
+                    <div class="sample-pad" data-pad="5">
+                        <span class="sample-num">6</span><span class="sample-name"></span>
+                        <div class="pad-controls">
+                            <button class="btn-micro pad-loop-toggle" data-pad="5">1-SHOT</button>
+                            <div class="pad-pitch-row"><input type="range" class="pad-pitch" data-pad="5" min="-12" max="12" value="0" step="1"><span class="pad-pitch-display">0</span></div>
+                            <div class="pad-vol-row"><input type="range" class="pad-volume" data-pad="5" min="0" max="100" value="100"></div>
+                        </div>
+                    </div>
+                    <div class="sample-pad" data-pad="6">
+                        <span class="sample-num">7</span><span class="sample-name"></span>
+                        <div class="pad-controls">
+                            <button class="btn-micro pad-loop-toggle" data-pad="6">1-SHOT</button>
+                            <div class="pad-pitch-row"><input type="range" class="pad-pitch" data-pad="6" min="-12" max="12" value="0" step="1"><span class="pad-pitch-display">0</span></div>
+                            <div class="pad-vol-row"><input type="range" class="pad-volume" data-pad="6" min="0" max="100" value="100"></div>
+                        </div>
+                    </div>
+                    <div class="sample-pad" data-pad="7">
+                        <span class="sample-num">8</span><span class="sample-name"></span>
+                        <div class="pad-controls">
+                            <button class="btn-micro pad-loop-toggle" data-pad="7">1-SHOT</button>
+                            <div class="pad-pitch-row"><input type="range" class="pad-pitch" data-pad="7" min="-12" max="12" value="0" step="1"><span class="pad-pitch-display">0</span></div>
+                            <div class="pad-vol-row"><input type="range" class="pad-volume" data-pad="7" min="0" max="100" value="100"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="sampler-hint">Click to trigger / Right-click to load sample</div>
+            </section>
+
+            <!-- RECORDING PANEL -->
+            <section class="aux-section rec-section hidden" id="rec-panel">
+                <div class="aux-header">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4" fill="currentColor"/>
+                    </svg>
+                    <span class="aux-title">RECORDING</span>
+                    <button class="btn-mini" id="rec-split-toggle" title="Split recording at transitions">SPLIT</button>
+                    <button class="btn-mini" id="rec-cue-export" title="Export cue sheet">CUE</button>
+                </div>
+                <canvas id="rec-waveform" class="rec-waveform" width="400" height="40"></canvas>
+                <div class="rec-cue-list" id="rec-cue-list"></div>
+            </section>
+
+        </div>
+
+        <!-- ===== LIBRARY + PLAYLISTS + SETLIST ===== -->
+        <div class="bottom-row">
+
+            <!-- Resize handle for library height -->
+            <div class="library-resize-handle" id="library-resize-handle"></div>
+
+            <!-- Playlists sidebar (PRO) -->
+            <section class="playlists-sidebar pro-only" id="playlists-sidebar">
+                <div class="playlists-header">
+                    <h3 class="library-title">PLAYLISTS</h3>
+                    <button class="btn-toolbar btn-sm" id="playlist-create" title="New playlist">+ NEW</button>
+                </div>
+                <div class="playlist-list" id="playlist-list"></div>
+            </section>
+
+            <section class="library" id="library" data-tutorial="library">
+                <div class="library-header">
+                    <div class="library-tabs">
+                        <button class="library-tab active" data-tab="local">LOCAL</button>
+                        <button class="library-tab" data-tab="recent">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                            RECENT
+                        </button>
+                        <button class="library-tab" data-tab="liked">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                            LIKED
+                        </button>
+                        <button class="library-tab" data-tab="playlists">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+                            PLAYLISTS
+                        </button>
+                        <button class="library-tab" data-tab="audius">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 6v12M8 9.5l4-3.5 4 3.5M8 14.5l4 3.5 4-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            AUDIUS
+                        </button>
+                        <button class="library-tab" data-tab="soundcloud">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M11.56 8.87V17h8.76c1.85 0 2.68-1.4 2.68-2.82 0-1.42-.83-2.82-2.68-2.82-.17 0-.5.03-.67.08C19.48 9.49 17.86 8 15.88 8c-.57 0-1.11.14-1.59.38v.03c-.13-.02-.26-.04-.4-.04-1.3 0-2.33 1.09-2.33 2.5zM1 14h2v3H1zm3-1h2v4H4zm3-1h2v5H7z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            SOUNDCLOUD
+                        </button>
+                        <button class="library-tab" data-tab="spotify">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 14.36c-.2.3-.56.38-.86.2-2.36-1.44-5.32-1.76-8.82-.96-.34.08-.66-.14-.74-.46-.08-.34.14-.66.46-.74 3.84-.88 7.12-.5 9.78 1.1.3.18.38.56.18.86zm1.22-2.7c-.24.38-.76.5-1.14.24-2.7-1.66-6.82-2.14-10.02-1.16-.42.12-.86-.12-.98-.54-.12-.42.12-.86.54-.98 3.64-1.1 8.18-.58 11.28 1.32.36.24.48.74.32 1.12zm.12-2.82C14.76 8.82 9.26 8.62 6.26 9.52c-.5.16-1.04-.14-1.18-.64-.14-.5.14-1.04.64-1.18 3.46-1.04 9.2-.84 12.84 1.36.46.28.6.88.32 1.34-.28.46-.88.6-1.34.32z" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
+                            SPOTIFY
+                        </button>
+                    </div>
+                    <div class="library-search-wrapper">
+                        <input type="search" id="library-search" class="library-search" placeholder="Search tracks...">
+                        <button class="library-search-clear hidden" id="library-search-clear" title="Clear search">&times;</button>
+                        <span class="library-search-results hidden" id="library-search-results"></span>
+                    </div>
+                </div>
+                <!-- Bulk actions bar -->
+                <div class="library-bulk-bar hidden" id="library-bulk-bar">
+                    <span class="lib-bulk-count" id="library-bulk-count">0 selected</span>
+                    <button class="btn-load btn-load-a" id="lib-bulk-queue">Add to Queue</button>
+                    <button class="btn-load" id="lib-bulk-playlist" style="color:var(--accent-a)">Add to Playlist</button>
+                    <button class="btn-load" id="lib-bulk-like" style="color:#ff3c5a">Like All</button>
+                    <button class="btn-load" id="lib-bulk-clear" style="color:var(--text-dim)">Clear</button>
+                </div>
+                <div class="library-table-wrapper">
+                    <table class="library-table" id="library-table">
+                        <thead>
+                            <tr>
+                                <th class="lib-th-check"><input type="checkbox" id="lib-select-all" title="Select all"></th>
+                                <th data-sort="title" class="lib-th-sortable">Title <span class="sort-indicator"></span></th>
+                                <th data-sort="artist" class="lib-th-sortable">Artist <span class="sort-indicator"></span></th>
+                                <th data-sort="bpm" class="lib-th-sortable">BPM <span class="sort-indicator"></span></th>
+                                <th data-sort="key" class="lib-th-sortable">Key <span class="sort-indicator"></span></th>
+                                <th data-sort="duration" class="lib-th-sortable">Duration <span class="sort-indicator"></span></th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="library-body">
+                            <tr><td colspan="8" style="text-align:center;color:#555577">Loading library...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="library-pagination" id="library-pagination"></div>
+            </section>
+
+            <section class="setlist-panel pro-only" id="setlist-panel">
+                <div class="setlist-header">
+                    <h3 class="library-title">SETLIST</h3>
+                    <div class="setlist-actions-bar">
+                        <div class="setlist-export-wrap">
+                            <button class="btn-toolbar btn-sm btn-setlist-export" id="setlist-export" title="Export setlist">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                EXPORT SET
+                            </button>
+                            <div class="setlist-export-dropdown hidden" id="setlist-export-dropdown">
+                                <button class="setlist-export-option" id="setlist-export-txt">
+                                    <span class="export-icon">TXT</span>
+                                    <span>Text tracklist</span>
+                                </button>
+                                <button class="setlist-export-option" id="setlist-export-json">
+                                    <span class="export-icon">JSON</span>
+                                    <span>Full metadata</span>
+                                </button>
+                                <button class="setlist-export-option" id="setlist-export-m3u">
+                                    <span class="export-icon">M3U</span>
+                                    <span>Playlist file</span>
+                                </button>
+                                <button class="setlist-export-option" id="setlist-export-csv">
+                                    <span class="export-icon">CSV</span>
+                                    <span>Spreadsheet</span>
+                                </button>
+                                <button class="setlist-export-option" id="setlist-export-png">
+                                    <span class="export-icon">PNG</span>
+                                    <span>Visual card</span>
+                                </button>
+                                <div class="setlist-export-divider"></div>
+                                <button class="setlist-export-option" id="setlist-share">
+                                    <span class="export-icon">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                                    </span>
+                                    <span>Share link</span>
+                                </button>
+                            </div>
+                        </div>
+                        <button class="btn-toolbar btn-sm" id="setlist-copy" title="Copy tracklist to clipboard">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                            COPY
+                        </button>
+                        <button class="btn-toolbar btn-sm" id="setlist-clear" title="Clear queue">CLEAR</button>
+                    </div>
+                </div>
+                <div class="setlist-queue" id="setlist-queue">
+                    <div class="setlist-empty">Queue empty -- add tracks from library</div>
+                </div>
+                <div class="setlist-divider">
+                    <span>HISTORY</span>
+                </div>
+                <div class="setlist-history" id="setlist-history"></div>
+                <div class="setlist-stats-section">
+                    <div class="setlist-divider">
+                        <span>SESSION STATS</span>
+                    </div>
+                    <div class="setlist-stats" id="setlist-stats">
+                        <span class="setlist-stats-empty">Play tracks to see session stats</span>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- ===== FLOW MODE PANEL (overlay) ===== -->
+        <div class="flow-panel hidden" id="flow-panel"></div>
+
+        <!-- ===== TRAVEL MODE INFO BAR ===== -->
+        <div class="travel-info-bar" id="travel-info-bar">
+            <div class="travel-deck-info travel-deck-a-info">
+                <span class="travel-deck-label">A</span>
+                <div class="travel-track-info">
+                    <span class="travel-track-title" id="travel-a-title">--</span>
+                    <div class="travel-track-meta">
+                        <span class="travel-bpm" id="travel-a-bpm">--- BPM</span>
+                        <span class="travel-key" id="travel-a-key">--</span>
+                    </div>
+                </div>
+                <button class="btn-travel-play" id="travel-play-a" title="Play/Pause Deck A">
+                    <svg class="icon-play" width="28" height="28" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                    <svg class="icon-pause hidden" width="28" height="28" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
+                </button>
+            </div>
+
+            <div class="travel-center-controls">
+                <button class="btn-travel-automix" id="travel-automix-btn" title="One-tap Auto Mix">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke-linejoin="round" stroke-linecap="round"/></svg>
+                    AUTO MIX
+                </button>
+                <div class="travel-xfader-wrap">
+                    <span class="travel-xf-label">A</span>
+                    <input type="range" id="travel-crossfader" min="0" max="100" value="50" class="travel-crossfader">
+                    <span class="travel-xf-label">B</span>
+                </div>
+            </div>
+
+            <div class="travel-deck-info travel-deck-b-info">
+                <button class="btn-travel-play" id="travel-play-b" title="Play/Pause Deck B">
+                    <svg class="icon-play" width="28" height="28" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                    <svg class="icon-pause hidden" width="28" height="28" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
+                </button>
+                <div class="travel-track-info">
+                    <span class="travel-track-title" id="travel-b-title">--</span>
+                    <div class="travel-track-meta">
+                        <span class="travel-bpm" id="travel-b-bpm">--- BPM</span>
+                        <span class="travel-key" id="travel-b-key">--</span>
+                    </div>
+                </div>
+                <span class="travel-deck-label travel-deck-label-b">B</span>
+            </div>
+        </div>
+
+        <!-- ===== TRAVEL OFFLINE TRACKS ===== -->
+        <div class="travel-offline-section hidden" id="travel-offline-section">
+            <div class="travel-offline-header">
+                <span>OFFLINE TRACKS</span>
+                <button class="btn-mini" id="travel-offline-close">X</button>
+            </div>
+            <div class="travel-offline-list" id="travel-offline-list">
+                <div class="travel-offline-empty">No tracks saved offline yet.</div>
+            </div>
+        </div>
+
+        <!-- ===== SETTINGS PANEL (overlay) ===== -->
+        <div class="settings-panel hidden" id="settings-panel">
+            <div class="settings-header">
+                <h3 class="library-title">SETTINGS</h3>
+                <button class="btn-toolbar btn-sm" id="settings-close">X</button>
+            </div>
+            <div class="settings-body">
+                <div class="settings-group">
+                    <label class="settings-label">Crossfader Curve</label>
+                    <select class="toolbar-select" id="setting-cf-curve">
+                        <option value="equal-power">Equal Power</option>
+                        <option value="linear">Linear</option>
+                        <option value="cut">Cut</option>
+                    </select>
+                </div>
+                <div class="settings-group">
+                    <label class="settings-label">Key Shift A</label>
+                    <input type="range" id="keyshift-a" min="-6" max="6" value="0" step="1" class="hp-slider">
+                    <span class="toolbar-text mono" id="keyshift-a-display">0</span>
+                </div>
+                <div class="settings-group">
+                    <label class="settings-label">Key Shift B</label>
+                    <input type="range" id="keyshift-b" min="-6" max="6" value="0" step="1" class="hp-slider">
+                    <span class="toolbar-text mono" id="keyshift-b-display">0</span>
+                </div>
+                <div class="settings-group">
+                    <label class="settings-label">MIDI Profiles</label>
+                    <div id="midi-profiles-list" class="midi-profiles-list"></div>
+                    <button class="btn-toolbar btn-sm" id="midi-save-profile">SAVE PROFILE</button>
+                </div>
+                <div class="settings-group">
+                    <label class="settings-label">Data</label>
+                    <div class="settings-actions">
+                        <button class="btn-toolbar btn-sm" id="settings-export">EXPORT ALL</button>
+                        <button class="btn-toolbar btn-sm" id="settings-import">IMPORT</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ===== TUTORIAL OVERLAY ===== -->
+    <div class="tutorial-overlay" id="tutorial-overlay" style="display:none;">
+        <div class="tutorial-backdrop" id="tutorial-backdrop"></div>
+        <div class="tutorial-spotlight" id="tutorial-spotlight"></div>
+        <div class="tutorial-tooltip" id="tutorial-tooltip">
+            <div class="tutorial-step-indicator" id="tutorial-step-indicator"></div>
+            <h3 class="tutorial-title" id="tutorial-title"></h3>
+            <p class="tutorial-desc" id="tutorial-desc"></p>
+            <div class="tutorial-actions">
+                <button class="tutorial-btn tutorial-btn-skip" id="tutorial-skip">Skip</button>
+                <button class="tutorial-btn tutorial-btn-next" id="tutorial-next">Next</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/wavesurfer.js@7/dist/wavesurfer.min.js"></script>
+    <script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/timeline.min.js"></script>
+    <script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/regions.min.js"></script>
+    <script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/minimap.min.js"></script>
+    <script>
+        if (typeof WaveSurfer !== 'undefined') {
+            console.log('WaveSurfer loaded:', !!WaveSurfer, 'Minimap:', !!WaveSurfer.Minimap, 'Timeline:', !!WaveSurfer.Timeline, 'Regions:', !!WaveSurfer.Regions);
+        }
+    </script>
+    <script type="module" src="player.js"></script>
+    <script type="module" src="dj-autopilot.js"></script><!-- HUNGREE Goat, see NOTICE.md -->
+    <!-- Fallback: if module fails, at least make tab clicks work -->
+    <script>
+    window.addEventListener('DOMContentLoaded', function() {
+        // Wait for module to set up — if it hasn't after 3s, wire tabs manually
+        setTimeout(function() {
+            var body = document.getElementById('library-body');
+            if (body && body.textContent.indexOf('Loading library') !== -1) {
+                console.warn('[FALLBACK] Module may not have loaded. Wiring tabs manually.');
+                var tabs = document.querySelectorAll('.library-tab');
+                tabs.forEach(function(tab) {
+                    tab.style.pointerEvents = 'auto';
+                    tab.style.cursor = 'pointer';
+                });
+                // Show a message
+                body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#ff6b6b;padding:20px">App is loading... If this persists, try clearing cache (Ctrl+Shift+R) or open DevTools (F12) to check for errors.</td></tr>';
+            }
+        }, 3000);
+    });
+    </script>
+    <script>
+        // Add ?reset to URL to force-unregister service worker and clear caches
+        if (window.location.search.includes('reset')) {
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.getRegistrations().then(regs => {
+                    regs.forEach(r => r.unregister());
+                    caches.keys().then(k => k.forEach(n => caches.delete(n)));
+                    window.location.href = window.location.pathname;
+                });
+            }
+        }
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js').then((reg) => {
+                // Check for updates periodically
+                setInterval(() => reg.update(), 60 * 60 * 1000); // hourly
+
+                reg.addEventListener('updatefound', () => {
+                    const newWorker = reg.installing;
+                    newWorker.addEventListener('statechange', () => {
+                        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                            // New version available — show update banner
+                            const banner = document.createElement('div');
+                            banner.className = 'sw-update-banner';
+                            banner.innerHTML = '<span>New version available</span><button id="sw-update-btn">UPDATE</button><button id="sw-dismiss-btn">LATER</button>';
+                            document.body.appendChild(banner);
+                            requestAnimationFrame(() => banner.classList.add('show'));
+
+                            document.getElementById('sw-update-btn')?.addEventListener('click', () => {
+                                newWorker.postMessage({ type: 'SKIP_WAITING' });
+                                banner.remove();
+                            });
+                            document.getElementById('sw-dismiss-btn')?.addEventListener('click', () => {
+                                banner.classList.remove('show');
+                                setTimeout(() => banner.remove(), 400);
+                            });
+                        }
+                    });
+                });
+
+                // Listen for SW messages
+                navigator.serviceWorker.addEventListener('message', (e) => {
+                    if (e.data.type === 'SW_UPDATED') {
+                        window.location.reload();
+                    }
+                });
+            }).catch(() => {});
+
+            // Handle URL shortcuts
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('mode') === 'flow') {
+                document.addEventListener('DOMContentLoaded', () => {
+                    setTimeout(() => document.getElementById('flow-toggle-btn')?.click(), 1500);
+                });
+            }
+            if (params.get('action') === 'record') {
+                document.addEventListener('DOMContentLoaded', () => {
+                    setTimeout(() => document.getElementById('rec-btn')?.click(), 2000);
+                });
+            }
+        }
+    </script>
+
+    <!-- Pro Mode + Tutorial Controller -->
+    <script>
+    (function() {
+        'use strict';
+
+        // ============ PRO MODE ============
+        const PRO_KEY = 'aurdour-pro-mode';
+        const proToggle = document.getElementById('pro-mode-toggle');
+        const proIconOff = proToggle?.querySelector('.pro-icon-off');
+        const proIconOn = proToggle?.querySelector('.pro-icon-on');
+
+        function setProMode(enabled, animate) {
+            if (enabled) {
+                document.body.classList.add('pro-mode');
+                if (animate) document.body.classList.add('pro-animating');
+            } else {
+                document.body.classList.remove('pro-mode');
+                if (animate) document.body.classList.add('pro-animating');
+            }
+            proToggle?.classList.toggle('active', enabled);
+            if (proIconOff) proIconOff.classList.toggle('hidden', enabled);
+            if (proIconOn) proIconOn.classList.toggle('hidden', !enabled);
+            localStorage.setItem(PRO_KEY, enabled ? '1' : '0');
+
+            if (animate) {
+                setTimeout(() => document.body.classList.remove('pro-animating'), 500);
+            }
+        }
+
+        // Restore saved state
+        const savedPro = localStorage.getItem(PRO_KEY);
+        if (savedPro === '1') setProMode(true, false);
+
+        proToggle?.addEventListener('click', () => {
+            const isOn = document.body.classList.contains('pro-mode');
+            setProMode(!isOn, true);
+        });
+
+        // ============ TUTORIAL ============
+        const TUTORIAL_KEY = 'aurdour-tutorial-done';
+
+        const tutorial = {
+            overlay: document.getElementById('tutorial-overlay'),
+            backdrop: document.getElementById('tutorial-backdrop'),
+            spotlight: document.getElementById('tutorial-spotlight'),
+            tooltip: document.getElementById('tutorial-tooltip'),
+            title: document.getElementById('tutorial-title'),
+            desc: document.getElementById('tutorial-desc'),
+            indicator: document.getElementById('tutorial-step-indicator'),
+            nextBtn: document.getElementById('tutorial-next'),
+            skipBtn: document.getElementById('tutorial-skip'),
+            restartBtn: document.getElementById('tutorial-restart'),
+            step: 0,
+
+            steps: [
+                {
+                    target: null,
+                    title: 'Welcome to AURDOUR DJ',
+                    desc: 'A powerful DJ platform made simple. Let\'s learn the basics — this takes about 30 seconds.',
+                },
+                {
+                    target: '#deck-a .deck-header',
+                    title: 'Meet Deck A',
+                    desc: 'Each deck shows the track name, BPM, and key. You have two decks — A on the left, B on the right — to mix between.',
+                },
+                {
+                    target: '[data-tutorial="transport"]',
+                    title: 'Play, Cue & Sync',
+                    desc: 'Hit the big play button to start the music. CUE sets a return point. SYNC matches tempo to the other deck.',
+                },
+                {
+                    target: '[data-tutorial="crossfader"]',
+                    title: 'The Crossfader',
+                    desc: 'Slide left to hear Deck A, right for Deck B, or anywhere in between to blend them together.',
+                },
+                {
+                    target: '[data-tutorial="library"]',
+                    title: 'Your Music Library',
+                    desc: 'Browse your tracks here. Switch to the AUDIUS tab to stream millions of free tracks. Click A or B to load onto a deck.',
+                },
+                {
+                    target: '[data-tutorial="flow"]',
+                    title: 'Flow Mode — Auto DJ',
+                    desc: 'Not sure where to start? Flow Mode picks tracks and mixes them automatically. Just sit back and enjoy.',
+                },
+                {
+                    target: '[data-tutorial="pro"]',
+                    title: 'Unlock Pro Controls',
+                    desc: 'When you\'re ready, toggle Pro Mode to access EQ, effects, loops, hot cues, jog wheels, stem separation, and more.',
+                },
+            ],
+
+            show() {
+                this.step = 0;
+                this.overlay.style.display = '';
+                document.body.style.overflow = 'hidden';
+                this.render();
+            },
+
+            hide() {
+                this.overlay.style.display = 'none';
+                document.body.style.overflow = '';
+                localStorage.setItem(TUTORIAL_KEY, '1');
+            },
+
+            next() {
+                this.step++;
+                if (this.step >= this.steps.length) {
+                    this.hide();
+                } else {
+                    this.render();
+                }
+            },
+
+            render() {
+                const s = this.steps[this.step];
+                this.title.textContent = s.title;
+                this.desc.textContent = s.desc;
+                this.nextBtn.textContent = this.step === this.steps.length - 1 ? 'Get Started' : 'Next';
+
+                // Step dots
+                this.indicator.innerHTML = this.steps.map((_, i) =>
+                    '<span class="tutorial-dot' + (i === this.step ? ' active' : '') + '"></span>'
+                ).join('');
+
+                if (!s.target) {
+                    // Welcome step — centered card, full backdrop, no spotlight
+                    this.backdrop.style.display = '';
+                    this.spotlight.style.display = 'none';
+                    this.tooltip.className = 'tutorial-tooltip tutorial-center';
+                    this.tooltip.removeAttribute('style');
+                } else {
+                    const el = document.querySelector(s.target);
+                    if (!el) { this.next(); return; }
+
+                    const rect = el.getBoundingClientRect();
+                    const pad = 14;
+
+                    // Hide backdrop, spotlight box-shadow creates the dimming
+                    this.backdrop.style.display = 'none';
+                    this.spotlight.style.display = '';
+                    this.spotlight.style.top = (rect.top - pad) + 'px';
+                    this.spotlight.style.left = (rect.left - pad) + 'px';
+                    this.spotlight.style.width = (rect.width + pad * 2) + 'px';
+                    this.spotlight.style.height = (rect.height + pad * 2) + 'px';
+
+                    // Smart tooltip positioning — auto-detect best placement
+                    this.tooltip.className = 'tutorial-tooltip';
+                    this.tooltip.removeAttribute('style');
+
+                    const tooltipW = 360;
+                    const tooltipH = 180; // approximate
+                    const gap = 16;
+                    const vw = window.innerWidth;
+                    const vh = window.innerHeight;
+
+                    // Horizontal: try to align left edge with element, clamp to viewport
+                    let tx = Math.max(20, Math.min(rect.left, vw - tooltipW - 20));
+
+                    // Vertical: prefer below, then above, then right side
+                    const spaceBelow = vh - rect.bottom - gap;
+                    const spaceAbove = rect.top - gap;
+                    const spaceRight = vw - rect.right - gap;
+
+                    this.tooltip.style.position = 'fixed';
+                    this.tooltip.style.maxWidth = tooltipW + 'px';
+
+                    if (spaceBelow >= tooltipH) {
+                        // Place below
+                        this.tooltip.style.top = (rect.bottom + gap) + 'px';
+                        this.tooltip.style.left = tx + 'px';
+                    } else if (spaceAbove >= tooltipH) {
+                        // Place above
+                        this.tooltip.style.bottom = (vh - rect.top + gap) + 'px';
+                        this.tooltip.style.left = tx + 'px';
+                    } else if (spaceRight >= tooltipW + 40) {
+                        // Place to the right
+                        this.tooltip.style.top = Math.max(20, rect.top) + 'px';
+                        this.tooltip.style.left = (rect.right + gap) + 'px';
+                    } else {
+                        // Fallback: overlay centered in viewport
+                        this.tooltip.style.top = '50%';
+                        this.tooltip.style.left = '50%';
+                        this.tooltip.style.transform = 'translate(-50%, -50%)';
+                    }
+                }
+            }
+        };
+
+        tutorial.nextBtn?.addEventListener('click', () => tutorial.next());
+        tutorial.skipBtn?.addEventListener('click', () => tutorial.hide());
+        tutorial.restartBtn?.addEventListener('click', () => {
+            localStorage.removeItem(TUTORIAL_KEY);
+            tutorial.show();
+        });
+
+        // Auto-show on first visit (delay lets the page render)
+        if (!localStorage.getItem(TUTORIAL_KEY)) {
+            setTimeout(() => tutorial.show(), 1000);
+        }
+
+        // ============ DECK HINT HIDING ============
+        // Hide empty state hints when tracks are loaded (observe title text changes)
+        function watchDeckHint(deckId) {
+            const titleEl = document.getElementById(`deck-${deckId}-title`);
+            const hintEl = document.getElementById(`deck-${deckId}-hint`);
+            if (!titleEl || !hintEl) return;
+
+            const check = () => {
+                const hasTrack = titleEl.textContent && titleEl.textContent !== 'No Track Loaded';
+                hintEl.classList.toggle('hint-hidden', hasTrack);
+            };
+
+            check();
+            const obs = new MutationObserver(check);
+            obs.observe(titleEl, { childList: true, characterData: true, subtree: true });
+        }
+        watchDeckHint('a');
+        watchDeckHint('b');
+        watchDeckHint('c');
+        watchDeckHint('d');
+    })();
+    </script>
+
+    <!-- ===== STREAMING CHAT PANEL ===== -->
+    <div class="stream-panel hidden" id="stream-panel">
+        <div class="stream-panel-header">
+            <span class="stream-panel-title">STREAM CHAT</span>
+            <button class="btn-toolbar btn-sm" id="stream-panel-close">X</button>
+        </div>
+        <div class="stream-connections">
+            <div class="stream-connect-group">
+                <div class="stream-connect-label"><span class="platform-dot twitch-dot"></span>TWITCH <span class="connect-status" id="twitch-status">Offline</span></div>
+                <div class="stream-connect-row">
+                    <input type="text" id="twitch-channel-input" class="stream-input" placeholder="channel name" spellcheck="false">
+                    <button class="btn-stream-connect" id="twitch-connect-btn">JOIN</button>
+                </div>
+            </div>
+            <div class="stream-connect-group">
+                <div class="stream-connect-label"><span class="platform-dot yt-dot"></span>YOUTUBE <span class="connect-status" id="yt-status">Offline</span></div>
+                <div class="stream-connect-row">
+                    <input type="text" id="yt-video-input" class="stream-input" placeholder="video ID" spellcheck="false">
+                    <input type="text" id="yt-api-key-input" class="stream-input" placeholder="API key" spellcheck="false">
+                    <button class="btn-stream-connect" id="yt-connect-btn">JOIN</button>
+                </div>
+            </div>
+        </div>
+        <div class="chat-messages" id="chat-messages"></div>
+        <div class="stream-requests-section hidden" id="stream-requests-section">
+            <div class="stream-requests-header"><span>SONG REQUESTS</span></div>
+            <div class="chat-requests" id="requests-list"></div>
+        </div>
+    </div>
+
+    <!-- ===== AI SUGGESTIONS PANEL ===== -->
+    <div class="suggest-panel hidden" id="suggest-panel">
+        <div class="suggest-header">SMART SUGGESTIONS</div>
+        <div class="suggest-list" id="suggest-list"></div>
+    </div>
+
+    <!-- ===== PLUGINS PANEL ===== -->
+    <div class="plugins-panel hidden" id="plugins-panel">
+        <div class="plugins-header">PLUGINS</div>
+        <div class="plugins-builtins">
+            <button class="btn-toolbar btn-sm" id="plugin-toggle-autoGain">Auto-Gain</button>
+            <button class="btn-toolbar btn-sm" id="plugin-toggle-trackStats">Track Stats</button>
+            <button class="btn-toolbar btn-sm" id="plugin-toggle-transitionLog">Transition Log</button>
+        </div>
+        <div id="plugins-list"></div>
+        <button class="btn-toolbar btn-sm" id="plugin-load-btn">Load Plugin (.js)</button>
+        <input type="file" id="plugin-load-file" accept=".js" class="hidden">
+        <div id="plugin-panels"></div>
+    </div>
+
+    <!-- ===== CLOUD SYNC ===== -->
+    <div style="display:none">
+        <button id="sync-export-btn">Export</button>
+        <button id="sync-import-btn">Import</button>
+        <input type="file" id="sync-import-file" accept=".json">
+        <button id="sync-qr-btn">QR Sync</button>
+        <div id="sync-qr-container" class="hidden"></div>
+    </div>
+
+    <!-- ===== AUDIO OUTPUT SELECTOR ===== -->
+    <div class="audio-output-selector hidden" id="audio-output-panel">
+        <div class="output-header">AUDIO OUTPUT</div>
+        <select id="audio-output-select" class="toolbar-select" style="width:100%"></select>
+        <button class="btn-toolbar btn-sm" id="audio-output-refresh">Refresh Devices</button>
+    </div>
+
+    <!-- ===== TOAST CONTAINER ===== -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- ===== RECENTLY LOADED TRACKS PANEL ===== -->
+    <div class="recent-tracks-panel hidden" id="recent-tracks-panel">
+        <div class="recent-tracks-header">
+            <span class="recent-tracks-title">RECENT TRACKS</span>
+            <button class="btn-mini recent-tracks-close" id="recent-tracks-close" title="Close">&times;</button>
+        </div>
+        <div class="recent-tracks-list" id="recent-tracks-list"></div>
+    </div>
+
+    <!-- ===== KEYBOARD SHORTCUTS OVERLAY ===== -->
+    <div class="shortcuts-overlay hidden" id="shortcuts-overlay">
+        <div class="shortcuts-backdrop" id="shortcuts-backdrop"></div>
+        <div class="shortcuts-panel">
+            <div class="shortcuts-header">
+                <span class="shortcuts-title">KEYBOARD SHORTCUTS</span>
+                <button class="btn-toolbar btn-sm shortcuts-close" id="shortcuts-close">ESC</button>
+            </div>
+            <div class="shortcuts-body">
+
+                <div class="shortcuts-category">
+                    <h3 class="shortcuts-cat-title">Transport</h3>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>Space</kbd></span><span class="shortcut-desc">Play / Pause active deck (Shift = Deck B)</span></div>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>Q</kbd></span><span class="shortcut-desc">Play / Pause Deck A</span></div>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>W</kbd></span><span class="shortcut-desc">Play / Pause Deck B</span></div>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>A</kbd></span><span class="shortcut-desc">Cue Deck A</span></div>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>S</kbd></span><span class="shortcut-desc">Cue Deck B</span></div>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>Z</kbd></span><span class="shortcut-desc">Sync Deck A to Deck B's BPM</span></div>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>X</kbd></span><span class="shortcut-desc">Sync Deck B to Deck A's BPM</span></div>
+                </div>
+
+                <div class="shortcuts-category">
+                    <h3 class="shortcuts-cat-title">Mixing</h3>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>&larr;</kbd> / <kbd>&rarr;</kbd></span><span class="shortcut-desc">Move crossfader left / right</span></div>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>&uarr;</kbd> / <kbd>&darr;</kbd></span><span class="shortcut-desc">Volume up / down (Shift = Deck B)</span></div>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>=</kbd> / <kbd>-</kbd></span><span class="shortcut-desc">Tempo up / down on active deck</span></div>
+                </div>
+
+                <div class="shortcuts-category">
+                    <h3 class="shortcuts-cat-title">Hot Cues &amp; Loops</h3>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>1</kbd>-<kbd>8</kbd></span><span class="shortcut-desc">Hot cue pads Deck A (Shift = Deck B)</span></div>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>Ctrl</kbd>+<kbd>1</kbd>-<kbd>8</kbd></span><span class="shortcut-desc">Hot cue pads Deck B</span></div>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>L</kbd></span><span class="shortcut-desc">Toggle loop Deck A (Shift = Deck B)</span></div>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>[</kbd> / <kbd>]</kbd></span><span class="shortcut-desc">Set loop in / out (Shift = Deck B)</span></div>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>G</kbd></span><span class="shortcut-desc">Toggle beat grid Deck A (Shift = Deck B)</span></div>
+                </div>
+
+                <div class="shortcuts-category">
+                    <h3 class="shortcuts-cat-title">Effects &amp; Recording</h3>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>R</kbd></span><span class="shortcut-desc">Toggle recording</span></div>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>V</kbd></span><span class="shortcut-desc">Toggle visualizer</span></div>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>M</kbd></span><span class="shortcut-desc">Toggle mic mute</span></div>
+                </div>
+
+                <div class="shortcuts-category">
+                    <h3 class="shortcuts-cat-title">Navigation</h3>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>F</kbd></span><span class="shortcut-desc">Toggle Flow Mode (Auto-DJ)</span></div>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>?</kbd> or <kbd>H</kbd></span><span class="shortcut-desc">Toggle this shortcuts panel</span></div>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>Escape</kbd></span><span class="shortcut-desc">Close any open panel</span></div>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>T</kbd></span><span class="shortcut-desc">BPM tap</span></div>
+                    <div class="shortcut-row"><span class="shortcut-keys"><kbd>Ctrl</kbd>+<kbd>Z</kbd></span><span class="shortcut-desc">Undo (Shift = Redo)</span></div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</body>
+</html>

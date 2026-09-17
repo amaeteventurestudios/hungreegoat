@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AURDOUR DJ - Live</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0d0d1a;
+            color: #e0e0e0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .header {
+            width: 100%;
+            padding: 20px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #222240;
+        }
+
+        .logo {
+            font-size: 1.25rem;
+            font-weight: 800;
+            letter-spacing: 0.1em;
+        }
+
+        .logo span { color: #00d4ff; }
+
+        .live-indicator {
+            display: none;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 16px;
+            background: rgba(255, 0, 0, 0.1);
+            border: 1px solid rgba(255, 0, 0, 0.3);
+            border-radius: 20px;
+        }
+
+        .live-indicator.visible { display: flex; }
+
+        .live-dot {
+            width: 10px; height: 10px;
+            background: #ff0000;
+            border-radius: 50%;
+            animation: pulse-dot 1.5s ease-in-out infinite;
+        }
+
+        .live-text {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #ff4444;
+            letter-spacing: 0.15em;
+        }
+
+        .viewer-count {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: #8888aa;
+        }
+
+        /* Now Playing */
+        .now-playing-section {
+            width: 100%;
+            max-width: 600px;
+            padding: 40px 24px;
+            text-align: center;
+        }
+
+        .np-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.65rem;
+            font-weight: 700;
+            letter-spacing: 0.2em;
+            color: #8b5cf6;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+        }
+
+        .np-title {
+            font-size: 2rem;
+            font-weight: 800;
+            margin-bottom: 4px;
+        }
+
+        .np-artist {
+            font-size: 1.1rem;
+            color: #8888aa;
+            margin-bottom: 24px;
+        }
+
+        .np-meta {
+            display: flex;
+            justify-content: center;
+            gap: 24px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: #555577;
+        }
+
+        .np-meta span { display: flex; align-items: center; gap: 4px; }
+
+        /* Decks display */
+        .decks-display {
+            display: flex;
+            gap: 16px;
+            width: 100%;
+            max-width: 600px;
+            padding: 0 24px;
+        }
+
+        .deck-card {
+            flex: 1;
+            background: #12121f;
+            border: 1px solid #222240;
+            border-radius: 12px;
+            padding: 16px;
+            opacity: 0.5;
+            transition: all 0.3s;
+        }
+
+        .deck-card.active { opacity: 1; }
+        .deck-card.deck-a { border-color: rgba(0, 212, 255, 0.2); }
+        .deck-card.deck-b { border-color: rgba(255, 107, 53, 0.2); }
+        .deck-card.deck-a.active { border-color: rgba(0, 212, 255, 0.5); }
+        .deck-card.deck-b.active { border-color: rgba(255, 107, 53, 0.5); }
+
+        .deck-card-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.6rem;
+            font-weight: 700;
+            letter-spacing: 0.15em;
+            margin-bottom: 8px;
+        }
+
+        .deck-a .deck-card-label { color: #00d4ff; }
+        .deck-b .deck-card-label { color: #ff6b35; }
+
+        .deck-card-title {
+            font-weight: 600;
+            font-size: 0.95rem;
+            margin-bottom: 2px;
+        }
+
+        .deck-card-artist {
+            font-size: 0.8rem;
+            color: #8888aa;
+        }
+
+        /* Interaction section */
+        .interaction {
+            width: 100%;
+            max-width: 600px;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            flex: 1;
+        }
+
+        /* Reactions */
+        .reactions-bar {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            padding: 12px;
+        }
+
+        .reaction-btn {
+            font-size: 1.5rem;
+            background: #1a1a2e;
+            border: 1px solid #222240;
+            border-radius: 12px;
+            padding: 10px 14px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .reaction-btn:hover {
+            background: #2a2a3e;
+            transform: scale(1.1);
+        }
+
+        .reaction-btn:active {
+            transform: scale(0.95);
+        }
+
+        /* Song request */
+        .request-section {
+            display: flex;
+            gap: 8px;
+        }
+
+        .request-input {
+            flex: 1;
+            background: #1a1a2e;
+            border: 1px solid #222240;
+            border-radius: 8px;
+            padding: 10px 14px;
+            color: #e0e0e0;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.85rem;
+            outline: none;
+        }
+
+        .request-input:focus {
+            border-color: #4444aa;
+        }
+
+        .request-input::placeholder { color: #555577; }
+
+        .request-btn {
+            background: #8b5cf6;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 10px 20px;
+            font-weight: 600;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        .request-btn:hover { background: #7c3aed; }
+
+        /* Chat */
+        .chat-section {
+            flex: 1;
+            background: #12121f;
+            border: 1px solid #222240;
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            min-height: 200px;
+        }
+
+        .chat-header-bar {
+            padding: 10px 14px;
+            border-bottom: 1px solid #222240;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.65rem;
+            font-weight: 700;
+            color: #555577;
+            letter-spacing: 0.1em;
+        }
+
+        .chat-messages-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px 14px;
+        }
+
+        .chat-msg-item {
+            padding: 6px 0;
+            font-size: 0.85rem;
+            border-bottom: 1px solid rgba(34, 34, 64, 0.3);
+        }
+
+        .chat-username {
+            font-weight: 600;
+            color: #00d4ff;
+        }
+
+        .chat-input-bar {
+            display: flex;
+            gap: 8px;
+            padding: 8px 14px;
+            border-top: 1px solid #222240;
+        }
+
+        .chat-input {
+            flex: 1;
+            background: #1a1a2e;
+            border: 1px solid #222240;
+            border-radius: 6px;
+            padding: 8px 12px;
+            color: #e0e0e0;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.8rem;
+            outline: none;
+        }
+
+        .chat-input:focus { border-color: #4444aa; }
+        .chat-input::placeholder { color: #555577; }
+
+        .chat-send {
+            background: #1a1a2e;
+            color: #8888aa;
+            border: 1px solid #222240;
+            border-radius: 6px;
+            padding: 8px 14px;
+            font-size: 0.8rem;
+            cursor: pointer;
+        }
+
+        .chat-send:hover { border-color: #4444aa; color: #e0e0e0; }
+
+        /* Floating reactions */
+        .reactions-area {
+            position: fixed;
+            bottom: 0;
+            right: 20px;
+            width: 200px;
+            height: 100vh;
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        .reaction-float {
+            position: absolute;
+            bottom: 10%;
+            font-size: 2rem;
+            animation: float-up 2.5s ease-out forwards;
+            pointer-events: none;
+        }
+
+        @keyframes float-up {
+            0% { opacity: 1; transform: translateY(0) scale(1); }
+            100% { opacity: 0; transform: translateY(-300px) scale(0.5); }
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="logo">AURDOUR <span>DJ</span></div>
+        <div class="live-indicator" id="live-indicator">
+            <div class="live-dot"></div>
+            <span class="live-text">LIVE</span>
+        </div>
+        <span class="viewer-count" id="viewer-count"></span>
+    </header>
+
+    <section class="now-playing-section">
+        <div class="np-label">NOW PLAYING</div>
+        <div class="np-title" id="np-title">Waiting for DJ...</div>
+        <div class="np-artist" id="np-artist"></div>
+        <div class="np-meta">
+            <span id="np-bpm"></span>
+            <span id="np-key"></span>
+        </div>
+    </section>
+
+    <div class="decks-display">
+        <div class="deck-card deck-a" id="card-a">
+            <div class="deck-card-label">DECK A</div>
+            <div class="deck-card-title" id="card-a-title">-</div>
+            <div class="deck-card-artist" id="card-a-artist">-</div>
+        </div>
+        <div class="deck-card deck-b" id="card-b">
+            <div class="deck-card-label">DECK B</div>
+            <div class="deck-card-title" id="card-b-title">-</div>
+            <div class="deck-card-artist" id="card-b-artist">-</div>
+        </div>
+    </div>
+
+    <section class="interaction">
+        <div class="reactions-bar">
+            <button class="reaction-btn" data-emoji="🔥">🔥</button>
+            <button class="reaction-btn" data-emoji="🎵">🎵</button>
+            <button class="reaction-btn" data-emoji="💜">💜</button>
+            <button class="reaction-btn" data-emoji="🙌">🙌</button>
+            <button class="reaction-btn" data-emoji="😍">😍</button>
+            <button class="reaction-btn" data-emoji="🎉">🎉</button>
+            <button class="reaction-btn" data-emoji="⬆️">⬆️</button>
+        </div>
+
+        <div class="request-section">
+            <input type="text" class="request-input" id="request-input" placeholder="Request a song...">
+            <button class="request-btn" id="request-btn">Request</button>
+        </div>
+
+        <div class="chat-section">
+            <div class="chat-header-bar">CHAT</div>
+            <div class="chat-messages-list" id="chat-list"></div>
+            <div class="chat-input-bar">
+                <input type="text" class="chat-input" id="chat-input" placeholder="Say something...">
+                <button class="chat-send" id="chat-send">Send</button>
+            </div>
+        </div>
+    </section>
+
+    <div class="reactions-area" id="reactions-area"></div>
+
+    <script>
+        const channel = new BroadcastChannel('aurdour-dj');
+        let username = 'Listener-' + Math.floor(Math.random() * 9000 + 1000);
+
+        // Receive updates from DJ
+        channel.onmessage = (e) => {
+            const data = e.data;
+            switch (data.type) {
+                case 'track_update':
+                    updateTrackCard(data.deck, data.metadata);
+                    break;
+                case 'now_playing':
+                    document.getElementById('np-title').textContent = data.title || '-';
+                    document.getElementById('np-artist').textContent = data.artist || '';
+                    break;
+                case 'live_status':
+                    document.getElementById('live-indicator').classList.toggle('visible', data.isLive);
+                    break;
+                case 'play_state':
+                    updatePlayState(data.deck, data.isPlaying);
+                    break;
+                case 'reaction':
+                    showFloatingReaction(data.emoji);
+                    break;
+                case 'crossfader_position':
+                    // Crossfader position available for audience page use
+                    break;
+                case 'transition_state':
+                    // Transition state available for audience page use
+                    break;
+            }
+        };
+
+        function updateTrackCard(deck, meta) {
+            if (!meta) return;
+            const id = deck.toLowerCase();
+            const card = document.getElementById(`card-${id}`);
+            document.getElementById(`card-${id}-title`).textContent = meta.title || '-';
+            document.getElementById(`card-${id}-artist`).textContent = meta.artist || '-';
+
+            // Also update main now-playing if this is the active deck
+            if (card && card.classList.contains('active')) {
+                document.getElementById('np-title').textContent = meta.title || '-';
+                document.getElementById('np-artist').textContent = meta.artist || '';
+            }
+        }
+
+        function updatePlayState(deck, isPlaying) {
+            const id = deck.toLowerCase();
+            const card = document.getElementById(`card-${id}`);
+            if (card) card.classList.toggle('active', isPlaying);
+        }
+
+        // Reactions
+        document.querySelectorAll('.reaction-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const emoji = btn.dataset.emoji;
+                channel.postMessage({ type: 'reaction', emoji });
+                showFloatingReaction(emoji);
+            });
+        });
+
+        function showFloatingReaction(emoji) {
+            const area = document.getElementById('reactions-area');
+            const el = document.createElement('div');
+            el.className = 'reaction-float';
+            el.textContent = emoji;
+            el.style.left = `${20 + Math.random() * 60}%`;
+            area.appendChild(el);
+            setTimeout(() => el.remove(), 2500);
+        }
+
+        // Song requests
+        document.getElementById('request-btn').addEventListener('click', () => {
+            const input = document.getElementById('request-input');
+            const track = input.value.trim();
+            if (!track) return;
+            channel.postMessage({ type: 'song_request', track, user: username });
+            input.value = '';
+        });
+
+        document.getElementById('request-input').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') document.getElementById('request-btn').click();
+        });
+
+        // Chat
+        document.getElementById('chat-send').addEventListener('click', () => {
+            const input = document.getElementById('chat-input');
+            const message = input.value.trim();
+            if (!message) return;
+            channel.postMessage({ type: 'chat', user: username, message });
+            addChatMessage(username, message);
+            input.value = '';
+        });
+
+        document.getElementById('chat-input').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') document.getElementById('chat-send').click();
+        });
+
+        function addChatMessage(user, message) {
+            const list = document.getElementById('chat-list');
+            const el = document.createElement('div');
+            el.className = 'chat-msg-item';
+            const userSpan = document.createElement('span');
+            userSpan.className = 'chat-username';
+            userSpan.textContent = user;
+            el.appendChild(userSpan);
+            el.appendChild(document.createTextNode(' ' + message));
+            list.appendChild(el);
+            list.scrollTop = list.scrollHeight;
+
+            while (list.children.length > 100) {
+                list.firstChild.remove();
+            }
+        }
+
+        // Announce presence
+        channel.postMessage({ type: 'viewer_join', user: username });
+    </script>
+</body>
+</html>

@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AURDOUR DJ - OBS Overlay</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        /* ================================================================
+           OBS OVERLAY — Transparent background, self-contained styles
+           Usage: OBS Browser Source → 1920x200 → Transparent checked
+           URL params: ?theme=minimal|full|neon|classic (default: full)
+           ================================================================ */
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: transparent;
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+            width: 1920px;
+            height: 200px;
+        }
+
+        /* ================================================================
+           BASE LAYOUT
+           ================================================================ */
+
+        .obs-overlay {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 200px;
+            display: flex;
+            align-items: center;
+            padding: 0 32px;
+            gap: 24px;
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.6s ease, transform 0.6s ease;
+        }
+
+        .obs-overlay.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* ================================================================
+           ALBUM ARTWORK
+           ================================================================ */
+
+        .artwork-container {
+            width: 120px;
+            height: 120px;
+            border-radius: 12px;
+            overflow: hidden;
+            flex-shrink: 0;
+            position: relative;
+            background: rgba(20, 20, 40, 0.6);
+            border: 1px solid rgba(139, 92, 246, 0.2);
+        }
+
+        .artwork-container img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+
+        .artwork-container img.loaded {
+            opacity: 1;
+        }
+
+        .artwork-placeholder {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 2rem;
+            color: rgba(139, 92, 246, 0.4);
+        }
+
+        .artwork-spin {
+            animation: spin-disc 4s linear infinite;
+        }
+
+        @keyframes spin-disc {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        /* ================================================================
+           TRACK INFO
+           ================================================================ */
+
+        .track-info {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .track-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.6rem;
+            font-weight: 700;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            color: #8b5cf6;
+        }
+
+        .track-title {
+            font-size: 1.8rem;
+            font-weight: 800;
+            color: #ffffff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            line-height: 1.1;
+        }
+
+        .track-title.changing {
+            animation: text-swap 0.5s ease;
+        }
+
+        .track-artist {
+            font-size: 1rem;
+            color: #9494b8;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .track-artist.changing {
+            animation: text-swap 0.5s ease;
+        }
+
+        .track-meta {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+        }
+
+        .meta-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            color: #555577;
+        }
+
+        .meta-label {
+            color: #444466;
+            font-size: 0.6rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+        }
+
+        .meta-value {
+            color: #aaaacc;
+            font-weight: 600;
+        }
+
+        @keyframes text-swap {
+            0% { opacity: 0; transform: translateY(8px); }
+            100% { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ================================================================
+           DECK INDICATOR & CROSSFADER
+           ================================================================ */
+
+        .deck-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            flex-shrink: 0;
+            width: 180px;
+        }
+
+        .deck-labels {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 800;
+            font-size: 0.85rem;
+        }
+
+        .deck-label-a {
+            color: #00d4ff;
+            opacity: 0.5;
+            transition: opacity 0.3s, text-shadow 0.3s;
+        }
+
+        .deck-label-a.active {
+            opacity: 1;
+            text-shadow: 0 0 8px rgba(0, 212, 255, 0.5);
+        }
+
+        .deck-arrow {
+            color: #444466;
+            font-size: 0.7rem;
+        }
+
+        .deck-label-b {
+            color: #ff6b35;
+            opacity: 0.5;
+            transition: opacity 0.3s, text-shadow 0.3s;
+        }
+
+        .deck-label-b.active {
+            opacity: 1;
+            text-shadow: 0 0 8px rgba(255, 107, 53, 0.5);
+        }
+
+        /* Crossfader visual */
+        .crossfader-visual {
+            width: 160px;
+            height: 8px;
+            background: rgba(40, 40, 80, 0.6);
+            border-radius: 4px;
+            position: relative;
+            overflow: visible;
+        }
+
+        .crossfader-track-a {
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            background: linear-gradient(90deg, rgba(0, 212, 255, 0.6), rgba(0, 212, 255, 0.1));
+            border-radius: 4px 0 0 4px;
+            transition: width 0.15s ease;
+        }
+
+        .crossfader-track-b {
+            position: absolute;
+            right: 0;
+            top: 0;
+            height: 100%;
+            background: linear-gradient(270deg, rgba(255, 107, 53, 0.6), rgba(255, 107, 53, 0.1));
+            border-radius: 0 4px 4px 0;
+            transition: width 0.15s ease;
+        }
+
+        .crossfader-thumb {
+            position: absolute;
+            top: 50%;
+            width: 14px;
+            height: 14px;
+            background: #ffffff;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            transition: left 0.15s ease;
+            box-shadow: 0 0 6px rgba(255, 255, 255, 0.3);
+        }
+
+        /* Transition indicator */
+        .transition-indicator {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.55rem;
+            font-weight: 700;
+            letter-spacing: 0.15em;
+            color: #ff44aa;
+            text-transform: uppercase;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            height: 14px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .transition-indicator.active {
+            opacity: 1;
+            animation: pulse-transition 1.2s ease-in-out infinite;
+        }
+
+        .transition-dot {
+            width: 6px;
+            height: 6px;
+            background: #ff44aa;
+            border-radius: 50%;
+        }
+
+        @keyframes pulse-transition {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        /* ================================================================
+           AUDIO LEVEL BARS
+           ================================================================ */
+
+        .level-bars {
+            display: flex;
+            align-items: flex-end;
+            gap: 3px;
+            height: 60px;
+            flex-shrink: 0;
+            padding: 0 8px;
+        }
+
+        .level-bar {
+            width: 4px;
+            background: linear-gradient(to top, #00ff44, #ffdd00, #ff2200);
+            border-radius: 2px;
+            min-height: 2px;
+            transition: height 0.08s ease;
+            opacity: 0.8;
+        }
+
+        /* ================================================================
+           LIVE BADGE
+           ================================================================ */
+
+        .live-badge {
+            display: none;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            background: rgba(255, 0, 0, 0.15);
+            border: 1px solid rgba(255, 0, 0, 0.3);
+            border-radius: 6px;
+            position: absolute;
+            top: 12px;
+            right: 24px;
+        }
+
+        .live-badge.visible {
+            display: flex;
+        }
+
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            background: #ff0000;
+            border-radius: 50%;
+            animation: pulse-dot 1.5s ease-in-out infinite;
+        }
+
+        .live-text {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.6rem;
+            font-weight: 700;
+            color: #ff4444;
+            letter-spacing: 0.15em;
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        /* ================================================================
+           THEME: MINIMAL
+           ================================================================ */
+
+        body.theme-minimal .obs-overlay {
+            height: 80px;
+            padding: 0 40px;
+            justify-content: flex-start;
+        }
+
+        body.theme-minimal .artwork-container,
+        body.theme-minimal .deck-section,
+        body.theme-minimal .level-bars,
+        body.theme-minimal .track-meta,
+        body.theme-minimal .track-label,
+        body.theme-minimal .live-badge {
+            display: none !important;
+        }
+
+        body.theme-minimal .track-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+        }
+
+        body.theme-minimal .track-artist {
+            font-size: 0.85rem;
+        }
+
+        body.theme-minimal .track-info {
+            gap: 2px;
+        }
+
+        /* ================================================================
+           THEME: NEON
+           ================================================================ */
+
+        body.theme-neon .track-title {
+            color: #00ffcc;
+            text-shadow:
+                0 0 10px rgba(0, 255, 204, 0.6),
+                0 0 30px rgba(0, 255, 204, 0.3),
+                0 0 60px rgba(0, 255, 204, 0.15);
+            animation: neon-flicker 3s ease-in-out infinite;
+        }
+
+        body.theme-neon .track-artist {
+            color: #ff44dd;
+            text-shadow:
+                0 0 8px rgba(255, 68, 221, 0.5),
+                0 0 20px rgba(255, 68, 221, 0.2);
+        }
+
+        body.theme-neon .track-label {
+            color: #00ffcc;
+            text-shadow: 0 0 6px rgba(0, 255, 204, 0.4);
+        }
+
+        body.theme-neon .meta-value {
+            color: #66ffee;
+            text-shadow: 0 0 4px rgba(102, 255, 238, 0.3);
+        }
+
+        body.theme-neon .deck-label-a {
+            text-shadow: 0 0 12px rgba(0, 212, 255, 0.8);
+        }
+
+        body.theme-neon .deck-label-a.active {
+            text-shadow: 0 0 20px rgba(0, 212, 255, 1);
+        }
+
+        body.theme-neon .deck-label-b {
+            text-shadow: 0 0 12px rgba(255, 107, 53, 0.8);
+        }
+
+        body.theme-neon .deck-label-b.active {
+            text-shadow: 0 0 20px rgba(255, 107, 53, 1);
+        }
+
+        body.theme-neon .crossfader-thumb {
+            background: #00ffcc;
+            box-shadow: 0 0 12px rgba(0, 255, 204, 0.6);
+        }
+
+        body.theme-neon .level-bar {
+            background: linear-gradient(to top, #00ffcc, #ff44dd, #ffcc00);
+            box-shadow: 0 0 4px rgba(0, 255, 204, 0.3);
+        }
+
+        body.theme-neon .artwork-container {
+            border-color: rgba(0, 255, 204, 0.3);
+            box-shadow: 0 0 15px rgba(0, 255, 204, 0.15);
+        }
+
+        @keyframes neon-flicker {
+            0%, 100% { opacity: 1; }
+            92% { opacity: 1; }
+            93% { opacity: 0.85; }
+            94% { opacity: 1; }
+            96% { opacity: 0.9; }
+            97% { opacity: 1; }
+        }
+
+        /* ================================================================
+           THEME: CLASSIC
+           ================================================================ */
+
+        body.theme-classic .obs-overlay {
+            background: rgba(0, 0, 0, 0.75);
+            height: 100px;
+            padding: 0 32px;
+        }
+
+        body.theme-classic .artwork-container {
+            width: 70px;
+            height: 70px;
+            border-radius: 6px;
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        body.theme-classic .track-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #ffffff;
+        }
+
+        body.theme-classic .track-artist {
+            font-size: 0.85rem;
+            color: #bbbbbb;
+        }
+
+        body.theme-classic .track-label {
+            color: #ffffff;
+            opacity: 0.5;
+        }
+
+        body.theme-classic .meta-value {
+            color: #dddddd;
+        }
+
+        body.theme-classic .meta-label {
+            color: #888888;
+        }
+
+        body.theme-classic .deck-label-a {
+            color: #66ccff;
+        }
+
+        body.theme-classic .deck-label-b {
+            color: #ff9966;
+        }
+
+        body.theme-classic .crossfader-visual {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        body.theme-classic .crossfader-track-a {
+            background: linear-gradient(90deg, rgba(102, 204, 255, 0.5), rgba(102, 204, 255, 0.05));
+        }
+
+        body.theme-classic .crossfader-track-b {
+            background: linear-gradient(270deg, rgba(255, 153, 102, 0.5), rgba(255, 153, 102, 0.05));
+        }
+
+        body.theme-classic .level-bars {
+            height: 40px;
+        }
+
+        body.theme-classic .level-bar {
+            width: 3px;
+            background: linear-gradient(to top, #66ccff, #ffffff, #ff9966);
+        }
+
+        body.theme-classic .live-badge {
+            background: rgba(255, 0, 0, 0.2);
+        }
+
+        /* ================================================================
+           THEME: FULL (default — no overrides needed)
+           Uses the base styles above as-is.
+           ================================================================ */
+
+        /* ================================================================
+           HIDDEN STATE — when no track is loaded
+           ================================================================ */
+
+        .obs-overlay.hidden-state {
+            opacity: 0;
+            transform: translateY(20px);
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="obs-overlay" id="obs-overlay">
+        <!-- Live badge -->
+        <div class="live-badge" id="live-badge">
+            <div class="live-dot"></div>
+            <span class="live-text">LIVE</span>
+        </div>
+
+        <!-- Album artwork -->
+        <div class="artwork-container" id="artwork-container">
+            <div class="artwork-placeholder" id="artwork-placeholder">&#9835;</div>
+            <img id="artwork-img" alt="">
+        </div>
+
+        <!-- Track info -->
+        <div class="track-info">
+            <div class="track-label">NOW PLAYING</div>
+            <div class="track-title" id="track-title">Waiting for DJ...</div>
+            <div class="track-artist" id="track-artist"></div>
+            <div class="track-meta">
+                <div class="meta-item" id="bpm-display" style="display:none;">
+                    <span class="meta-label">BPM</span>
+                    <span class="meta-value" id="bpm-value">---</span>
+                </div>
+                <div class="meta-item" id="key-display" style="display:none;">
+                    <span class="meta-label">KEY</span>
+                    <span class="meta-value" id="key-value">---</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Deck indicator + crossfader -->
+        <div class="deck-section">
+            <div class="deck-labels">
+                <span class="deck-label-a" id="deck-label-a">DECK A</span>
+                <span class="deck-arrow">&#8596;</span>
+                <span class="deck-label-b" id="deck-label-b">DECK B</span>
+            </div>
+            <div class="crossfader-visual">
+                <div class="crossfader-track-a" id="xf-track-a" style="width: 50%;"></div>
+                <div class="crossfader-track-b" id="xf-track-b" style="width: 50%;"></div>
+                <div class="crossfader-thumb" id="xf-thumb" style="left: 50%;"></div>
+            </div>
+            <div class="transition-indicator" id="transition-indicator">
+                <div class="transition-dot"></div>
+                <span>CROSSFADING</span>
+            </div>
+        </div>
+
+        <!-- Audio level bars -->
+        <div class="level-bars" id="level-bars"></div>
+    </div>
+
+    <script>
+        // ================================================================
+        // THEME SELECTION
+        // ================================================================
+
+        const params = new URLSearchParams(window.location.search);
+        const theme = params.get('theme') || 'full';
+        const validThemes = ['minimal', 'full', 'neon', 'classic'];
+
+        if (validThemes.includes(theme) && theme !== 'full') {
+            document.body.classList.add(`theme-${theme}`);
+        }
+
+        // ================================================================
+        // LEVEL BARS SETUP
+        // ================================================================
+
+        const NUM_BARS = 24;
+        const levelBarsContainer = document.getElementById('level-bars');
+        const bars = [];
+
+        for (let i = 0; i < NUM_BARS; i++) {
+            const bar = document.createElement('div');
+            bar.className = 'level-bar';
+            bar.style.height = '2px';
+            levelBarsContainer.appendChild(bar);
+            bars.push(bar);
+        }
+
+        // Simulated audio level animation (responds to play state)
+        let isPlaying = false;
+        let animFrame = null;
+        const barHeights = new Float32Array(NUM_BARS);
+        const barTargets = new Float32Array(NUM_BARS);
+
+        function animateBars() {
+            if (isPlaying) {
+                for (let i = 0; i < NUM_BARS; i++) {
+                    // Create a waveform-like pattern with some randomness
+                    const center = NUM_BARS / 2;
+                    const dist = Math.abs(i - center) / center;
+                    const baseHeight = (1 - dist * 0.6) * 0.7;
+                    barTargets[i] = baseHeight + Math.random() * 0.3;
+                }
+            } else {
+                for (let i = 0; i < NUM_BARS; i++) {
+                    barTargets[i] = 0.03;
+                }
+            }
+
+            for (let i = 0; i < NUM_BARS; i++) {
+                // Smooth interpolation
+                barHeights[i] += (barTargets[i] - barHeights[i]) * 0.25;
+                const h = Math.max(2, barHeights[i] * 60);
+                bars[i].style.height = `${h}px`;
+            }
+
+            animFrame = requestAnimationFrame(animateBars);
+        }
+
+        animateBars();
+
+        // ================================================================
+        // BROADCAST CHANNEL LISTENER
+        // ================================================================
+
+        const channel = new BroadcastChannel('aurdour-dj');
+        const overlay = document.getElementById('obs-overlay');
+
+        // State
+        let deckAPlaying = false;
+        let deckBPlaying = false;
+        let deckATrack = null;
+        let deckBTrack = null;
+        let currentCrossfader = 0.5;
+        let hasTrack = false;
+
+        channel.onmessage = (e) => {
+            const data = e.data;
+
+            switch (data.type) {
+                case 'track_update':
+                    handleTrackUpdate(data.deck, data.metadata);
+                    break;
+
+                case 'now_playing':
+                    handleNowPlaying(data.title, data.artist);
+                    break;
+
+                case 'play_state':
+                    handlePlayState(data.deck, data.isPlaying);
+                    break;
+
+                case 'live_status':
+                    document.getElementById('live-badge').classList.toggle('visible', data.isLive);
+                    break;
+
+                case 'crossfader_position':
+                    handleCrossfader(data.position);
+                    break;
+
+                case 'transition_state':
+                    handleTransition(data.active, data.direction);
+                    break;
+            }
+        };
+
+        // ================================================================
+        // MESSAGE HANDLERS
+        // ================================================================
+
+        function handleTrackUpdate(deck, meta) {
+            if (!meta) return;
+
+            const deckId = deck.toUpperCase();
+
+            if (deckId === 'A') {
+                deckATrack = meta;
+            } else {
+                deckBTrack = meta;
+            }
+
+            // Determine which track to show based on crossfader position
+            updateDisplayedTrack();
+        }
+
+        function handleNowPlaying(title, artist) {
+            setTrackDisplay(title, artist);
+            if (title && title !== '-') {
+                hasTrack = true;
+                overlay.classList.add('visible');
+                overlay.classList.remove('hidden-state');
+            }
+        }
+
+        function handlePlayState(deck, playing) {
+            const deckId = deck.toUpperCase();
+
+            if (deckId === 'A') {
+                deckAPlaying = playing;
+                document.getElementById('deck-label-a').classList.toggle('active', playing);
+            } else {
+                deckBPlaying = playing;
+                document.getElementById('deck-label-b').classList.toggle('active', playing);
+            }
+
+            isPlaying = deckAPlaying || deckBPlaying;
+
+            if (isPlaying && !hasTrack) {
+                hasTrack = true;
+                overlay.classList.add('visible');
+                overlay.classList.remove('hidden-state');
+            }
+
+            updateDisplayedTrack();
+        }
+
+        function handleCrossfader(position) {
+            currentCrossfader = position;
+            const pct = position * 100;
+
+            document.getElementById('xf-thumb').style.left = `${pct}%`;
+            document.getElementById('xf-track-a').style.width = `${100 - pct}%`;
+            document.getElementById('xf-track-b').style.width = `${pct}%`;
+
+            // Update deck label brightness based on crossfader
+            const aOpacity = position <= 0.5 ? 1 : 1 - (position - 0.5) * 1.4;
+            const bOpacity = position >= 0.5 ? 1 : position * 1.4 + 0.3;
+            document.getElementById('deck-label-a').style.opacity = Math.max(0.3, aOpacity);
+            document.getElementById('deck-label-b').style.opacity = Math.max(0.3, bOpacity);
+
+            updateDisplayedTrack();
+        }
+
+        function handleTransition(active, direction) {
+            const indicator = document.getElementById('transition-indicator');
+            indicator.classList.toggle('active', active);
+
+            if (active && direction) {
+                const dirText = direction === 'AtoB' ? 'A \u2192 B' : 'B \u2192 A';
+                indicator.querySelector('span').textContent = `CROSSFADING ${dirText}`;
+            }
+        }
+
+        function updateDisplayedTrack() {
+            // Show the track that is more prominent based on crossfader
+            let trackToShow = null;
+
+            if (currentCrossfader <= 0.5 && deckATrack) {
+                trackToShow = deckATrack;
+            } else if (currentCrossfader > 0.5 && deckBTrack) {
+                trackToShow = deckBTrack;
+            } else if (deckATrack) {
+                trackToShow = deckATrack;
+            } else if (deckBTrack) {
+                trackToShow = deckBTrack;
+            }
+
+            if (trackToShow) {
+                setTrackDisplay(
+                    trackToShow.title,
+                    trackToShow.artist,
+                    trackToShow.bpm,
+                    trackToShow.key,
+                    trackToShow.artwork
+                );
+            }
+        }
+
+        function setTrackDisplay(title, artist, bpm, key, artwork) {
+            const titleEl = document.getElementById('track-title');
+            const artistEl = document.getElementById('track-artist');
+
+            if (title && titleEl.textContent !== title) {
+                titleEl.textContent = title || '-';
+                titleEl.classList.remove('changing');
+                void titleEl.offsetWidth; // trigger reflow
+                titleEl.classList.add('changing');
+            }
+
+            if (artist !== undefined && artistEl.textContent !== artist) {
+                artistEl.textContent = artist || '';
+                artistEl.classList.remove('changing');
+                void artistEl.offsetWidth;
+                artistEl.classList.add('changing');
+            }
+
+            // BPM
+            const bpmDisplay = document.getElementById('bpm-display');
+            const bpmValue = document.getElementById('bpm-value');
+            if (bpm && bpm > 0) {
+                bpmDisplay.style.display = 'flex';
+                bpmValue.textContent = Math.round(bpm);
+            }
+
+            // Key
+            const keyDisplay = document.getElementById('key-display');
+            const keyValue = document.getElementById('key-value');
+            if (key) {
+                keyDisplay.style.display = 'flex';
+                keyValue.textContent = key;
+            }
+
+            // Artwork
+            if (artwork) {
+                const img = document.getElementById('artwork-img');
+                const placeholder = document.getElementById('artwork-placeholder');
+
+                if (img.src !== artwork) {
+                    img.classList.remove('loaded');
+                    img.onload = () => {
+                        img.classList.add('loaded');
+                        placeholder.style.display = 'none';
+                    };
+                    img.onerror = () => {
+                        img.classList.remove('loaded');
+                        placeholder.style.display = 'flex';
+                    };
+                    img.src = artwork;
+                }
+            }
+        }
+
+        // ================================================================
+        // REMOVE ANIMATION CLASS AFTER COMPLETION
+        // ================================================================
+
+        document.getElementById('track-title').addEventListener('animationend', function() {
+            this.classList.remove('changing');
+        });
+
+        document.getElementById('track-artist').addEventListener('animationend', function() {
+            this.classList.remove('changing');
+        });
+
+        // ================================================================
+        // ANNOUNCE PRESENCE — request current state from DJ app
+        // ================================================================
+
+        channel.postMessage({ type: 'obs_overlay_connect' });
+
+        // If playing starts from spinning disc animation
+        const artworkContainer = document.getElementById('artwork-container');
+        function updateArtworkSpin() {
+            if (isPlaying) {
+                artworkContainer.classList.add('artwork-spin');
+            } else {
+                artworkContainer.classList.remove('artwork-spin');
+            }
+            requestAnimationFrame(updateArtworkSpin);
+        }
+        // Only spin the placeholder icon, not the whole container
+        const placeholderEl = document.getElementById('artwork-placeholder');
+        function updatePlaceholderSpin() {
+            if (isPlaying) {
+                placeholderEl.style.animation = 'spin-disc 4s linear infinite';
+            } else {
+                placeholderEl.style.animation = 'none';
+            }
+        }
+        setInterval(updatePlaceholderSpin, 500);
+    </script>
+</body>
+</html>

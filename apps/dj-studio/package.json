@@ -1,0 +1,23 @@
+{
+  "name": "ardour-web-player",
+  "version": "1.0.0",
+  "description": "Open-source web audio player for Ardour exports with markers and social sharing",
+  "scripts": {
+    "dev": "python3 -m http.server 8000",
+    "build": "echo 'No build step required - static site'",
+    "preview": "python3 -m http.server 8080"
+  },
+  "keywords": [
+    "audio",
+    "player",
+    "wavesurfer",
+    "ardour",
+    "daw",
+    "markers",
+    "dj"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {}
+}

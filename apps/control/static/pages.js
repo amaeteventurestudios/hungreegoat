@@ -645,6 +645,71 @@ Object.assign(CHANGES, {
   'coll-order': (el)=>{ COLL_EDIT.order=el.value; },
 });
 
+/* ======================= WORKOUT DJ ======================= */
+const WORKOUT_LABELS = {general:'General Workout',strength:'Strength',treadmill:'Treadmill / Run',cycling:'Cycling',rowing:'Rowing',hiit:'HIIT'};
+const MIX_STATUS_PILL = {creating:['slate','Creating'],recording:['blue','Recording'],mastering:['amber','Mastering'],saving:['amber','Saving'],ready:['green','Ready'],failed:['red','Failed']};
+function mixRow(m){
+  const [cls,lbl]=MIX_STATUS_PILL[m.status]||['slate',m.status]; const busy = m.status==='recording'||m.status==='mastering'||m.status==='creating';
+  return `<div class="row" data-key="mix-${m.id}" style="align-items:center">
+    <div class="tt" style="flex:1;min-width:0"><b>${h(m.title)}</b><span>${WORKOUT_LABELS[m.workout_type]||h(m.workout_type||'')} · ${h(m.intensity||'')}${m.measured_lufs!=null?` · ${m.measured_lufs.toFixed(1)} LUFS`:''}</span></div>
+    <span class="dur">${m.actual_duration_sec?fmtDur(m.actual_duration_sec):(m.target_duration_sec?'~'+fmtDur(m.target_duration_sec):'')}</span>
+    <span class="pill ${cls}">${lbl}${busy?' …':''}</span>
+    <span class="acts">${m.status==='ready'?`<audio controls preload="none" style="height:32px;max-width:220px" src="/api/dj/mixes/${m.id}/audio.wav"></audio><a class="btn xs icon ghost" href="/api/dj/mixes/${m.id}/download" title="Download">${I.upload}</a>`:''}<button class="btn xs icon red" data-act="wo-delete" data-id="${m.id}" title="Delete">${I.trash}</button></span>
+  </div>`;
+}
+pages.workout = { live:true, async load(){
+  const [mixes, analyzeStatus, pls] = await Promise.all([
+    api(`/api/dj/mixes?station=${S()}`), api('/api/dj/analyze/status'), api(`${P()}/playlists`)
+  ]);
+  return {mixes, analyzeStatus, workoutPlaylists: pls.filter(p=>p.kind==='workout')};
+}, view(d){
+  const wf = state._woForm || (state._woForm = {playlist:(d.workoutPlaylists[0]||{}).slug||'workout', workout_type:'general', intensity:'moderate', duration_min:5});
+  const pendingAnalyze = d.analyzeStatus.running;
+  return `<div class="page-h"><h2>Workout DJ</h2><div class="right"><a class="btn sm" href="/dj/index.html" target="_blank" rel="noopener">${I.headphones} Full DJ Console</a></div></div>
+  <div class="panel" style="padding:16px 18px;margin-bottom:14px">
+    <p class="small muted" style="margin:0 0 12px;line-height:1.55">Auto-DJ builds a brand-new workout mix from your Library — beatmatched, transitioned and mastered automatically — and saves it as a finished recording under Mixes. Library tracks and playlists are never modified or duplicated.</p>
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
+      <div class="stat"><div class="k">Workout playlists</div><div class="v">${d.workoutPlaylists.length}</div></div>
+      <div class="stat"><div class="k">Mixes saved</div><div class="v">${d.mixes.length}</div></div>
+      <div class="stat"><div class="k">Analysis</div><div class="v">${pendingAnalyze?`Analyzing… ${d.analyzeStatus.done}/${d.analyzeStatus.total}`:'Idle'}</div></div>
+    </div>
+  </div>
+  <div class="two">
+    <div class="panel"><div class="panel-h"><h3>${ic(I.plus,'gold')}CREATE WORKOUT MIX</h3></div><div class="panel-b">
+      ${d.workoutPlaylists.length ? `<form data-form="wo-create" class="form">
+        <label>Playlist<select class="sel" name="playlist">${d.workoutPlaylists.map(p=>`<option value="${h(p.slug)}" ${wf.playlist===p.slug?'selected':''}>${h(p.name)} (${p.track_count||0} tracks)</option>`).join('')}</select></label>
+        <label>Workout type<select class="sel" name="workout_type">${Object.entries(WORKOUT_LABELS).map(([k,l])=>`<option value="${k}" ${wf.workout_type===k?'selected':''}>${l}</option>`).join('')}</select></label>
+        <label>Intensity<select class="sel" name="intensity">${['easy','moderate','high','intense'].map(x=>`<option value="${x}" ${wf.intensity===x?'selected':''}>${x[0].toUpperCase()+x.slice(1)}</option>`).join('')}</select></label>
+        <label>Duration<select class="sel" name="duration_min">${[5,10,15,20,30,45,60].map(x=>`<option value="${x}" ${Number(wf.duration_min)===x?'selected':''}>${x} minutes</option>`).join('')}</select></label>
+        <div class="wide row-actions"><button class="btn gold" type="submit">${I.play} Create &amp; Generate Mix</button></div>
+      </form>` : empty(I.list,'No workout playlist yet','Create a playlist with kind "workout" on the Playlists page, add tracks to it, then come back here.',`<a class="btn sm gold" href="#/playlists">${I.list} Playlists</a>`)}
+    </div></div>
+    <div class="panel"><div class="panel-h"><h3>${ic(I.tag,'blue')}TRACK ANALYSIS</h3></div><div class="panel-b">
+      <p class="small muted" style="margin:0 0 10px">Auto-DJ needs each track's tempo and key before it can beatmix it. Run this once after adding new tracks to a workout playlist.</p>
+      <button class="btn sm ${pendingAnalyze?'':'gold'}" data-act="wo-analyze" ${pendingAnalyze?'disabled':''}>${pendingAnalyze?`Analyzing ${d.analyzeStatus.done}/${d.analyzeStatus.total}…`:'Analyze Workout Playlist'}</button>
+    </div></div>
+  </div>
+  <h3 style="margin:18px 0 8px;font:800 15px var(--display)">${ic(I.list,'gold')}MIXES (${d.mixes.length})</h3>
+  <div class="panel"><div class="panel-b">${d.mixes.length?d.mixes.map(mixRow).join(''):empty(I.list,'No mixes yet','Create your first workout mix above.')}</div></div>`;
+} };
+Object.assign(FORMS, {
+  'wo-create': async(f,b)=>{
+    state._woForm = {playlist:b.playlist, workout_type:b.workout_type, intensity:b.intensity, duration_min:b.duration_min};
+    const target_duration_sec = Number(b.duration_min)*60;
+    const btn = f.querySelector('button[type=submit]'); btn.disabled=true; btn.textContent='Starting…';
+    try {
+      const mix = await post('/api/dj/mixes', {station:S(), workout_type:b.workout_type, intensity:b.intensity, target_duration_sec});
+      await post(`/api/dj/mixes/${mix.id}/generate`, {playlist:b.playlist, transition_sec:8, transition_type:'blend'});
+      toast('Workout mix started — recording in real time, this takes about as long as the mix itself.','ok');
+      delete state.pageData.workout; render();
+    } catch(e) { toast(e.message,'err'); btn.disabled=false; btn.textContent='Create & Generate Mix'; }
+  },
+});
+Object.assign(ACTIONS, {
+  'wo-analyze': ()=>act(()=>post(`/api/dj/analyze?station=${S()}&playlist=${(state._woForm&&state._woForm.playlist)||'workout'}`), 'Analysis started'),
+  'wo-delete': async(el)=>{ if(await confirmDlg('Delete this mix? The original Library tracks it was built from are never affected.','Delete',true)) act(()=>del(`/api/dj/mixes/${el.dataset.id}`),'Mix deleted'); },
+});
+
 /* ======================= ALERTS PAGE ======================= */
 pages.alerts = { live:true, async load(){ return api('/api/alerts?state=all&limit=300'); }, view(A){ const sev={critical:'err',error:'err',warning:'warn',info:'blue'}; const view=state.alertPage||'active'; const list=A.alerts.filter(a=> view==='active'?a.state!=='resolved':a.state==='resolved'); const c=A.counts;
   return `<div class="page-h"><h2>Alerts</h2><span class="chip red">${c.crit||0} critical</span><span class="chip red">${c.err||0} errors</span><span class="chip amber">${c.warn||0} warnings</span><div class="right"><span class="seg"><button class="${view==='active'?'active':''}" data-act="alert-page" data-v="active">Active</button><button class="${view==='resolved'?'active':''}" data-act="alert-page" data-v="resolved">Resolved (${c.resolved||0})</button></span><button class="btn sm" data-act="alerts-bulk" data-op="read-all">Mark all read</button><button class="btn sm" data-act="alerts-bulk" data-op="clear-read">Clear read</button><button class="btn sm" data-act="alerts-bulk" data-op="clear-resolved">Clear resolved</button></div></div>

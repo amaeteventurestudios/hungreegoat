@@ -110,6 +110,58 @@ CREATE TABLE IF NOT EXISTS play_history (
   source TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_history_station ON play_history(station, started_at);
+
+-- DJ Studio / Auto-DJ / Mixes -----------------------------------------------------------
+CREATE TABLE IF NOT EXISTS workout_profiles (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  workout_type TEXT NOT NULL,       -- general | strength | treadmill | cycling | rowing | hiit
+  default_duration_sec INTEGER DEFAULT 1800,
+  default_intensity TEXT DEFAULT 'moderate',  -- easy | moderate | high | intense
+  double_time INTEGER DEFAULT 1,     -- allow effective-BPM (double-time) interpretation
+  max_tempo_adjust_pct REAL DEFAULT 6,  -- max real playback tempo change AutoTransition may use
+  transition_duration_sec REAL DEFAULT 8,
+  transition_type TEXT DEFAULT 'blend',  -- blend | echo-out | cut | filter-sweep
+  energy_curve TEXT DEFAULT 'warmup,build,peak,cooldown',  -- comma list of segment labels
+  artist_repeat_gap INTEGER DEFAULT 3,   -- min tracks between same-artist repeats
+  recent_history_window INTEGER DEFAULT 20,  -- tracks remembered for repetition avoidance
+  mastering_preset TEXT DEFAULT 'workout_streaming',
+  enabled INTEGER DEFAULT 1,
+  created_at REAL, updated_at REAL
+);
+
+CREATE TABLE IF NOT EXISTS mixes (
+  id INTEGER PRIMARY KEY,
+  title TEXT NOT NULL,
+  filename TEXT,                     -- bare filename under media/mixes/, mastered WAV
+  raw_filename TEXT,                 -- bare filename under media/mixes/.raw/, pre-master capture
+  station TEXT NOT NULL,
+  playlist_id INTEGER,
+  profile_id INTEGER,
+  workout_type TEXT, intensity TEXT,
+  target_duration_sec REAL, actual_duration_sec REAL,
+  mastering_preset TEXT,
+  target_lufs REAL, measured_lufs REAL, measured_true_peak_db REAL,
+  sample_rate INTEGER, bit_depth INTEGER, audio_format TEXT DEFAULT 'wav',
+  status TEXT NOT NULL DEFAULT 'creating',  -- creating|recording|mastering|saving|ready|failed
+  file_size INTEGER, notes TEXT,
+  variation_parent_id INTEGER,
+  engine_version TEXT, mastering_engine_version TEXT,
+  created_at REAL NOT NULL, updated_at REAL
+);
+CREATE INDEX IF NOT EXISTS idx_mixes_station ON mixes(station, created_at);
+
+CREATE TABLE IF NOT EXISTS mix_tracks (
+  mix_id INTEGER NOT NULL REFERENCES mixes(id) ON DELETE CASCADE,
+  position INTEGER NOT NULL,
+  track_id INTEGER NOT NULL,
+  deck TEXT,
+  source_bpm REAL, effective_bpm REAL, tempo_adjust_pct REAL,
+  source_key TEXT,
+  start_offset_sec REAL DEFAULT 0, end_offset_sec REAL,
+  transition_in_sec REAL, transition_duration_sec REAL,
+  PRIMARY KEY(mix_id, position)
+);
 """
 
 
@@ -127,6 +179,12 @@ def connect() -> sqlite3.Connection:
             cols = {r[1] for r in _conn.execute("PRAGMA table_info(tracks)")}
             if "sha256" not in cols:
                 _conn.execute("ALTER TABLE tracks ADD COLUMN sha256 TEXT")
+            # DJ Studio: analyzed BPM/key/energy, kept separate from any embedded-tag BPM so a
+            # workout's "effective" double-time interpretation never overwrites the real value.
+            for col, decl in (("dj_bpm", "REAL"), ("dj_key", "TEXT"), ("dj_energy", "REAL"),
+                               ("dj_analyzed_at", "REAL"), ("dj_analysis_version", "TEXT")):
+                if col not in cols:
+                    _conn.execute(f"ALTER TABLE tracks ADD COLUMN {col} {decl}")
         return _conn
 
 

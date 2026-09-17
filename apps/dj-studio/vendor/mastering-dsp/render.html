@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<!-- HUNGREE Goat, new file (not upstream). Offline mastering-render harness driven by
+     dj_orchestrator.py via Playwright. Imports the vendored noisyloop/mastering DSP modules
+     (unmodified math, ISC license — see NOTICE.md) as real ES modules and chains a plain,
+     conservative mastering signal path: normalize-to-target-LUFS (which internally applies a
+     lookahead limiter only if needed to protect the true-peak ceiling) -> gentle mastering
+     compression -> final filters (DC/rumble cleanup) -> WAV encode. Every DSP call here is
+     the library's own exported function, called with its own documented defaults; no new
+     signal processing math is introduced. -->
+<html><head><meta charset="utf-8"><title>HGC mastering render harness</title></head>
+<body>
+<script type="module">
+import {
+  measureLUFS, findTruePeak, normalizeToLUFS, applyMasteringCompression, applyFinalFilters
+} from './dsp/index.js';
+import { encodeWAV } from './encoder.js';
+
+async function hgcMaster(sourceUrl, opts) {
+  opts = opts || {};
+  const targetLufs = typeof opts.targetLufs === 'number' ? opts.targetLufs : -14;
+  const ceilingDb = typeof opts.ceilingDb === 'number' ? opts.ceilingDb : -1;
+  const sampleRate = opts.sampleRate || 44100;
+  const bitDepth = opts.bitDepth === 24 ? 24 : 16;
+
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const resp = await fetch(sourceUrl);
+  if (!resp.ok) throw new Error('fetch source failed: ' + resp.status);
+  const arrayBuf = await resp.arrayBuffer();
+  let audioBuf = await ctx.decodeAudioData(arrayBuf);
+  await ctx.close();
+
+  const beforeLufs = measureLUFS(audioBuf);
+  const beforePeak = findTruePeak(audioBuf);
+
+  // Gentle mastering-grade compression (library default preset), then bring to target
+  // loudness (this call applies its own lookahead limiter internally only if the projected
+  // peak after gain would exceed the ceiling), then final DC/rumble filtering.
+  audioBuf = applyMasteringCompression(audioBuf);
+  audioBuf = normalizeToLUFS(audioBuf, targetLufs, ceilingDb);
+  audioBuf = applyFinalFilters(audioBuf);
+
+  const afterLufs = measureLUFS(audioBuf);
+  const afterPeakDb = 20 * Math.log10(Math.max(findTruePeak(audioBuf), 1e-9));
+
+  const wav = encodeWAV(audioBuf, audioBuf.sampleRate, bitDepth, { ditherMode: 'tpdf' });
+
+  // Trigger a real browser download of the mastered WAV (same pattern Aurdour's own
+  // Recorder.js already uses for the raw recording) instead of returning the multi-ten-MB
+  // audio payload through the JS<->Python bridge — dj_orchestrator.py captures it via
+  // Playwright's page.expect_download().
+  const blob = new Blob([wav], { type: 'audio/wav' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = opts.downloadName || 'mastered.wav';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+
+  const result = {
+    durationSec: audioBuf.duration,
+    sampleRate: audioBuf.sampleRate,
+    channels: audioBuf.numberOfChannels,
+    beforeLufs, beforePeakDb: 20 * Math.log10(Math.max(beforePeak, 1e-9)),
+    afterLufs, afterPeakDb,
+    targetLufs, ceilingDb
+  };
+  window.__hgcMasterResult = result;
+  return result;
+}
+window.hgcMaster = hgcMaster;
+window.__hgcReady = true;
+</script>
+</body></html>

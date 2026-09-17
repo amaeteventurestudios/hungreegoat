@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<!-- HUNGREE Goat, new file (not upstream). Headless BPM/key analysis harness driven by
+     dj_orchestrator.py via Playwright — reuses Aurdour's own dj/bpm-worker.js detection
+     functions (onset+autocorrelation BPM, chromagram key) unmodified, just called directly
+     instead of through a Web Worker, since this page IS the worker context. See NOTICE.md. -->
+<html><head><meta charset="utf-8"><title>HGC DJ analysis harness</title></head>
+<body>
+<script src="../dj/bpm-worker.js"></script>
+<script>
+// bpm-worker.js defines detectBPM/detectKey in global scope and does `self.onmessage = ...`
+// (harmless here — `self` is just `window`, nothing posts it a message).
+async function hgcAnalyze(url) {
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const resp = await fetch(url);
+  const arrayBuf = await resp.arrayBuffer();
+  const audioBuf = await ctx.decodeAudioData(arrayBuf);
+  const data = audioBuf.getChannelData(0);
+  const bpm = detectBPM(data, audioBuf.sampleRate);
+  const key = detectKey(data, audioBuf.sampleRate);
+  // Simple RMS-derived energy (0..1), used only to order tracks within a workout's energy
+  // curve (warmup/build/peak/cooldown) — not a loudness/mastering measurement, so a plain
+  // RMS proxy is appropriate here rather than a full LUFS analysis (that happens later, at
+  // mastering time, via the vendored DSP's real measureLUFS).
+  let sumSq = 0;
+  const step = Math.max(1, Math.floor(data.length / 200000));
+  let n = 0;
+  for (let i = 0; i < data.length; i += step) { sumSq += data[i] * data[i]; n++; }
+  const rms = Math.sqrt(sumSq / Math.max(1, n));
+  const energy = Math.max(0, Math.min(1, rms * 4));
+  await ctx.close();
+  return { bpm, key, energy, duration: audioBuf.duration, sampleRate: audioBuf.sampleRate };
+}
+window.hgcAnalyze = hgcAnalyze;
+window.__hgcReady = true;
+</script>
+</body></html>
