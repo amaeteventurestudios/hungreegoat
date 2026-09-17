@@ -9,7 +9,6 @@ export default function FocusPanel() {
   const start = () => { const secs = h * 3600 + m * 60; if (!secs) return; setEnd(Date.now() + secs * 1000); setLeft(secs); try { Notification.requestPermission?.(); } catch {} };
   const fmt = (s: number) => `${String(Math.floor(s / 3600)).padStart(2, '0')}:${String(Math.floor(s % 3600 / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
   return (<>
-    <h4>Focus Mode</h4>
     <div className="timer">{end == null ? (<div className="setup"><label>h<input type="number" min={0} max={12} value={h} onChange={e => setH(+e.target.value)} /></label><label>min<input type="number" min={0} max={59} value={m} onChange={e => setM(+e.target.value)} /></label><button className="go" onClick={start}>Start</button></div>) : (<div className="running"><div className="digits">{fmt(left)}</div><button className="go" onClick={() => setEnd(null)}>Stop</button></div>)}</div>
     <h4>To do list</h4>
     <form className="todo-add" onSubmit={e => { e.preventDefault(); if (txt.trim()) { setTodos([...todos, { t: txt.trim(), done: false }]); setTxt(''); } }}><input value={txt} onChange={e => setTxt(e.target.value)} placeholder="Add a task…" aria-label="New task" /><button type="submit">+</button></form>

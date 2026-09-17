@@ -20,7 +20,8 @@ export default function Header() {
   const yt = s.stations.find(x => x.id === s.station)?.youtube_url || YT_ENV;
   return (
     <nav className="wrap">
-      <a className="brand" href={HOME} title="Back to hungreegoat.com"><img src="/assets/logo.png" alt="HUNGREE Goat" /><b>HUNGREE GOAT MUSIC PLAYER</b></a>
+      <a className="brand" href={HOME} title="Back to hungreegoat.com" aria-label="Back to HUNGREE Goat"><img src="/assets/logo.png" alt="HUNGREE Goat" /></a>
+      <div className="ptitle">HUNGREE GOAT MUSIC PLAYER</div>
       <div className="nav-menu">
         <a href={HOME} className="home">← hungreegoat.com</a>
         {yt && <a href={yt} target="_blank" rel="noreferrer" className="yt" title="Opens the HUNGREE Goat live broadcast on YouTube, separate from this player">Listen Live<span className="yt-full"> on YouTube</span></a>}

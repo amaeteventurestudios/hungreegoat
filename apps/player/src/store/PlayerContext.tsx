@@ -26,14 +26,19 @@ const ls = (k: string, d: string) => { try { return localStorage.getItem(k) ?? d
 const init: State = {
   started: false, conn: 'idle', playing: false, volume: +ls('hg.vol', '0.85'), muted: false,
   time: autoTime(), timeAuto: ls('hg.timeAuto', '1') === '1', skins: mergeSkins([]), skinId: ls('hg.skin', '') || null, defaultSkin: null,
-  ambience: {}, ambienceMaster: +ls('hg.ambVol', '1'), station: ls('hg.station', 'lofi'), stations: [],
+  // Ambience always starts silent and user-chosen, every load — never restored from a prior
+  // session's localStorage value, and never auto-populated from a scene's suggested mix
+  // (see the 'skin' reducer case and the skins-load effect below).
+  ambience: {}, ambienceMaster: 0, station: ls('hg.station', 'lofi'), stations: [],
   tracks: [], index: 0, shuffle: ls('hg.shuffle', '0') === '1', repeat: false, queueHistory: [], elapsed: 0, panel: 'none', catalogState: 'loading',
 };
 function reducer(s: State, a: Action): State {
   switch (a.type) {
     case 'set': return { ...s, ...a.patch };
     case 'ambience': return { ...s, ambience: { ...s.ambience, [a.key]: a.value } };
-    case 'skin': { const sk = s.skins.find(x => x.id === a.id); return { ...s, skinId: a.id, ambience: sk && sk.ambience && Object.keys(sk.ambience).length ? { ...sk.ambience } : s.ambience }; }
+    // A scene is visual only - it never touches the user's ambience mix, even if the skin
+    // data carries a suggested `ambience` preset (that preset is not applied anywhere).
+    case 'skin': return { ...s, skinId: a.id };
     /* Time of day is purely a lighting treatment (see Scene.tsx's .light overlay) — it never
        changes which scene/skin is selected, and changing the scene never touches time. */
     case 'time': return a.time === 'auto' ? { ...s, timeAuto: true, time: autoTime() } : { ...s, time: a.time, timeAuto: false };
@@ -61,7 +66,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, []);
   /* ---- volume ---- */
   useEffect(() => { const v = s.muted ? 0 : s.volume; if (audio.current) audio.current.volume = v; try { localStorage.setItem('hg.vol', String(s.volume)); } catch {} }, [s.volume, s.muted]);
-  useEffect(() => { try { localStorage.setItem('hg.station', s.station); localStorage.setItem('hg.shuffle', s.shuffle ? '1' : '0'); localStorage.setItem('hg.timeAuto', s.timeAuto ? '1' : '0'); localStorage.setItem('hg.ambVol', String(s.ambienceMaster)); if (s.skinId) localStorage.setItem('hg.skin', s.skinId); } catch {} }, [s.station, s.shuffle, s.timeAuto, s.skinId, s.ambienceMaster]);
+  useEffect(() => { try { localStorage.setItem('hg.station', s.station); localStorage.setItem('hg.shuffle', s.shuffle ? '1' : '0'); localStorage.setItem('hg.timeAuto', s.timeAuto ? '1' : '0'); if (s.skinId) localStorage.setItem('hg.skin', s.skinId); } catch {} }, [s.station, s.shuffle, s.timeAuto, s.skinId]);
+  // hg.ambVol previously persisted the ambience master across sessions, which is exactly what
+  // Issue #1 forbids (a returning visitor got audible ambience with no action of their own).
+  // Drop any leftover value so it can never resurrect old audible defaults.
+  useEffect(() => { try { localStorage.removeItem('hg.ambVol'); } catch {} }, []);
   /* ---- stations (for the station switcher and the secondary "Listen Live on YouTube" link only) ---- */
   useEffect(() => { let stop = false; let timer: number;
     const tick = async () => { if (stop) return; try { const stations = await api.stations(); if (!stop) d({ type: 'set', patch: { stations } }); } catch { /* keep the last known list */ } timer = window.setTimeout(tick, 60000); };
@@ -71,7 +80,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const load = () => { api.tracks(s.station).then(tracks => { if (!stop) d({ type: 'set', patch: { tracks, index: 0, catalogState: 'ready' } }); })
       .catch(() => { if (!stop) { d({ type: 'set', patch: { catalogState: 'unavailable' } }); const wait = Math.min(30000, 2000 * 2 ** attempt++); timer = window.setTimeout(load, wait); } }); };
     d({ type: 'set', patch: { catalogState: 'loading' } }); load(); return () => { stop = true; clearTimeout(timer); }; }, [s.station]);
-  useEffect(() => { api.skins().then(({ skins, def }) => { const merged = mergeSkins(skins); const st = stateRef.current; const keep = st.skinId && merged.find(x => x.id === st.skinId); const sk = keep ? merged.find(x => x.id === st.skinId)! : pickSkin(merged, def); d({ type: 'set', patch: { skins: merged, defaultSkin: def, skinId: sk ? sk.id : null, ambience: sk && sk.ambience && !keep ? { ...sk.ambience } : st.ambience } }); }).catch(() => { const sk = pickSkin(stateRef.current.skins, null); if (sk && !stateRef.current.skinId) d({ type: 'set', patch: { skinId: sk.id, ambience: { ...(sk.ambience || {}) } } }); }); }, []);
+  useEffect(() => { api.skins().then(({ skins, def }) => { const merged = mergeSkins(skins); const st = stateRef.current; const keep = st.skinId && merged.find(x => x.id === st.skinId); const sk = keep ? merged.find(x => x.id === st.skinId)! : pickSkin(merged, def); d({ type: 'set', patch: { skins: merged, defaultSkin: def, skinId: sk ? sk.id : null } }); }).catch(() => { const sk = pickSkin(stateRef.current.skins, null); if (sk && !stateRef.current.skinId) d({ type: 'set', patch: { skinId: sk.id } }); }); }, []);
   useEffect(() => { const id = setInterval(() => { if (stateRef.current.timeAuto) { const t = autoTime(); if (t !== stateRef.current.time) d({ type: 'time', time: 'auto' }); } }, 60000); return () => clearInterval(id); }, []);
   useEffect(() => { if ('mediaSession' in navigator) { navigator.mediaSession.setActionHandler('play', () => play()); navigator.mediaSession.setActionHandler('pause', () => pause()); navigator.mediaSession.setActionHandler('nexttrack', () => d({ type: 'track-step', dir: 1 })); navigator.mediaSession.setActionHandler('previoustrack', () => d({ type: 'track-step', dir: -1 })); } // eslint-disable-next-line
   }, []);

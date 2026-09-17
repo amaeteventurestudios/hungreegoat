@@ -29,7 +29,7 @@ input[type=range]{accent-color:var(--accent)}
 .wrap{position:absolute;top:0;left:0;width:100%;z-index:10;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 18px;background:linear-gradient(180deg,rgba(3,6,12,.75),transparent)}
 .brand{display:flex;align-items:center;gap:12px;color:#fff;text-decoration:none}.brand img{width:88px;height:88px;object-fit:contain;filter:drop-shadow(0 4px 14px rgba(0,0,0,.7));animation:breathe 6s ease-in-out infinite}
 @keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
-.brand b{display:block;font:800 17px/1.25 var(--display);letter-spacing:.05em;color:$gold3;text-shadow:0 2px 10px rgba(0,0,0,.85);white-space:nowrap}
+.ptitle{font:800 17px/1.25 var(--display);letter-spacing:.05em;color:$gold3;text-shadow:0 2px 10px rgba(0,0,0,.85);white-space:nowrap;pointer-events:none}
 .dot{width:8px;height:8px;border-radius:50%;background:#7386a0;display:inline-block}.dot.live{background:$green;box-shadow:0 0 10px $green;animation:pulse 1.6s infinite}@keyframes pulse{50%{opacity:.4}}
 .nav-menu{display:flex;align-items:center;gap:6px}
 .nav-menu a,.nav-menu button{display:inline-flex;align-items:center;gap:6px;color:#fff;text-decoration:none;font-size:13px;font-weight:600;letter-spacing:.04em;padding:0 12px;height:38px;border-radius:12px;background:rgba(7,13,24,.55);border:1px solid $line;backdrop-filter:blur(8px)}
@@ -39,6 +39,7 @@ input[type=range]{accent-color:var(--accent)}
 
 /* ---------- modifier board (original) ---------- */
 .modifier{position:absolute;right:16px;top:45%;transform:translateY(-50%);width:60px;background:rgba(7,13,24,.85);z-index:11;border-radius:34px;padding:8px;display:flex;flex-direction:column;align-items:center;gap:4px;border:1px solid $line;backdrop-filter:blur(10px);transition:border-radius .1s}
+.modifier-scrim{position:fixed;inset:0;z-index:10;background:transparent;cursor:default}
 .modifier.scenes{border-radius:0 34px 34px 34px}.modifier.mood{border-radius:0 34px 34px 34px}.modifier.focus{border-radius:34px 34px 34px 0}
 .hint2{display:block;font:500 10.5px var(--sans);color:$muted;text-transform:none;letter-spacing:0;margin-top:2px}
 .modifier__icon{position:relative;padding:8px 0;border-top:1px solid rgba(128,168,214,.15)}.modifier__icon:first-child{border:0}
@@ -82,7 +83,8 @@ input[type=range]{accent-color:var(--accent)}
 /* ---------- sheets (library / up next / credits) ---------- */
 .sheet{position:absolute;left:50%;bottom:118px;transform:translateX(-50%);width:min(560px,calc(100vw - 24px));max-height:calc(100vh - 220px);overflow:auto;z-index:12;background:rgba(7,13,24,.94);border:1px solid $line;border-radius:20px;padding:14px 16px;backdrop-filter:blur(14px);box-shadow:0 20px 60px rgba(0,0,0,.6)}
 .sheet.small{width:min(440px,calc(100vw - 24px))}.sheet p{margin:0 0 10px;font-size:13.5px;line-height:1.5}.sheet a{color:$cyan}
-.sheet-h{display:flex;align-items:center;gap:10px;margin-bottom:8px}.sheet-h h4{margin:0;font:800 15px var(--display);flex:1}.sheet-h span{color:$muted;font-size:12px}.sheet .x{width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.08)}
+.sheet-h{display:flex;align-items:center;gap:10px;margin-bottom:8px}.sheet-h h4{margin:0;font:800 15px var(--display);flex:1}.sheet-h span{color:$muted;font-size:12px}.sheet .x,.modifierBox .x{width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.08);flex:none}
+.modifierBox .modifierBox-h{display:flex;align-items:flex-start;gap:10px}.modifierBox .modifierBox-h>div{flex:1;min-width:0}
 .sheet .stations{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap}.sheet .stations button{display:inline-flex;align-items:center;gap:6px;padding:0 12px;height:32px;border-radius:999px;background:#14141d;color:$muted;font-weight:700;font-size:12.5px}.sheet .stations button.on{background:var(--accent);color:#1a1200}.sheet .stations button:disabled{opacity:.5}.sheet .stations button.live-back{background:var(--accent);color:#1a1200;margin-right:auto}
 .sheet .browse-catalog{width:100%;height:40px;margin-top:12px;border-radius:12px;background:var(--accent);color:#1a1200;font-weight:800}
 .sheet .search{width:100%;height:38px;border-radius:10px;border:1px solid $line;background:#14141d;color:#fff;padding:0 12px;margin-bottom:8px}
@@ -104,7 +106,14 @@ input[type=range]{accent-color:var(--accent)}
 /* ---------- responsive ---------- */
 @media (max-width:1024px){.fullscreen-btn{display:none}.nav-menu .home span{display:none}.nav-menu .yt-full{display:none}}
 @media (max-width:767px){
-  .wrap{padding:10px 12px;flex-wrap:wrap}.brand img{width:60px;height:60px}.brand b{font-size:13px}.nav-menu{margin-left:auto}.nav-menu .home{display:none}.nav-menu a,.nav-menu button{height:36px;padding:0 10px;font-size:12px}
+  /* Two real rows instead of one flex line: logo and controls stay on row 1 (naturally
+     asymmetric widths - the YouTube+Time buttons are wider than the logo), and the title gets
+     its own full-width row 2 so centering it is exact instead of centered-within-whatever-
+     space-was-left-over between two unequal siblings. */
+  .wrap{padding:10px 12px 8px;display:grid;grid-template-columns:auto 1fr auto;grid-template-areas:"brand . nav" "title title title";row-gap:4px;align-items:center;gap:8px}
+  .brand{grid-area:brand}.brand img{width:44px;height:44px}
+  .ptitle{grid-area:title;text-align:center;font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .nav-menu{grid-area:nav;justify-self:end}.nav-menu .home{display:none}.nav-menu a,.nav-menu button{height:36px;padding:0 10px;font-size:12px}
   /* backdrop-filter on an ancestor creates its own containing block for fixed-position
      descendants (Chrome/Safari) — without dropping it here, .modifierBox's left/right
      insets below resolve against this 52px pill instead of the viewport and the panel
