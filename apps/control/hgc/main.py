@@ -1160,11 +1160,16 @@ def alerts(state: str = "active", limit: int = 200, user: str = Depends(current_
 # otherwise swallow "bulk" and fail int-parsing it (the bug behind the old "bulk" 422s).
 @app.post("/api/alerts/bulk/{act}")
 def alerts_bulk(act: str, user: str = Depends(current_user)):
-    if act not in ("read-all", "clear-resolved", "clear-all"):
+    if act not in ("read-all", "clear-read", "clear-resolved", "clear-all"):
         raise HTTPException(400, "unknown bulk action")
     with db.tx() as c:
         if act == "read-all":
             n = c.execute("UPDATE alerts SET read=1 WHERE state IN ('open','acknowledged')").rowcount
+        elif act == "clear-read":
+            # Only already-read active alerts. Never touches resolved rows (those go through
+            # clear-resolved) and never marks anything resolved — straight to cleared, same as
+            # every other clear action here.
+            n = c.execute("UPDATE alerts SET state='cleared' WHERE state IN ('open','acknowledged') AND read=1").rowcount
         elif act == "clear-resolved":
             n = c.execute("UPDATE alerts SET state='cleared' WHERE state='resolved'").rowcount
         else:

@@ -222,13 +222,30 @@ def store_asset(skin_id: str, kind: str, filename: str, data: bytes, time_key: s
                 raise KeyError(skin_id)
             row = {"id": skin_id, "created_at": time.time(), "enabled": True}
             d["skins"].append(row)
+        old = (row.get("time_variants") or {}).get(time_key, {}).get(kind)
         variants = dict(row.get("time_variants") or {})
         variants[time_key] = {**variants.get(time_key, {}), kind: name}
         row["time_variants"] = variants
         row["time_mode"] = "variants"
         save(d)
+        if old and old != name:
+            (SKINS_DIR / old).unlink(missing_ok=True)
     else:
+        cur = next((s for s in load()["skins"] if s["id"] == skin_id), {})
+        other_key = "image" if kind == "video" else "video" if kind == "image" else None
+        # A new video/image replaces the previous main visual outright (the two are mutually
+        # exclusive), and any replaced file — main visual or thumbnail — must not linger as an
+        # orphan on disk once nothing in the manifest points to it.
+        stale = [f for f in (cur.get(kind), cur.get(other_key) if other_key else None) if f and f != name]
         upsert({kind: name}, skin_id)
+        if other_key and cur.get(other_key):
+            d = load()
+            row = next((s for s in d["skins"] if s["id"] == skin_id), None)
+            if row is not None:
+                row[other_key] = None
+                save(d)
+        for f in stale:
+            (SKINS_DIR / f).unlink(missing_ok=True)
     return name
 
 
