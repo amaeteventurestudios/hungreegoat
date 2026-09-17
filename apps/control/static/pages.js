@@ -25,7 +25,7 @@ function svcButtons(svcInfo, {svcKind, startAct, stopAct, restartAct, startDisab
     `<button class="btn sm" ${attrs('restart')} ${!running||busy?'disabled':''} title="${!running&&!busy?'Only meaningful while running':''}">${I.restart} Restart${sfx}</button>`+
     (failed?`<span class="pill err" style="margin-left:4px">SERVICE ERROR</span>`:'');
 }
-function modal(html){ state.modal={html}; render(); }
+function modal(html, opts={}){ state.modal={html, wide:opts.wide}; render(); }
 const closeModal = () => { state.modal=null; render(); };
 Object.assign(ACTIONS, { 'close-modal': closeModal });
 
@@ -265,7 +265,7 @@ Object.assign(ACTIONS, {
   'bulk-queue': async()=>{ for(const id of state.sel) await post(`${P()}/queue`,{track_id:id}).catch(()=>{}); toast(`${state.sel.size} tracks queued`,'ok'); state.sel=new Set(); refresh(true); },
   'bulk-enable': async(el)=>{ for(const id of state.sel) await patch(`/api/library/${id}`,{enabled:el.dataset.v==='1'}).catch(()=>{}); toast('Updated','ok'); state.sel=new Set(); delete state.pageData.library; refresh(true); },
   'bulk-art': async(el)=>{ let n=0; for(const id of state.sel){ const r=await post(`/api/library/${id}/artwork/${el.dataset.mode}`).catch(()=>null); if(r&&r.artwork_source!=='default') n++; } toast(`${n} covers matched`,'ok'); state.sel=new Set(); delete state.pageData.library; refresh(true); },
-  'bulk-playlist': async()=>{ const pls=await api(`${P()}/playlists`); modal(()=>`<h3>${I.list} Add ${state.sel.size} tracks to playlist<button class="btn xs ghost icon x" data-act="close-modal">${I.x}</button></h3><div class="list">${pls.filter(p=>p.slug!=='all').map(p=>`<button class="row" data-act="bulk-playlist-go" data-id="${p.id}" style="border:0;background:none;text-align:left;width:100%"><span class="ph tile"></span><div class="tt"><b>${h(p.name)}</b><span>${p.track_count} tracks</span></div>${I.chev}</button>`).join('')}</div>`); },
+  'bulk-playlist': async()=>{ const pls=await api(`${P()}/playlists`); modal(()=>`<h3>${I.list} Add ${state.sel.size} tracks to playlist<button class="btn xs ghost icon x" data-act="close-modal">${I.x}</button></h3><div class="list">${pls.filter(p=>p.slug!=='all').map(p=>`<button class="row" data-act="bulk-playlist-go" data-id="${p.id}" style="border:0;background:none;text-align:left;width:100%"><span style="width:36px;height:36px;border-radius:8px;background:linear-gradient(135deg,#1f3b5c,#0c1a2e);display:grid;place-items:center;color:var(--blue2);flex:none">${ic(I.list)}</span><div class="tt"><b>${h(p.name)}</b><span>${p.track_count} tracks</span></div>${ic(I.chev)}</button>`).join('')}</div>`); },
   'bulk-playlist-go': async(el)=>{ const r=await act(()=>post(`${P()}/playlists/${el.dataset.id}/tracks`,{track_ids:[...state.sel]}),'Added to playlist'); if(r){ state.sel=new Set(); closeModal(); } },
 });
 Object.assign(CHANGES, {
@@ -291,18 +291,94 @@ pages.playlists = { async load(){ const pls=await api(`${P()}/playlists`); const
       ${cur.description?`<div class="small muted">${h(cur.description)}${cur.slug==='all'?' — follows the library automatically.':''}</div>`:''}
       <div style="display:flex;flex-direction:column;max-height:65vh;overflow:auto">${list.length?list.map((t,i)=>trackRow({...t, idx:i}, {remove: cur.slug!=='all'})).join(''):empty(kindIcon[cur.kind]||I.list, cur.kind==='jingles'?'No jingles yet':cur.kind==='station_ids'?'No station IDs yet':'This playlist is empty', ['jingles','station_ids'].includes(cur.kind)?'Upload short idents to enable scheduled inserts between songs.':'Add tracks from the library to build this playlist.', ['jingles','station_ids'].includes(cur.kind)?`<button class="btn sm gold" data-act="upload-open">${I.upload} Upload</button>`:`<button class="btn sm gold" data-act="pl-add-open">${I.plus} Add tracks</button>`)}</div></div>
     <div class="panel-f small muted">${list.length} tracks shown · ${fmtLong(list.reduce((a,t)=>a+(t.duration||0),0))}${cur.mode==='sequential'?' · order = playlist position':''}</div></div>`; } };
+/* Add Tracks modal — browses the real Library immediately (no search required first) and a
+   From Playlist tab that imports membership references from another playlist (never copies
+   files, never duplicates Library rows — playlist_add's INSERT OR IGNORE already makes
+   re-adding an existing member a safe no-op, so "eligible" here is a UI/reporting concern,
+   not a correctness one). */
+const PL_ADD = { active:false, tab:'library', q:'', readyOnly:false, libTracks:[], loading:true,
+  selected:new Set(), srcPlaylistId:null, srcTracks:[], srcLoading:false, srcSelected:new Set() };
+function plAddHave(){ return new Set((state.pageData.playlists.tracks||[]).map(t=>t.id)); }
+function plAddFilteredLib(){ const have=plAddHave(); const q=PL_ADD.q.trim().toLowerCase();
+  return PL_ADD.libTracks.filter(t=>{ if(PL_ADD.readyOnly && !t.dj_bpm) return false;
+    if(!q) return true;
+    return `${t.title} ${t.artist||''} ${t.dj_key||''} ${t.dj_bpm||''} ${t.genre||''}`.toLowerCase().includes(q);
+  }).map(t=>({...t, _already:have.has(t.id)})); }
+function plAddRow(t, changeKey, selSet){ const already=t._already;
+  return `<div class="row" data-key="pr-${t.id}">
+    <input type="checkbox" ${already?'disabled':''} ${!already && selSet.has(t.id)?'checked':''} data-change="${changeKey}" data-id="${t.id}" aria-label="select ${h(t.title)}">
+    <img class="th" src="${artUrl(t)}" loading="lazy" alt="">
+    <div class="tt"><b>${h(t.title)}</b><span>${h(t.artist||'')}</span></div>
+    <span class="small muted hide-m" style="width:110px;flex:none">${t.dj_bpm?Math.round(t.dj_bpm)+' BPM':'<span class="muted2">not analyzed</span>'}${t.dj_bpm&&t.dj_key?' · ':''}${t.dj_key?h(t.dj_key):''}</span>
+    <span class="dur">${fmtDur(t.duration)}</span>
+    <span class="acts"><button class="btn xs icon ${state.previewing===t.id?'gold':''}" data-act="preview" data-id="${t.id}" data-title="${h(t.title)}" title="Preview">${state.previewing===t.id?I.pause:I.play}</button>${already?pill('slate','Already added'):''}</span></div>`; }
+function plAddModalHtml(){ const cur=state.pageData.playlists.cur;
+  return `<h3>${I.plus} Add tracks to ${h(cur.name)}<button class="btn xs ghost icon x" data-act="close-modal">${I.x}</button></h3>
+  <div class="seg" style="margin-bottom:10px"><button class="${PL_ADD.tab==='library'?'active':''}" data-act="pl-add-tab" data-v="library">Library Tracks</button><button class="${PL_ADD.tab==='playlist'?'active':''}" data-act="pl-add-tab" data-v="playlist">From Playlist</button></div>
+  ${PL_ADD.tab==='library'?plAddLibraryTab():plAddPlaylistTab(cur)}`; }
+function plAddLibraryTab(){
+  if(PL_ADD.loading) return `<div class="small muted" style="padding:20px 0">Loading library…</div>`;
+  const rows=plAddFilteredLib(); const n=PL_ADD.selected.size;
+  return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+    <div class="search" style="flex:1;min-width:160px">${I.search}<input placeholder="Search title, artist, BPM, key…" value="${h(PL_ADD.q)}" data-input="pl-add-q" autofocus></div>
+    <label class="small muted" style="display:flex;gap:6px;align-items:center;white-space:nowrap"><input type="checkbox" ${PL_ADD.readyOnly?'checked':''} data-change="pl-add-ready-only"> DJ ready only</label></div>
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+    <span class="small muted">${rows.length} track${rows.length===1?'':'s'} shown</span>
+    <button class="btn xs" data-act="pl-add-select-all">Select All Visible</button>
+    <button class="btn xs ghost" data-act="pl-add-select-clear">Clear Selection</button>
+    <span style="margin-left:auto" class="small ${n?'gold':'muted'}">${n} track${n===1?'':'s'} selected</span></div>
+  <div class="list" style="max-height:46vh;overflow:auto;border-radius:10px">${rows.length?rows.map(t=>plAddRow(t,'pl-add-chk',PL_ADD.selected)).join(''):empty(I.music,'No matches','Try a different search.')}</div>
+  <div class="row-actions" style="margin-top:12px"><button class="btn" data-act="close-modal">Cancel</button><button class="btn gold" data-act="pl-add-commit-lib" ${n?'':'disabled'}>${I.plus} Add ${n||''} Track${n===1?'':'s'}</button></div>`; }
+function plAddPlaylistTab(cur){ const sources=state.pageData.playlists.pls.filter(p=>p.id!==cur.id);
+  if(!PL_ADD.srcPlaylistId) return `<div class="list" style="max-height:52vh;overflow:auto">${sources.map(p=>`<button class="row" data-act="pl-add-src-select" data-id="${p.id}" style="border:0;background:none;text-align:left;width:100%;cursor:pointer"><span style="width:36px;height:36px;border-radius:8px;background:linear-gradient(135deg,#1f3b5c,#0c1a2e);display:grid;place-items:center;color:var(--blue2);flex:none">${ic(I.list)}</span><div class="tt"><b>${h(p.name)}</b><span>${p.track_count} track${p.track_count===1?'':'s'}</span></div>${ic(I.chev)}</button>`).join('')}</div>`;
+  const src=sources.find(p=>p.id===PL_ADD.srcPlaylistId);
+  if(PL_ADD.srcLoading) return `<div class="small muted" style="padding:20px 0">Loading ${h(src?src.name:'')}…</div>`;
+  const have=plAddHave(); const rows=PL_ADD.srcTracks.map(t=>({...t,_already:have.has(t.id)}));
+  const eligible=rows.filter(t=>!t._already); const n=PL_ADD.srcSelected.size;
+  return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><button class="btn xs ghost" data-act="pl-add-src-back">‹ Back</button><b style="font:800 14px var(--display)">${h(src?src.name:'')}</b><span class="small muted">${rows.length} tracks · ${eligible.length} eligible</span></div>
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+    <button class="btn xs" data-act="pl-add-src-select-all">Select All Eligible</button>
+    <button class="btn xs ghost" data-act="pl-add-src-select-clear">Clear Selection</button>
+    <span style="margin-left:auto" class="small ${n?'gold':'muted'}">${n} track${n===1?'':'s'} selected</span></div>
+  <div class="list" style="max-height:42vh;overflow:auto;border-radius:10px">${rows.length?rows.map(t=>plAddRow(t,'pl-add-src-chk',PL_ADD.srcSelected)).join(''):empty(I.music,'Empty playlist','This playlist has no tracks yet.')}</div>
+  <div class="row-actions" style="margin-top:12px"><button class="btn" data-act="close-modal">Cancel</button><button class="btn" data-act="pl-add-src-all-eligible" ${eligible.length?'':'disabled'}>${I.plus} Add All Eligible (${eligible.length})</button><button class="btn gold" data-act="pl-add-commit-src" ${n?'':'disabled'}>${I.plus} Add ${n||''} Track${n===1?'':'s'}</button></div>`; }
 function plModal(p){ p=p||{name:'',description:'',mode:'shuffle',kind:'music',enabled:1}; return `<h3>${I.list} ${p.id?'Edit':'New'} playlist<button class="btn xs ghost icon x" data-act="close-modal">${I.x}</button></h3><form data-form="playlist" data-id="${p.id||''}" class="form"><label>Name<input class="inp" name="name" value="${h(p.name)}" required></label><label>Kind<select class="sel" name="kind" ${p.id?'disabled':''}>${['music','jingles','station_ids','fallback'].map(k=>`<option ${p.kind===k?'selected':''}>${k}</option>`).join('')}</select></label><label class="wide">Description<input class="inp" name="description" value="${h(p.description||'')}"></label><label>Mode<select class="sel" name="mode">${['shuffle','sequential','weighted'].map(k=>`<option ${p.mode===k?'selected':''}>${k}</option>`).join('')}</select></label><label>Enabled<select class="sel" name="enabled"><option value="1" ${p.enabled?'selected':''}>Yes</option><option value="0" ${!p.enabled?'selected':''}>No</option></select></label><div class="row-actions"><button type="button" class="btn" data-act="close-modal">Cancel</button><button class="btn gold" type="submit">Save</button></div></form>`; }
 Object.assign(ACTIONS, {
   'pl-select': (el)=>{ state._pl=Number(el.dataset.id); state._plq=''; delete state.pageData.playlists; render(); },
   'pl-new': ()=>modal(()=>plModal(null)), 'pl-edit': (el)=>modal(()=>plModal(state.pageData.playlists.pls.find(p=>p.id===Number(el.dataset.id)))),
   'pl-del': async(el)=>{ if(await confirmDlg('Delete this playlist? Tracks stay in the library.','Delete',true)){ const r=await act(()=>del(`${P()}/playlists/${el.dataset.id}`),'Deleted'); if(r){ state._pl=null; delete state.pageData.playlists; render(); } } },
   'pl-rm': (el)=>act(()=>del(`${P()}/playlists/${state._pl}/tracks/${el.dataset.id}`)).then(()=>{ delete state.pageData.playlists; render(); }),
-  'pl-add-open': ()=>modal(()=>`<h3>${I.plus} Add tracks to ${h(state.pageData.playlists.cur.name)}<button class="btn xs ghost icon x" data-act="close-modal">${I.x}</button></h3><div class="search" style="margin-bottom:8px">${I.search}<input placeholder="Search the library…" data-input="pl-add-search" autofocus></div><div id="pl-add-results" class="list" style="max-height:50vh;overflow:auto"><div class="small muted">Type to search.</div></div>`),
-  'pl-add': async(el)=>{ await act(()=>post(`${P()}/playlists/${state._pl}/tracks`,{track_ids:[Number(el.dataset.id)]}),'Added'); el.disabled=true; el.textContent='Added'; delete state.pageData.playlists; },
+  'pl-add-open': async()=>{ Object.assign(PL_ADD,{active:true,tab:'library',q:'',readyOnly:false,loading:true,selected:new Set(),srcPlaylistId:null,srcTracks:[],srcLoading:false,srcSelected:new Set()});
+    modal(()=>plAddModalHtml(),{wide:true});
+    const d=await api(`/api/library?station=${S()}&per_page=1000`);
+    PL_ADD.libTracks=d.tracks; PL_ADD.loading=false;
+    if(state.modal) modal(()=>plAddModalHtml(),{wide:true}); },
+  'pl-add-tab': (el)=>{ PL_ADD.tab=el.dataset.v; modal(()=>plAddModalHtml(),{wide:true}); },
+  'pl-add-select-all': ()=>{ plAddFilteredLib().forEach(t=>{ if(!t._already) PL_ADD.selected.add(t.id); }); modal(()=>plAddModalHtml(),{wide:true}); },
+  'pl-add-select-clear': ()=>{ PL_ADD.selected=new Set(); modal(()=>plAddModalHtml(),{wide:true}); },
+  'pl-add-commit-lib': async()=>{ const ids=[...PL_ADD.selected]; if(!ids.length) return; PL_ADD.selected=new Set();
+    await act(()=>post(`${P()}/playlists/${state._pl}/tracks`,{track_ids:ids}),`Added ${ids.length} track${ids.length===1?'':'s'}.`); },
+  'pl-add-src-select': async(el)=>{ const pid=Number(el.dataset.id); PL_ADD.srcPlaylistId=pid; PL_ADD.srcLoading=true; PL_ADD.srcSelected=new Set();
+    modal(()=>plAddModalHtml(),{wide:true});
+    PL_ADD.srcTracks=await api(`${P()}/playlists/${pid}/tracks`); PL_ADD.srcLoading=false;
+    if(state.modal) modal(()=>plAddModalHtml(),{wide:true}); },
+  'pl-add-src-back': ()=>{ PL_ADD.srcPlaylistId=null; PL_ADD.srcTracks=[]; PL_ADD.srcSelected=new Set(); modal(()=>plAddModalHtml(),{wide:true}); },
+  'pl-add-src-select-all': ()=>{ const have=plAddHave(); PL_ADD.srcTracks.forEach(t=>{ if(!have.has(t.id)) PL_ADD.srcSelected.add(t.id); }); modal(()=>plAddModalHtml(),{wide:true}); },
+  'pl-add-src-select-clear': ()=>{ PL_ADD.srcSelected=new Set(); modal(()=>plAddModalHtml(),{wide:true}); },
+  'pl-add-src-all-eligible': async()=>{ const have=plAddHave(); const eligible=PL_ADD.srcTracks.filter(t=>!have.has(t.id)).map(t=>t.id); const already=PL_ADD.srcTracks.length-eligible.length;
+    if(!eligible.length){ toast('All tracks in this playlist are already in '+state.pageData.playlists.cur.name+'.'); return; }
+    PL_ADD.srcSelected=new Set();
+    await act(()=>post(`${P()}/playlists/${state._pl}/tracks`,{track_ids:eligible}),
+      `Added ${eligible.length} track${eligible.length===1?'':'s'}.${already?` ${already} ${already===1?'was':'were'} already in ${state.pageData.playlists.cur.name}.`:''}`); },
+  'pl-add-commit-src': async()=>{ const ids=[...PL_ADD.srcSelected]; if(!ids.length) return; PL_ADD.srcSelected=new Set();
+    await act(()=>post(`${P()}/playlists/${state._pl}/tracks`,{track_ids:ids}),`Added ${ids.length} track${ids.length===1?'':'s'}.`); },
 });
 Object.assign(CHANGES, {
   'pl-filter': (el)=>{ state._plq=el.value; clearTimeout(state._plt); state._plt=setTimeout(()=>render(),120); }, 'pl-sort': (el)=>{ state._plSort=el.value; render(); },
-  'pl-add-search': async(el)=>{ clearTimeout(state._pat); state._pat=setTimeout(async()=>{ const d=await api(`/api/library?station=${S()}&q=${encodeURIComponent(el.value)}&per_page=25`); const have=new Set(state.pageData.playlists.tracks.map(t=>t.id)); const box=document.getElementById('pl-add-results'); if(box) box.innerHTML=d.tracks.map(t=>`<div class="row"><img class="th" src="${artUrl(t)}"><div class="tt"><b>${h(t.title)}</b><span>${h(t.album||'')}</span></div><button class="btn xs gold" data-act="pl-add" data-id="${t.id}" ${have.has(t.id)?'disabled':''}>${have.has(t.id)?'In playlist':I.plus+' Add'}</button></div>`).join('')||'<div class="small muted">No matches</div>'; },200); },
+  'pl-add-q': (el)=>{ PL_ADD.q=el.value; clearTimeout(state._pat); state._pat=setTimeout(()=>{ if(state.modal) modal(()=>plAddModalHtml(),{wide:true}); },120); },
+  'pl-add-ready-only': (el)=>{ PL_ADD.readyOnly=el.checked; modal(()=>plAddModalHtml(),{wide:true}); },
+  'pl-add-chk': (el)=>{ const id=Number(el.dataset.id); el.checked?PL_ADD.selected.add(id):PL_ADD.selected.delete(id); modal(()=>plAddModalHtml(),{wide:true}); },
+  'pl-add-src-chk': (el)=>{ const id=Number(el.dataset.id); el.checked?PL_ADD.srcSelected.add(id):PL_ADD.srcSelected.delete(id); modal(()=>plAddModalHtml(),{wide:true}); },
 });
 Object.assign(FORMS, { 'playlist': async(f,b)=>{ b.enabled=b.enabled==='1'; const id=f.dataset.id; const r=await act(()=>id?put(`${P()}/playlists/${id}`,b):post(`${P()}/playlists`,b),'Playlist saved'); if(r){ delete state.pageData.playlists; closeModal(); } } });
 

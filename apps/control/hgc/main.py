@@ -804,7 +804,7 @@ def library(station: str | None = None, q: str = "", page: int = 1, per_page: in
     total = db.q1(f"SELECT COUNT(*) n FROM tracks WHERE {' AND '.join(where)}", tuple(params))["n"]
     rows = db.rows(db.q(f"SELECT id,station,filename,title,artist,album,genre,duration,codec,format,bitrate,sample_rate,"
                         f"channels,size,artwork_source,embedded_artwork,external_artwork,loudness_i,replaygain_db,enabled,corrupt,"
-                        f"play_count,last_played FROM tracks WHERE {' AND '.join(where)} ORDER BY {order} LIMIT ? OFFSET ?",
+                        f"play_count,last_played,dj_bpm,dj_key,dj_energy FROM tracks WHERE {' AND '.join(where)} ORDER BY {order} LIMIT ? OFFSET ?",
                         tuple(params) + (per_page, (page - 1) * per_page)))
     return {"total": total, "page": page, "per_page": per_page, "tracks": rows}
 

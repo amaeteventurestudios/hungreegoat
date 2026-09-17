@@ -147,7 +147,7 @@ function shell(content) {
   ${state.modal ? modalView() : ''}`;
 }
 function modalView(){ const m=state.modal; if(m.kind==='confirm') return `<div class="modal-bg" data-act="modal-bg"><div class="panel modal" style="width:min(440px,100%)"><h3>${m.danger?I.alert:I.info} Confirm</h3><p style="margin:0 0 14px">${h(m.text)}</p><div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn" data-act="confirm-no">Cancel</button><button class="btn ${m.danger?'red':'gold'}" data-act="confirm-yes">${h(m.okLabel)}</button></div></div></div>`;
-  return `<div class="modal-bg" data-act="modal-bg"><div class="panel modal">${m.html()}</div></div>`; }
+  return `<div class="modal-bg" data-act="modal-bg"><div class="panel modal" ${m.wide?'style="width:min(980px,100%)"':''}>${m.html()}</div></div>`; }
 
 /* ---------------- Listen Live player ---------------- */
 const audio = () => document.getElementById('live-audio');
