@@ -31,6 +31,15 @@ input,select,textarea{font:inherit;color:var(--text)}
 img{max-width:100%}
 .small svg,.muted svg,.note svg,.panel-f>span svg,.chip svg,.kv svg,.stat svg{width:14px;height:14px;vertical-align:-3px}
 svg{flex:none}
+/* Every icon in this app is a bare <svg viewBox="0 0 24 24"> with no width/height of its
+   own (see P() in app.js) — it relies entirely on CSS, and an svg with no intrinsic size
+   and no constraint expands to fill its container. This is the one default every icon
+   context falls back to; specific contexts (.card .v .ic svg, .panel-h h3 .ic svg, etc.)
+   already override it with their own size and keep doing so. Without this, any new bare
+   .ic wrapper (or a raw icon dropped straight into markup) silently renders as a
+   room-sized "broken image" glyph instead of a small icon — that exact bug has shown up
+   more than once in modals and .ic spans that predate this rule. */
+.ic svg{width:18px;height:18px}
 
 /* ---------- backdrop ---------- */
 .scene{position:fixed;inset:0;z-index:0;background:radial-gradient(1200px 700px at 70% -10%,rgba(24,60,96,.45),transparent 60%),radial-gradient(900px 600px at 0% 100%,rgba(10,52,60,.5),transparent 60%),linear-gradient(180deg,#081222 0%,#060c18 60%,#050912 100%)}
