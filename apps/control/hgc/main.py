@@ -52,6 +52,10 @@ def _startup() -> None:
     auth.bootstrap()
     from . import skins as _skins_mod
     _skins_mod.ensure_seeded()
+    _skins_mod.purge_stale_drafts()
+    # Runs in the background (an external-URL thumbnail can need a real ffmpeg fetch+decode)
+    # so a cold boot with several un-thumbnailed skins never delays Control coming up.
+    threading.Thread(target=_skins_mod.backfill_missing_thumbnails, daemon=True).start()
     from . import dj as _dj_mod
     _dj_mod.ensure_dirs()
     _dj_mod.ensure_default_profiles()
@@ -1669,10 +1673,17 @@ def skins_create(body: SkinBody, user: str = Depends(current_user)):
     return s
 
 
+@app.post("/api/skins/draft")
+def skins_draft_create(user: str = Depends(current_user)):
+    """Backs the New Skin modal (see skins.create_draft): a real, uploadable-into skin row
+    exists from the moment the modal opens, invisible everywhere else until Save."""
+    return skins_mod.create_draft()
+
+
 @app.put("/api/skins/{skin_id}")
 def skins_update(skin_id: str, body: SkinBody, user: str = Depends(current_user)):
     try:
-        return skins_mod.upsert(body.model_dump(), skin_id)
+        return skins_mod.upsert(body.model_dump(), skin_id, finalize_draft=True)
     except KeyError:
         raise HTTPException(404)
 
@@ -1720,7 +1731,9 @@ async def skins_asset(skin_id: str, kind: str, time_key: str | None = None, file
     except KeyError:
         raise HTTPException(404)
     db.log_event("info", "system", f"Player skin asset uploaded: {skin_id} ({kind}{' '+time_key if time_key else ''})")
-    return {"ok": True, "file": name, "probe": probe}
+    row = skins_mod.get(skin_id) or {}
+    thumb = row.get("thumbnail")
+    return {"ok": True, "file": name, "probe": probe, "thumbnail": f"/v1/skins/assets/{thumb}" if thumb else None}
 
 
 @app.post("/api/skins/{skin_id}/thumbnail/generate")

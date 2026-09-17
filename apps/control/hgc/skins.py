@@ -217,9 +217,13 @@ def _public_entry(s: dict, default_id: str | None) -> dict:
 def public_list(include_disabled: bool = False) -> list[dict]:
     """The authoritative inventory, sorted by operator order: this is exactly what the
     public player and the Control dashboard both read — there is no second, hidden list,
-    and nothing here is exempt from the enabled filter, including former built-ins."""
+    and nothing here is exempt from the enabled filter, including former built-ins. A
+    `draft` row (an in-progress New Skin that hasn't been saved yet — see create_draft) is
+    excluded unconditionally, even from the operator's own `include_disabled` view: it is
+    real storage-backed state so uploads work before Save, but it must never be visible as
+    a finished skin anywhere until the operator actually saves it."""
     d = load()
-    out = [_public_entry(s, d.get("default")) for s in d["skins"]]
+    out = [_public_entry(s, d.get("default")) for s in d["skins"] if not s.get("draft")]
     out.sort(key=lambda x: (x["order"], x["name"]))
     if not include_disabled:
         out = [s for s in out if s["enabled"]]
@@ -230,7 +234,40 @@ def get(skin_id: str) -> dict | None:
     return next((s for s in load()["skins"] if s["id"] == skin_id), None)
 
 
-def upsert(data: dict, skin_id: str | None = None) -> dict:
+def create_draft() -> dict:
+    """Backs the New Skin modal: a real row exists from the moment the modal opens, so
+    Upload Video/Image/Thumbnail work immediately — no more 'save first, come back later'.
+    Invisible everywhere else (see public_list) until upsert() clears `draft`. Cancel
+    deletes it outright (see delete(), which already cleans up any uploaded assets); an
+    abandoned one is swept up by purge_stale_drafts()."""
+    d = load()
+    base = "draft"; sid = base; n = 2
+    while any(s["id"] == sid for s in d["skins"]):
+        sid = f"{base}-{n}"; n += 1
+    cur = {"id": sid, "created_at": time.time(), "enabled": True, "source": "custom",
+           "order": len(d["skins"]), "draft": True, "name": "", "description": "",
+           "accent": "#f2c14e", "ambience": {}, "time_mode": "always"}
+    d["skins"].append(cur)
+    save(d)
+    return cur
+
+
+def purge_stale_drafts(max_age_sec: float = 6 * 3600) -> int:
+    """A draft the operator opened, uploaded into, then just closed the browser tab on
+    (no explicit Cancel) would otherwise sit in the manifest forever with orphaned files
+    on disk. Run at every Control startup and safe to call any time."""
+    d = load()
+    now = time.time()
+    stale = [s["id"] for s in d["skins"] if s.get("draft") and now - s.get("created_at", now) > max_age_sec]
+    for sid in stale:
+        try:
+            delete(sid)
+        except KeyError:
+            pass
+    return len(stale)
+
+
+def upsert(data: dict, skin_id: str | None = None, finalize_draft: bool = False) -> dict:
     d = load()
     if skin_id:
         cur = next((s for s in d["skins"] if s["id"] == skin_id), None)
@@ -255,6 +292,28 @@ def upsert(data: dict, skin_id: str | None = None) -> dict:
         cur["time_variants"] = {t: v for t, v in cur["time_variants"].items() if t in TIMES and isinstance(v, dict)}
     if cur.get("broadcast_eligible") and not _is_managed(cur.get("video")):
         cur["broadcast_eligible"] = False   # can't broadcast a video this box can't read as a local file
+    if cur.get("draft") and finalize_draft:
+        # Only the explicit Save flow (main.py's skins_update passes finalize_draft=True)
+        # turns a draft into a real skin. An *incidental* upsert() made along the way —
+        # store_asset()'s own auto-thumbnail-generation calling generate_thumbnail(), which
+        # itself calls upsert() just to record the new thumbnail filename — must NOT finalize
+        # it; earlier this finalized (and renamed off "draft") the instant an image was
+        # uploaded, before the operator had even typed a name. The draft's id was a
+        # placeholder ("draft"/"draft-2"/...) since the real name didn't exist yet when
+        # uploads needed somewhere to attach to — give it the proper name-derived id now,
+        # same as a skin created the old way always got. Uploaded asset filenames keep their
+        # old draft-prefixed names (renaming files on disk for a cosmetic id change isn't
+        # worth the risk) — nothing reads a filename expecting it to match its skin's current
+        # id, only the manifest's own field pointing at it.
+        cur["draft"] = False
+        base = slug(cur.get("name", "skin")); new_id = base; n = 2
+        while any(s["id"] == new_id for s in d["skins"] if s is not cur):
+            new_id = f"{base}-{n}"; n += 1
+        if new_id != cur["id"]:
+            old_id = cur["id"]
+            cur["id"] = new_id
+            if d.get("default") == old_id:
+                d["default"] = new_id
     save(d)
     return cur
 
@@ -396,6 +455,15 @@ def store_asset(skin_id: str, kind: str, filename: str, data: bytes, time_key: s
                 save(d)
         for f in stale:
             (SKINS_DIR / f).unlink(missing_ok=True)
+        # A skin must never be left with a main visual and no thumbnail — a video with no
+        # poster renders as a misleading black card at rest (preload="metadata" paints
+        # nothing until playback starts). Only fills a genuinely empty slot; an operator's
+        # own already-set thumbnail (custom or previously generated) is never replaced here.
+        if kind in ("video", "image") and not (get(skin_id) or {}).get("thumbnail"):
+            try:
+                generate_thumbnail(skin_id, name)
+            except Exception:
+                pass
     return name
 
 
@@ -436,23 +504,52 @@ def probe_asset(name: str) -> dict:
 
 def generate_thumbnail(skin_id: str, source_name: str) -> str:
     """Still-frame (video) or resized copy (image) used as the thumbnail, matching the
-    'Generate from visual' action in the skin editor."""
-    p = SKINS_DIR / source_name
-    if not p.is_file():
+    'Generate from visual' action in the skin editor. `source_name` may be a managed
+    filename under SKINS_DIR OR a full external URL (e.g. a built-in scene's bundled
+    footage hosted on player.hungreegoat.com) — ffmpeg reads a remote https:// input the
+    same way it reads a local path, so external visuals get a real generated thumbnail
+    too instead of being permanently stuck with none."""
+    external = source_name.startswith("http://") or source_name.startswith("https://")
+    src = source_name if external else str(SKINS_DIR / source_name)
+    if not external and not (SKINS_DIR / source_name).is_file():
         raise KeyError(source_name)
+    ext = Path(source_name.split("?")[0]).suffix.lower()
     out_name = f"{skin_id}-thumbnail-{int(time.time())}.webp"
     out = SKINS_DIR / out_name
-    if p.suffix.lower() in VIDEO_EXTS:
+    if ext in VIDEO_EXTS or (external and ext not in IMAGE_EXTS):
         import subprocess
-        r = subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(p), "-frames:v", "1", "-vf", "scale=640:-1", str(out)],
-                            capture_output=True, timeout=30)
+        r = subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", src, "-frames:v", "1", "-vf", "scale=640:-1", str(out)],
+                            capture_output=True, timeout=60)
         if r.returncode != 0 or not out.exists():
             raise RuntimeError("could not extract a still frame from this video")
     else:
         from PIL import Image
-        im = Image.open(p).convert("RGB"); im.thumbnail((640, 640)); im.save(out, "WEBP", quality=80)
+        im = Image.open(SKINS_DIR / source_name).convert("RGB"); im.thumbnail((640, 640)); im.save(out, "WEBP", quality=80)
     old = (get(skin_id) or {}).get("thumbnail")
     upsert({"thumbnail": out_name}, skin_id)
     if old and old != out_name and _is_managed(old):
         (SKINS_DIR / old).unlink(missing_ok=True)
     return out_name
+
+
+def backfill_missing_thumbnails() -> int:
+    """Startup migration: any skin with a main visual (video or image, managed or an
+    external URL) but no thumbnail gets one generated automatically. This is the general
+    fix for the black-card bug class — a video/image skin should never be able to end up
+    with no thumbnail, whether it arrived via the seed data (the original loop adoption
+    never generated one), an old upload path, or manual manifest editing. Safe to run on
+    every startup: a skin that already has a thumbnail is left untouched."""
+    d = load()
+    n = 0
+    for s in d["skins"]:
+        if s.get("thumbnail"):
+            continue
+        source = s.get("video") or s.get("image")
+        if not source:
+            continue
+        try:
+            generate_thumbnail(s["id"], source)
+            n += 1
+        except Exception:
+            pass
+    return n
