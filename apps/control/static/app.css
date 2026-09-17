@@ -171,7 +171,7 @@ h3 .help{margin-left:6px}
 .sel,.inp,textarea.inp{background:rgba(8,14,26,.9);border:1px solid var(--line2);border-radius:10px;padding:0 10px;height:38px;color:var(--text);outline:0;max-width:100%}
 textarea.inp{height:auto;padding:8px 10px;min-height:70px}.sel:focus,.inp:focus{border-color:var(--blue)}.sel option{background:#0d1a2b}
 .form{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
-.form label{display:flex;flex-direction:column;gap:5px;font-size:11.5px;color:var(--muted);font-weight:600;min-width:0}.form .wide{grid-column:1/-1}.form .inp,.form .sel{width:100%}
+.form label{display:flex;flex-direction:column;gap:5px;font-size:11.5px;color:var(--muted);font-weight:600;min-width:0}.form .wide{grid-column:1/-1;min-width:0}.form .inp,.form .sel{width:100%}
 .form .row-actions{grid-column:1/-1;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
 .days{display:flex;gap:4px;flex-wrap:wrap}.days button{height:34px;padding:0 10px;border-radius:8px;border:1px solid var(--line);background:rgba(8,14,26,.7);color:var(--muted);font-size:11.5px;font-weight:700}.days button.on{background:rgba(242,193,78,.16);color:var(--gold3);border-color:var(--line-gold)}
 
