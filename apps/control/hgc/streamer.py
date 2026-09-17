@@ -1,6 +1,10 @@
 """Stream supervisor: runs one FFmpeg video pipeline for a station.
 
-  looping 720p animation (hardware decode)
+  background visual, looping (see BgFeeder — a small helper FFmpeg decodes+loops
+    whichever clip Broadcast Visuals says is current, this process relays its raw
+    frames into a FIFO the main FFmpeg reads as input 0; swapping the background for
+    a new song only restarts the small helper, never the main process or the RTMPS
+    connection)
   + overlay band (yuva420p frames piped from this process, updated on track change)
   + Liquidsoap AAC audio from the local harbor (stream-copied, no re-encode)
   → H.264 (hardware h264_v4l2m2m) + AAC → RTMPS (YouTube) | local FLV file | null
@@ -23,6 +27,156 @@ from . import config, overlay
 
 W, H = config.OVERLAY_W, config.OVERLAY_H
 FRAME_BYTES = W * H * 3 // 2 + W * H  # yuva420p: Y + U/4 + V/4 + A
+BG_FRAME_BYTES = config.VIDEO_W * config.VIDEO_H * 3 // 2  # yuv420p, no alpha
+
+
+def _write_all(fd: int, data: bytes) -> None:
+    """os.write() on a pipe/FIFO is not guaranteed to write the whole buffer in one call
+    — for anything bigger than the kernel pipe buffer (a background frame is ~1.3 MB;
+    the default pipe buffer is 64 KB) it can do a short write and silently return however
+    many bytes it actually accepted, leaving the rest for the caller to retry. Ignoring
+    that (as an early version of this code did) desyncs the raw-video byte stream after
+    the first oversized write — every frame boundary after that is wrong. Found this by
+    running the exact same background-swap test twice and getting a correct video once
+    and a stalled/corrupt one the next time; a short write explains the inconsistency
+    (kernel pipe buffer state is timing-dependent) that a version-number bug wouldn't."""
+    mv = memoryview(data)
+    while mv:
+        n = os.write(fd, mv)
+        mv = mv[n:]
+
+
+class BgFeeder:
+    """Owns the background-visual FIFO for one station: relays raw video frames from a
+    small, freely-restartable helper FFmpeg (decoding+looping whichever clip is
+    currently selected) into a FIFO the main FFmpeg process reads as a plain rawvideo
+    input. The FIFO's write end is opened once and held open for the whole lifetime of
+    the main FFmpeg process — only the helper is ever killed/respawned, so the main
+    process's input never sees EOF and the RTMPS connection is never touched by a
+    background-visual change.
+
+    Track-change detection (see hgc/broadcast.py::advance_if_track_changed) is polled
+    at most once a second — no per-frame DB/JSON work."""
+
+    def __init__(self, sid: str, log_path: Path):
+        self.sid = sid
+        self.log_path = log_path
+        self.stop_flag = False
+        self._helper: subprocess.Popen | None = None
+        self._helper_path: Path | None = None
+        self._last_frame: bytes | None = None
+        self._consecutive_failures = 0
+
+    def fifo_path(self) -> Path:
+        return config.RUN_DIR / f"bg-{self.sid}.fifo"
+
+    def ensure_fifo(self) -> None:
+        config.RUN_DIR.mkdir(parents=True, exist_ok=True)
+        p = self.fifo_path()
+        if not p.exists():
+            os.mkfifo(str(p))
+
+    def _spawn_helper(self, path: Path) -> subprocess.Popen:
+        cmd = [
+            "ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "warning", "-nostats",
+            "-re", "-stream_loop", "-1", "-i", str(path),
+            "-vf", f"scale={config.VIDEO_W}:{config.VIDEO_H}:force_original_aspect_ratio=increase,"
+                   f"crop={config.VIDEO_W}:{config.VIDEO_H},fps={config.VIDEO_FPS}",
+            "-f", "rawvideo", "-pix_fmt", "yuv420p", "pipe:1",
+        ]
+        return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=0)
+
+    def _kill_helper(self, proc: subprocess.Popen) -> None:
+        try:
+            proc.kill()
+            proc.wait(timeout=3)
+        except Exception:
+            pass
+
+    def _log(self, msg: str) -> None:
+        try:
+            with open(self.log_path, "ab") as lf:
+                lf.write(f"[bg] {msg}\n".encode())
+        except OSError:
+            pass
+
+    def run(self, is_alive) -> None:
+        """is_alive: callable, True while the owning main FFmpeg process is still the
+        current one — this thread exits as soon as it isn't, same contract as the
+        overlay feeder.
+
+        Never blocks waiting on the helper: a freshly (re)spawned FFmpeg needs real wall
+        time to start producing frames (codec probe, decode warmup — tens to a couple
+        hundred ms), and blocking on its first read for that long, every single time the
+        background changes, would stall the FIFO and make the whole pipeline fall behind
+        real time. Proven by a stress test that forced a switch every ~1s (vastly more
+        often than a real track change) and made the encode run at roughly half speed
+        until fixed. Real usage switches once per song — minutes apart — so this only
+        ever matters as a safety margin, not a normal-path optimization."""
+        import select
+        from . import broadcast
+        fifo_fd = os.open(str(self.fifo_path()), os.O_WRONLY)  # blocks until FFmpeg opens it to read
+        last_check = 0.0
+        current_path: Path | None = None
+        partial = b""
+        try:
+            while not self.stop_flag and is_alive():
+                now = time.time()
+                if now - last_check > 1.0:
+                    last_check = now
+                    try:
+                        path, _visual = broadcast.advance_if_track_changed(self.sid)
+                    except Exception as e:
+                        path = None
+                        self._log(f"broadcast selection error: {e}")
+                    if path and path != current_path:
+                        old = self._helper
+                        self._helper = self._spawn_helper(path)
+                        current_path = path
+                        partial = b""
+                        self._consecutive_failures = 0
+                        if old:
+                            threading.Thread(target=self._kill_helper, args=(old,), daemon=True).start()
+
+                if self._helper is None or self._helper.poll() is not None:
+                    if self._helper is not None:
+                        self._consecutive_failures += 1
+                        self._log(f"background helper exited unexpectedly (failure #{self._consecutive_failures}) for {current_path}")
+                    fallback = current_path if self._consecutive_failures < 3 else (
+                        config.LOOP_720 if config.LOOP_720.exists() else config.LOOP_SOURCE)
+                    self._helper = self._spawn_helper(fallback) if fallback else None
+                    current_path = fallback
+                    partial = b""
+                    if self._last_frame:
+                        _write_all(fifo_fd, self._last_frame)
+                    time.sleep(0.03)
+                    continue
+
+                ready, _, _ = select.select([self._helper.stdout], [], [], 0.05)
+                if ready:
+                    chunk = self._helper.stdout.read(BG_FRAME_BYTES - len(partial))
+                    if not chunk:
+                        self._kill_helper(self._helper)
+                        self._helper = None
+                        continue
+                    partial += chunk
+                    if len(partial) < BG_FRAME_BYTES:
+                        continue   # still assembling this frame — not a failure, just early
+                    self._last_frame = partial
+                    partial = b""
+                    self._consecutive_failures = 0
+                    _write_all(fifo_fd, self._last_frame)
+                elif self._last_frame:
+                    _write_all(fifo_fd, self._last_frame)
+        except (BrokenPipeError, OSError) as e:
+            self._log(f"feeder stopped: {e}")
+        finally:
+            if self._helper:
+                self._kill_helper(self._helper)
+            try:
+                os.close(fifo_fd)
+            except OSError:
+                pass
 
 
 def read_env_file(p: Path) -> dict:
@@ -73,15 +227,16 @@ class Streamer:
             return "local", ["-fs", "300M", "-f", "flv", str(out)], info
         return "none", ["-f", "null", "-"], info
 
-    def ffmpeg_cmd(self, out_args: list[str]) -> list[str]:
+    def ffmpeg_cmd(self, out_args: list[str], bg_fifo: Path) -> list[str]:
         vb = self.st["video_bitrate_k"]
-        loop = config.LOOP_720 if config.LOOP_720.exists() else config.LOOP_SOURCE
         audio_url = f"http://127.0.0.1:{self.st['harbor_port']}/{self.sid}.aac"
         return [
             "ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "warning", "-nostats",
             "-progress", "pipe:1",
-            # video loop (hardware decode)
-            "-c:v", "h264_v4l2m2m", "-re", "-stream_loop", "-1", "-i", str(loop),
+            # background visual — raw frames relayed from BgFeeder (see module docstring);
+            # a full song's worth of the same clip, looping, until the next track change
+            "-f", "rawvideo", "-pix_fmt", "yuv420p", "-s", f"{config.VIDEO_W}x{config.VIDEO_H}",
+            "-framerate", str(config.VIDEO_FPS), "-thread_queue_size", "64", "-i", str(bg_fifo),
             # overlay frames from stdin (this process)
             "-f", "rawvideo", "-pix_fmt", "yuva420p", "-s", f"{W}x{H}", "-framerate", str(config.VIDEO_FPS),
             "-thread_queue_size", "64", "-i", "pipe:0",
@@ -231,12 +386,15 @@ class Streamer:
             except OSError as e:
                 self.state.update(state="waiting", last_error=f"media drive: {e}", started_at=None)
                 self.write_status(); time.sleep(15); continue
-            cmd = self.ffmpeg_cmd(out_args)
+            bg = BgFeeder(self.sid, self.log_path)
+            bg.ensure_fifo()
+            cmd = self.ffmpeg_cmd(out_args, bg.fifo_path())
             with open(self.log_path, "ab") as lf:
                 lf.write(f"\n=== {time.strftime('%Y-%m-%d %H:%M:%S')} starting ffmpeg target={mode}\n".encode())
                 lf.write((" ".join(_redact(a) for a in cmd) + "\n").encode())
                 lf.flush()
                 self.proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0)
+                proc = self.proc   # captured for this cycle's threads, independent of the next restart's reassignment
                 secret = next((a.rsplit("/", 1)[-1] for a in out_args if a.startswith("rtmp")), None)
                 threading.Thread(target=self.stderr_reader, args=(self.proc.stderr, lf, secret), daemon=True).start()
                 self.state.update(state="running", started_at=time.time(), last_error=None)
@@ -244,7 +402,8 @@ class Streamer:
                 self.write_status()
                 t_feed = threading.Thread(target=self.feeder, args=(self.proc.stdin,), daemon=True)
                 t_prog = threading.Thread(target=self.progress_reader, args=(self.proc.stdout,), daemon=True)
-                t_feed.start(); t_prog.start()
+                t_bg = threading.Thread(target=bg.run, args=(lambda: proc.poll() is None,), daemon=True)
+                t_feed.start(); t_prog.start(); t_bg.start()
                 start = time.time()
                 while self.proc.poll() is None and not self.stop_flag:
                     time.sleep(2)
