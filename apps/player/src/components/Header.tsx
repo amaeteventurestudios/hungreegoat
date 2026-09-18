@@ -18,11 +18,13 @@ export default function Header() {
   const nextTime = () => { const i = TIMES.indexOf(s.time); d({ type: 'time', time: TIMES[(i + 1) % TIMES.length] }); };
   const icon = { dawn: I.dawn, afternoon: I.sun, dusk: I.dusk, night: I.moon }[s.time];
   const yt = s.stations.find(x => x.id === s.station)?.youtube_url || YT_ENV;
+  const skin = s.skins.find(x => x.id === s.skinId);
   return (
     <nav className="wrap">
       <a className="brand" href={HOME} title="Back to hungreegoat.com" aria-label="Back to HUNGREE Goat"><img src="/assets/logo.png" alt="HUNGREE Goat" /></a>
       <div className="ptitle">HUNGREE GOAT MUSIC PLAYER</div>
       <div className="nav-menu">
+        {skin && <span className="scene-label" title={`Current scene: ${skin.name}`}><small>NOW VIEWING</small><b>{skin.name}</b></span>}
         <a href={HOME} className="home">← hungreegoat.com</a>
         {yt && <a href={yt} target="_blank" rel="noreferrer" className="yt" title="Opens the HUNGREE Goat live broadcast on YouTube, separate from this player">Listen Live<span className="yt-full"> on YouTube</span></a>}
         <button className="time" onClick={nextTime} title={`Time of day: ${TIME_LABEL[s.time]}${s.timeAuto ? ' (auto)' : ''}, click to change`} aria-label="Change time of day">{icon}<span>{TIME_LABEL[s.time]}</span></button>
