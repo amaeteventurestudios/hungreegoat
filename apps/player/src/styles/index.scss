@@ -36,7 +36,7 @@ input[type=range]{accent-color:var(--accent)}
    which is what pointed at something ABOVE it painting solid color, not the blur/filter
    chain (already verified correct in isolation) or the vignette (a real, separate,
    smaller issue fixed below, but not what was causing solid black). */
-@media (max-aspect-ratio:16/9){
+@media (max-aspect-ratio:16/9) and (max-width:900px){
   .scene video,.scene img{object-fit:contain}
   .layer-bg{opacity:1;filter:blur(28px) brightness(.45) saturate(1.15);transform:scale(1.15)}
 }
@@ -66,7 +66,7 @@ input[type=range]{accent-color:var(--accent)}
    already fills the screen; in contain mode those same regions are the new blurred-
    background letterbox bars, and the full-strength (~55-85% opaque black) gradient was
    crushing an already-darkened (brightness:.45) blur to indistinguishable-from-black. */
-@media (max-aspect-ratio:16/9){
+@media (max-aspect-ratio:16/9) and (max-width:900px){
   .scene .vignette{background:radial-gradient(120% 90% at 50% 45%,transparent 65%,rgba(3,6,12,.35) 100%),linear-gradient(180deg,rgba(3,6,12,.3),transparent 20%,transparent 75%,rgba(3,6,12,.5))}
 }
 
