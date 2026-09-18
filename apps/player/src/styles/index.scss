@@ -28,6 +28,17 @@ input[type=range]{accent-color:var(--accent)}
 @media (max-aspect-ratio:16/9){
   .scene video,.scene img{object-fit:contain;background:#000}
   .layer-bg{opacity:1;filter:blur(28px) brightness(.45) saturate(1.15);transform:scale(1.15)}
+  /* The default .vignette (below) is tuned for full-bleed cover mode, where it subtly
+     darkens the very top/bottom edge of a video that already fills the whole screen —
+     fine there, since almost nothing sits in that narrow band. In contain mode those same
+     top/bottom regions ARE the new blurred-background letterbox area, and the vignette's
+     normal ~55-85%-opaque-black gradient was compositing on top of it and crushing an
+     already-darkened (brightness:.45) blur down to indistinguishable-from-black — found
+     by isolating the exact same filter chain in a standalone page (renders correctly
+     there) vs. in the real app (renders black), which narrowed it to this sibling layer
+     stacking above .layer-bg, not the blur/filter itself. Lightened here, scoped to this
+     breakpoint only, so cover mode (landscape/desktop) is completely unaffected. */
+  .scene .vignette{background:radial-gradient(120% 90% at 50% 45%,transparent 65%,rgba(3,6,12,.35) 100%),linear-gradient(180deg,rgba(3,6,12,.3),transparent 20%,transparent 75%,rgba(3,6,12,.5))}
 }
 
 /* ---------- rotate-device hint (portrait phones only, see RotateHint.tsx) ---------- */
