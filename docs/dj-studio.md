@@ -42,10 +42,20 @@ LIBRARY (tracks, unchanged)  →  PLAYLISTS (kind='workout' is just an ordinary 
   the pipeline, driving a headless browser via Playwright as the *execution engine* for the real JS — never a
   reimplementation of BPM detection, mastering DSP, or the DJ engine itself.
 
-## The 90 BPM / "workout feel" requirement
-`tracks.dj_bpm` stores the analyzed real tempo and is never overwritten. `workout_profiles.max_tempo_adjust_pct`
-bounds how far a workout profile is allowed to nudge playback speed (a few percent, via the deck's own tempo control)
-— there is no double-time/half-time playback trick that would shift pitch or make the music unrecognizable.
+## Real tempo acceleration (not "double-time interpretation")
+The owner listened to early mixes and found them musically useless — every track played at its original tempo, only
+labeled "Moderate"/"Intense". Root cause: `tempo_adjust_pct` was always `0`; nothing in the pipeline ever actually
+changed playback speed. Fixed by driving Aurdour's own existing tempo control, not writing new DSP:
+`dj-autopilot.js` calls each deck's real `Deck.setPlaybackRate(rate)` (wavesurfer's own rate control) and
+`Deck.setKeyLock(true)` (native `HTMLMediaElement.preservesPitch` — pitch-preserving time-stretch built into every
+browser) on the first track and on every subsequent `AutoTransition`-driven deck, *before* that transition starts, so
+the mix never drops back to original speed partway through. `dj_orchestrator.py`'s `_resolve_tempo()` turns an
+operator's choice — Automatic (maps easy/moderate/high/intense to +0/25/50/75%), Original, a fixed Boost %, or a
+Target BPM — into a concrete multiplier before the browser ever sees it. `tracks.dj_bpm` (source) is never
+overwritten; `mix_tracks.effective_bpm`/`tempo_adjust_pct`/`key_lock` record what was actually played. Verified
+directly (not just trusted): a real generated mix's own logged rate was `deck.currentRate = 1.5` for a +50% request,
+`preservesPitch: true`, and the saved recipe shows exactly `source_bpm × 1.5 = effective_bpm` on every track (75→112.5,
+100→150, 143→214.5 BPM).
 
 ## Why a corrective `loudnorm` pass after the DSP mastering
 Smoke-testing found the vendored DSP's own `measureLUFS`/limiter can land several LU off *its own stated target*
@@ -64,10 +74,33 @@ inherently wall-clock-bound. Measured directly on pi-node-01: Playwright's defau
 deck reported `isPlaying=true` and the AudioContext reported `state: running` — confirmed with a real `AnalyserNode`
 tap (peak sample = 0) and by the deck's own playback position barely advancing. `dj_orchestrator.py` launches Stage 1
 with `channel="chromium"` (the full browser) instead, which produces real, audible, correctly-paced playback. There
-is still a real, load-dependent startup ramp — a "5 minute" (300 s) request typically yields ~250 s of actual
-captured audio on this Pi while the production broadcast is also running (verified: 300 s requested → 250.92 s
-captured, independently ffprobe'd). `mixes.target_duration_sec` and `.actual_duration_sec` are both stored so this is
-always visible, never silently hidden.
+is still a real, load-dependent startup ramp, worse with tempo acceleration active (more per-sample time-stretch work
+for the same wall-clock recording window) — three independent 300s-target recordings measured 250.9s (83.6%), 257.8s
+(85.9%), and 241.1s (80.4%, tempo on) of actual captured audio. `dj_orchestrator.py` mitigates this with a measured
+padding-and-trim, not a blind fudge: it requests `duration × 1.25` wall-clock seconds from the recorder, then — after
+converting the download to WAV — trims the result back down to the real requested duration (with a short fade at the
+cut) if it overshot. This is a *disclosed mitigation*, not a precision guarantee: the actual shortfall ratio varies
+with live system load (~80–86% observed), so a request can still occasionally land outside the padded window on a
+particularly loaded run. Verified working: a padded 300s request came back at 300.96s post-trim (within the ±5s
+acceptance band) on a real generated mix. The clean, permanent fix — removing this class of error entirely — is
+switching generated-Mix rendering to something deterministic/offline (e.g. ffmpeg's own `atempo` + `acrossfade`
+filters driven by the same recipe FlowMode already computes, run as fast as the CPU allows rather than wall-clock-
+bound); noted as a next step, not attempted in this pass given the scope of re-verifying a second rendering path.
+`mixes.target_duration_sec` and `.actual_duration_sec` are both stored so the real result is always visible, never
+silently hidden.
+
+## A second real environmental constraint: the Pi's limited RAM under concurrent load
+This Pi has 3.7 GB RAM + 2 GB swap, shared between the live 24/7 YouTube broadcast (Liquidsoap + FFmpeg), this Control
+process, and whatever else is running. A full generate (record → convert → DSP-master → loudnorm-correct → verify)
+pushes a large in-memory buffer (tens of MB of decoded PCM) through a headless Chromium's V8 heap twice (once for
+real-time recording, once for offline DSP mastering) — during one real test run here, the orchestrator subprocess was
+killed outright with no exception ever logged (consistent with the kernel OOM-killer sending SIGKILL, which no
+Python-level `except` can intercept) while swap was at 1.4/2.0 GB used. Both intermediate files (the raw recording
+and the DSP-mastered WAV) were found complete and valid on disk afterward — recording and mastering themselves had
+already finished; only the final loudnorm-correction/verification/save step was lost — so that run was salvaged by
+re-running just the remaining steps directly rather than the full ~10-minute pipeline. This is a real operational
+risk worth the owner's awareness on a Pi this size, not something code alone can fully eliminate; retrying (the
+generate endpoint is idempotent to call again on a fresh mix row) has so far always succeeded on the second attempt.
 
 ## Storage
 - `MEDIA/mixes/*.wav` — finished, mastered mixes (what `Mixes` lists and plays).
@@ -109,14 +142,22 @@ ffmpeg -nostdin -i MEDIA/mixes/mix-N.wav -af ebur128=peak=true -f null -
 ```
 
 ## Known limitations / next steps
-- Actual captured duration runs somewhat below the requested target under normal production load (see above) —
-  acceptable and always disclosed via `actual_duration_sec`, but padding the requested duration to compensate would
-  be a reasonable follow-up.
-- No Dashboard summary card or a "Auto-DJ this playlist" shortcut from the Playlists page yet — `Workout DJ` in the
-  left nav is the only current entry point.
-- Workout Profiles (`workout_profiles`) are seeded with sensible defaults and fully CRUD-able via `/api/dj/profiles`,
-  but have no dedicated Control UI yet (JSON API only).
+- Duration accuracy is a disclosed mitigation (padding + trim), not an exact guarantee — see above; the real fix is
+  deterministic/offline rendering.
+- The Pi can run low enough on memory under concurrent load (live broadcast + a generate job) that the orchestrator
+  subprocess is killed outright — see above; a generate that fails this way is usually salvageable (the raw/DSP
+  intermediates under `MEDIA/mixes/.raw/` often survive) or safely retryable on a fresh mix row.
 - `MEDIA/mixes/.raw/` intermediates are not automatically pruned.
-- No automated regression test suite yet for "playlist membership never copies files" / "Mix deletion never touches
-  Library" / etc. — manually verified during the acceptance test (Library track count and all source-file checksums
-  confirmed unchanged before/after); worth codifying as real tests.
+- `apps/control/tests/test_dj_studio.py` (stdlib `unittest`, run with
+  `~/hungree-goat/venv/bin/python -m unittest tests.test_dj_studio -v` from `~/hungree-goat/app`) covers the
+  data-layer invariants (Library/Mixes separation, playlist-membership idempotency, profile CRUD, tempo math,
+  manifest playlist filtering, duration persistence, auth/path-traversal, skin draft staging) — it does not and can't
+  cover FlowMode's own in-browser track-selection/recent-repeat-avoidance logic; that's only exercised by the manual
+  end-to-end test above.
+- Workout Profiles have a full Control UI now (Workout DJ page: list/create/edit/duplicate/enable/delete, plus a
+  "Load from profile" selector on Create Workout Mix) — `tempo_mode`/`tempo_boost_pct`/`target_bpm` are stored per
+  profile but a profile's tempo choice isn't yet auto-applied at generate time without the operator explicitly
+  loading it into the form first (i.e. picking a workout type alone doesn't imply its profile's tempo default).
+- `dj.hungreegoat.com`'s nginx vhost is written and ready (`infra/gateway/nginx/dj.hungreegoat.com.conf`) but not
+  deployed — no shell access to the gateway host from here (a restricted tunnel-only SSH key). The owner needs to
+  re-run `infra/gateway/install-hetzner.sh` (or apply the equivalent nginx+certbot steps by hand) on the gateway.

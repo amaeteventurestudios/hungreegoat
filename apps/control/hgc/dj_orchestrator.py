@@ -303,6 +303,26 @@ async def _generate(mid: int, station: str, playlist: str, duration: float,
     _log(f"recorded raw mix: {raw_webm} ({raw_webm.stat().st_size} bytes)")
     dj.mix_set_status(mid, "mastering", actual_duration_sec=actual_duration, engine_version=dj.ENGINE_VERSION)
 
+    # Persisted here, right after recording, rather than at the very end: the recipe only
+    # ever exists in this process's memory otherwise, and mastering is real work (an offline
+    # DSP pass through a headless browser, then an ffmpeg loudnorm pass) that can fail or —
+    # on this Pi, under concurrent load — occasionally get OOM-killed outright. A crash past
+    # this point still loses the finished-mix file, but never the recipe.
+    recipe_rows = [
+        {
+            "track_id": int(r["id"]), "deck": r.get("deck", "A" if i % 2 == 0 else "B"),
+            "source_bpm": r.get("bpm"), "effective_bpm": r.get("effectiveBpm", r.get("bpm")),
+            "tempo_adjust_pct": round((r.get("tempoMultiplier", 1) - 1) * 100, 2),
+            "key_lock": bool(r.get("keyLock", key_lock)),
+            "source_key": r.get("key"),
+            "start_offset_sec": r.get("startedAtSec", 0),
+            "end_offset_sec": None, "transition_in_sec": r.get("startedAtSec", 0),
+            "transition_duration_sec": transition_sec,
+        }
+        for i, r in enumerate(recipe_raw)
+    ]
+    dj.mix_set_recipe(mid, recipe_rows)
+
     # --- Stage 2: webm -> wav, then trim back to the real requested duration if the padded
     # recording (see REC_PADDING above) overshot it, with a short fade so the cut is never
     # abrupt. Left alone (not trimmed further) if it still came in under target even with
@@ -365,6 +385,14 @@ async def _generate(mid: int, station: str, playlist: str, duration: float,
 
     _log(f"mastering DSP self-report (not trusted — corrected below): {master_result}")
 
+    # A real OOM-kill was observed landing in exactly this gap on this Pi (see
+    # docs/dj-studio.md) — right as the just-closed browser's process memory is still being
+    # torn down by the kernel while the next ffmpeg subprocess starts allocating its own.
+    # Recipe data is already safely persisted above regardless, but giving the OS a moment to
+    # actually reclaim the browser's memory before launching another subprocess is a cheap,
+    # low-risk way to shrink that overlap window.
+    await asyncio.sleep(3)
+
     # --- Stage 4: corrective loudness pass + independent verification ------------------------
     # The DSP chain (Stage 3) supplies the creative processing; this ffmpeg pass is what
     # actually delivers the acceptance-mandated LUFS/true-peak numbers (see _loudnorm_correct).
@@ -372,21 +400,6 @@ async def _generate(mid: int, station: str, playlist: str, duration: float,
     probe = _ffprobe(mastered_wav)
     loud = _measure_ebur128(mastered_wav)
     _log(f"independent verification: probe={probe} ebur128={loud}")
-
-    recipe_rows = [
-        {
-            "track_id": int(r["id"]), "deck": r.get("deck", "A" if i % 2 == 0 else "B"),
-            "source_bpm": r.get("bpm"), "effective_bpm": r.get("effectiveBpm", r.get("bpm")),
-            "tempo_adjust_pct": round((r.get("tempoMultiplier", 1) - 1) * 100, 2),
-            "key_lock": bool(r.get("keyLock", key_lock)),
-            "source_key": r.get("key"),
-            "start_offset_sec": r.get("startedAtSec", 0),
-            "end_offset_sec": None, "transition_in_sec": r.get("startedAtSec", 0),
-            "transition_duration_sec": transition_sec,
-        }
-        for i, r in enumerate(recipe_raw)
-    ]
-    dj.mix_set_recipe(mid, recipe_rows)
 
     updated = dj.mix_set_status(
         mid, "ready",
