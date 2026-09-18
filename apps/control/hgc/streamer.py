@@ -225,6 +225,23 @@ class BgFeeder:
             return
         self._log(f"BgFeeder fifo opened, fd={fifo_fd}")
         last_check = 0.0
+        # broadcast_path: what broadcast.py says should be playing right now.
+        # current_path: what the helper is actually decoding right now — these diverge
+        # once a clip fails repeatedly and this falls back to the default loop (below).
+        # They used to be the same variable, which was a real bug: the periodic
+        # track-change poll compared the broadcast's pick against that single variable,
+        # so once it had been overwritten with the fallback path, the very next poll
+        # (at most 1s later) saw "path != current_path" and treated the *unchanged*
+        # broadcast selection as a fresh track change — respawning the helper on the
+        # same broken clip and resetting the failure counter before the fallback could
+        # ever stick. Confirmed in production: a clip whose resolution/profile/level
+        # exceeds this Pi's h264_v4l2m2m hardware decoder ("Error while opening
+        # decoder: No such file or directory") retry-stormed once a second, indefinitely,
+        # instead of settling on the fallback loop after 3 failures as intended — no
+        # video frames reached the main FFmpeg process during the storm, which is what
+        # produced YouTube's "not receiving enough video" warning and, eventually,
+        # corrupted the FIFO badly enough to kill the main process outright.
+        broadcast_path: Path | None = None
         current_path: Path | None = None
         partial = b""
         try:
@@ -237,9 +254,10 @@ class BgFeeder:
                     except Exception as e:
                         path = None
                         self._log(f"broadcast selection error: {e}")
-                    if path and path != current_path:
+                    if path and path != broadcast_path:
                         old = self._helper
                         self._helper = self._spawn_helper(path)
+                        broadcast_path = path
                         current_path = path
                         partial = b""
                         self._consecutive_failures = 0
@@ -250,6 +268,8 @@ class BgFeeder:
                     if self._helper is not None:
                         self._consecutive_failures += 1
                         self._log(f"background helper exited unexpectedly (failure #{self._consecutive_failures}) for {current_path}")
+                        if self._consecutive_failures == 3:
+                            self._log(f"giving up on {broadcast_path} after 3 failures, falling back to the default loop until the broadcast selection actually changes")
                     fallback = current_path if self._consecutive_failures < 3 else (
                         config.LOOP_720 if config.LOOP_720.exists() else config.LOOP_SOURCE)
                     self._helper = self._spawn_helper(fallback) if fallback else None
