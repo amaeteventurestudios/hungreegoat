@@ -1118,7 +1118,7 @@ def outputs(sid: str, user: str = Depends(current_user)):
                     "fps": stream.get("fps"), "uptime_sec": stream.get("uptime_sec"), "restarts": stream.get("restarts"),
                     "last_error": stream.get("last_error")},
         "local_test": {"path": str(config.RUN_DIR / f"local-{sid}.flv")},
-        "harbor": {"url": f"http://127.0.0.1:{st['harbor_port']}/{sid}.aac", "note": "Liquidsoap AAC feed for FFmpeg (loopback only)"},
+        "harbor": {"url": f"http://127.0.0.1:{st['harbor_port']}/{sid}.wav", "note": "Liquidsoap PCM/WAV feed for FFmpeg (loopback only)"},
         "output_target": db.get_setting(sid, "output_target"),
         "encoder": {"video": "h264_v4l2m2m (Raspberry Pi hardware)", "resolution": f"{config.VIDEO_W}x{config.VIDEO_H}",
                     "fps": config.VIDEO_FPS, "video_kbps": st["video_bitrate_k"], "audio": f"AAC-LC {st['audio_bitrate_k']} kbps 48 kHz stereo"},

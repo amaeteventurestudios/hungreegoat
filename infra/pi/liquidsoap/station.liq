@@ -148,9 +148,18 @@ radio.on_metadata(synchronous=false, fun (m) ->
                          track_id=(m["hgc_track_id"] ?? ""), on_air=(m["on_air"] ?? "")}))
 
 # ---------------------------------------------------------------------------
-# Output: AAC over a local harbor mount, consumed by the FFmpeg video pipeline.
-aac = %ffmpeg(format="adts", %audio(codec="aac", b="#{audio_kbps}k", ar=48000, ac=2))
-output.harbor(id="out", mount="/#{station}.aac", port=harbor_port, aac, radio)
+# Output: raw PCM/WAV over a local harbor mount, consumed by the FFmpeg video
+# pipeline. This leg is loopback-only (127.0.0.1), never exposed externally, so
+# bandwidth is not a concern. It was previously AAC (%ffmpeg adts), but
+# Liquidsoap's AAC encoder occasionally emits ADTS frames with multiple RDBs
+# per frame, which FFmpeg's aac decoder AND its aac_adtstoasc bitstream filter
+# both treat as a hard, unrecoverable error ("More than one AAC RDB per ADTS
+# frame is not implemented"), crashing the whole stream process. PCM has no
+# such parsing edge case and costs less CPU (no encode/decode at all). The
+# final AAC encode for actual YouTube delivery still happens downstream in
+# ffmpeg_cmd() in streamer.py, unaffected by this change.
+pcm = %wav(stereo=true, samplesize=16)
+output.harbor(id="out", mount="/#{station}.wav", port=harbor_port, pcm, radio)
 # Listen Live / future public player: lightweight MP3 mount on the same harbor
 # (proxied by the control backend; never exposed directly).
 output.harbor(id="listen", mount="/#{station}-listen.mp3", port=harbor_port,

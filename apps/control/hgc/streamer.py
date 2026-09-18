@@ -6,7 +6,7 @@
     a new song only restarts the small helper, never the main process or the RTMPS
     connection)
   + overlay band (yuva420p frames piped from this process, updated on track change)
-  + Liquidsoap AAC audio from the local harbor (stream-copied, no re-encode)
+  + Liquidsoap PCM/WAV audio from the local harbor (encoded to AAC here)
   → H.264 (hardware h264_v4l2m2m) + AAC → RTMPS (YouTube) | local FLV file | null
 
 Also writes run/stream-<station>.json with real metrics parsed from FFmpeg's
@@ -380,7 +380,8 @@ class Streamer:
 
     def ffmpeg_cmd(self, out_args: list[str], bg_fifo: Path) -> list[str]:
         vb = self.st["video_bitrate_k"]
-        audio_url = f"http://127.0.0.1:{self.st['harbor_port']}/{self.sid}.aac"
+        ab = self.st["audio_bitrate_k"]
+        audio_url = f"http://127.0.0.1:{self.st['harbor_port']}/{self.sid}.wav"
         return [
             "ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "warning", "-nostats",
             "-progress", "pipe:1",
@@ -391,7 +392,21 @@ class Streamer:
             # overlay frames from stdin (this process)
             "-f", "rawvideo", "-pix_fmt", "yuva420p", "-s", f"{W}x{H}", "-framerate", str(config.VIDEO_FPS),
             "-thread_queue_size", "64", "-i", "pipe:0",
-            # Liquidsoap audio
+            # Liquidsoap audio — raw PCM/WAV over the loopback harbor (see station.liq).
+            # Previously ADTS AAC: Liquidsoap's AAC encoder periodically emitted frames
+            # with multiple RDBs per ADTS frame, which BOTH FFmpeg's aac_adtstoasc
+            # bitstream filter (needed for -c:a copy into FLV) AND FFmpeg's native aac
+            # decoder (tried when re-encoding instead) treat as a hard, unrecoverable
+            # error ("More than one AAC RDB per ADTS frame is not implemented") — no
+            # available alternative decoder (no libfdk_aac in this build) could parse
+            # it either way, killing the whole process outright, not just dropping a
+            # frame. Confirmed as the dominant cause of a real ~1-crash-per-40min
+            # pattern in production (2026-09-18: 10 crashes across a 7-hour window).
+            # Fixed at the source: station.liq now emits WAV on this internal,
+            # loopback-only leg (127.0.0.1, never exposed externally) instead of AAC,
+            # which has no such parsing edge case. The real AAC encode for actual
+            # YouTube delivery still happens right here, just fed clean PCM instead.
+            "-f", "wav",
             "-thread_queue_size", "1024", "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5",
             "-i", audio_url,
             "-filter_complex",
@@ -399,7 +414,8 @@ class Streamer:
             "-map", "[v]", "-map", "2:a:0",
             "-c:v", "h264_v4l2m2m", "-b:v", f"{vb}k", "-maxrate", f"{vb}k", "-bufsize", f"{vb*2}k",
             "-g", str(config.VIDEO_FPS * 2), "-r", str(config.VIDEO_FPS), "-pix_fmt", "yuv420p",
-            "-c:a", "copy", "-max_muxing_queue_size", "1024",
+            "-c:a", "aac", "-b:a", f"{ab}k", "-ar", "48000", "-ac", "2",
+            "-max_muxing_queue_size", "1024",
             "-y", *out_args,
         ]
 

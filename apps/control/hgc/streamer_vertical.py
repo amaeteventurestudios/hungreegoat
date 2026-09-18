@@ -61,12 +61,13 @@ class VerticalStreamer:
             self.frame_mtime = m_
 
     def ffmpeg_cmd(self) -> list[str]:
-        audio_url = f"http://127.0.0.1:{self.st['harbor_port']}/{self.sid}.aac"
+        audio_url = f"http://127.0.0.1:{self.st['harbor_port']}/{self.sid}.wav"
         out_args = ["-t", str(self.duration_sec)] if self.duration_sec else []
         return [
             "ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "warning", "-nostats", "-progress", "pipe:1",
             "-f", "rawvideo", "-pix_fmt", "yuv420p", "-s", f"{W}x{H}", "-framerate", str(config.VERT_FPS),
             "-thread_queue_size", "64", "-i", "pipe:0",
+            "-f", "wav",
             "-thread_queue_size", "1024", "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5",
             "-i", audio_url,
             "-map", "0:v", "-map", "1:a:0",
