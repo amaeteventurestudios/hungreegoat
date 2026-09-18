@@ -24,9 +24,20 @@ input[type=range]{accent-color:var(--accent)}
    complete, unstretched, uncropped animation instead, and the blurred/darkened
    thumbnail behind it (see Scene.tsx's .layer-bg) fills the resulting top/bottom bars.
    Purely a CSS breakpoint, not JS-driven, so it already responds to a real device
-   rotation instantly with no reload and no extra listener needed for the layout itself. */
+   rotation instantly with no reload and no extra listener needed for the layout itself.
+
+   Do NOT add a background color to .scene video/img here. An earlier version had
+   background:#000 on this rule (meant as a letterbox fallback for the rare case with no
+   thumbnail) and it rendered the whole blur background feature inert — a CSS background
+   on an <img>/<video> paints the element's FULL box (100% width/height is set above),
+   not just whatever margin object-fit:contain leaves empty, so it was an opaque black
+   layer sitting directly on top of .layer-bg the entire time. Confirmed by forcing
+   .layer-bg to a flat, !important red with no filter/image at all — still invisible —
+   which is what pointed at something ABOVE it painting solid color, not the blur/filter
+   chain (already verified correct in isolation) or the vignette (a real, separate,
+   smaller issue fixed below, but not what was causing solid black). */
 @media (max-aspect-ratio:16/9){
-  .scene video,.scene img{object-fit:contain;background:#000}
+  .scene video,.scene img{object-fit:contain}
   .layer-bg{opacity:1;filter:blur(28px) brightness(.45) saturate(1.15);transform:scale(1.15)}
 }
 
