@@ -132,11 +132,23 @@ class BgFeeder:
         # the box's 4 cores). Falls back to software decode for anything else (e.g. a
         # webm upload), which is correct but slower; that trade-off only matters if an
         # operator puts a non-h264 clip in broadcast rotation.
-        decode_args = ["-c:v", "h264_v4l2m2m"] if self._probe_codec(path) == "h264" else []
+        is_h264 = self._probe_codec(path) == "h264"
+        decode_args: list[str] = []
+        vf_prefix = ""
+        if is_h264 and config.HW_BACKEND == "v4l2m2m":
+            decode_args = ["-c:v", "h264_v4l2m2m"]
+        elif is_h264 and config.HW_BACKEND == "vaapi":
+            # Hardware-decode via VAAPI, then bring the frame back to system memory
+            # (hwdownload) before the existing, well-tested software scale/crop/fps
+            # chain — cropping under VAAPI has no direct filter equivalent, and this
+            # box has CPU to spare for a cheap 720p scale+crop, unlike the Pi.
+            decode_args = ["-hwaccel", "vaapi", "-hwaccel_device", config.VAAPI_DEVICE,
+                           "-hwaccel_output_format", "vaapi"]
+            vf_prefix = "hwdownload,format=nv12,"
         cmd = [
             "ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "warning", "-nostats",
             *decode_args, "-re", "-stream_loop", "-1", "-i", str(path),
-            "-vf", f"scale={config.VIDEO_W}:{config.VIDEO_H}:force_original_aspect_ratio=increase,"
+            "-vf", f"{vf_prefix}scale={config.VIDEO_W}:{config.VIDEO_H}:force_original_aspect_ratio=increase,"
                    f"crop={config.VIDEO_W}:{config.VIDEO_H},fps={config.VIDEO_FPS}",
             "-f", "rawvideo", "-pix_fmt", "yuv420p", "pipe:1",
         ]
@@ -402,9 +414,30 @@ class Streamer:
         vb = self.st["video_bitrate_k"]
         ab = self.st["audio_bitrate_k"]
         audio_url = f"http://127.0.0.1:{self.st['harbor_port']}/{self.sid}.wav"
+        backend = config.HW_BACKEND
+        global_hw_args = ["-vaapi_device", config.VAAPI_DEVICE] if backend == "vaapi" else []
+        if backend == "vaapi":
+            # Composite in software as always, then hand the final frame to the GPU
+            # (format=nv12,hwupload) only at the very end, right before the hardware
+            # encoder — the overlay/BgFeeder relay stays untouched either way.
+            overlay_filter = (f"[0:v][1:v]overlay=0:{config.OVERLAY_Y}:format=yuv420:"
+                               f"eof_action=repeat,format=nv12,hwupload[v]")
+            video_encode = ["-c:v", "h264_vaapi", "-b:v", f"{vb}k", "-maxrate", f"{vb}k",
+                             "-bufsize", f"{vb*2}k", "-g", str(config.VIDEO_FPS * 2),
+                             "-r", str(config.VIDEO_FPS)]
+        else:
+            overlay_filter = (f"[0:v][1:v]overlay=0:{config.OVERLAY_Y}:format=yuv420:"
+                               f"eof_action=repeat,format=yuv420p[v]")
+            encoder = "h264_v4l2m2m" if backend == "v4l2m2m" else "libx264"
+            video_encode = ["-c:v", encoder, "-b:v", f"{vb}k", "-maxrate", f"{vb}k",
+                             "-bufsize", f"{vb*2}k", "-g", str(config.VIDEO_FPS * 2),
+                             "-r", str(config.VIDEO_FPS), "-pix_fmt", "yuv420p"]
+            if backend == "software":
+                video_encode += ["-preset", "veryfast"]
         return [
             "ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "warning", "-nostats",
             "-progress", "pipe:1",
+            *global_hw_args,
             # background visual — raw frames relayed from BgFeeder (see module docstring);
             # a full song's worth of the same clip, looping, until the next track change
             "-f", "rawvideo", "-pix_fmt", "yuv420p", "-s", f"{config.VIDEO_W}x{config.VIDEO_H}",
@@ -429,11 +462,9 @@ class Streamer:
             "-f", "wav",
             "-thread_queue_size", "1024", "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5",
             "-i", audio_url,
-            "-filter_complex",
-            f"[0:v][1:v]overlay=0:{config.OVERLAY_Y}:format=yuv420:eof_action=repeat,format=yuv420p[v]",
+            "-filter_complex", overlay_filter,
             "-map", "[v]", "-map", "2:a:0",
-            "-c:v", "h264_v4l2m2m", "-b:v", f"{vb}k", "-maxrate", f"{vb}k", "-bufsize", f"{vb*2}k",
-            "-g", str(config.VIDEO_FPS * 2), "-r", str(config.VIDEO_FPS), "-pix_fmt", "yuv420p",
+            *video_encode,
             "-c:a", "aac", "-b:a", f"{ab}k", "-ar", "48000", "-ac", "2",
             "-max_muxing_queue_size", "1024",
             "-y", *out_args,
@@ -520,7 +551,8 @@ class Streamer:
             "uptime_sec": int(time.time() - self.state["started_at"]) if self.state.get("started_at") else 0,
             "preview": str(self.preview_path) if self.preview_path.exists() else None,
             "preview_kind": "composited",
-            "encoder": "h264_v4l2m2m", "resolution": f"{config.VIDEO_W}x{config.VIDEO_H}", "fps_target": config.VIDEO_FPS,
+            "encoder": {"v4l2m2m": "h264_v4l2m2m", "vaapi": "h264_vaapi", "software": "libx264"}[config.HW_BACKEND],
+            "resolution": f"{config.VIDEO_W}x{config.VIDEO_H}", "fps_target": config.VIDEO_FPS,
             "video_bitrate_k": self.st["video_bitrate_k"], "audio_bitrate_k": self.st["audio_bitrate_k"],
         })
         with self._status_lock:

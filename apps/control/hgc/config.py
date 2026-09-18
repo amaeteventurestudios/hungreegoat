@@ -49,6 +49,27 @@ ARTWORK_CACHE = ARTWORK_DIR / ".cache"
 API_HOST = os.environ.get("HGC_HOST", "0.0.0.0")
 API_PORT = int(os.environ.get("HGC_PORT", "8090"))
 
+# Hardware video backend for BgFeeder decode + the main stream encode (see streamer.py).
+# "v4l2m2m" — Raspberry Pi's stateful M2M codec (the original/only backend for a long
+#   time); "vaapi" — Intel/AMD VAAPI (e.g. the Beelink's AMD Cezanne iGPU via
+#   /dev/dri/renderD128); "software" — libx264/software scale, no hardware, works
+#   anywhere but costs real CPU. Explicit HGC_HW_BACKEND always wins; otherwise autodetect
+#   from what the host actually exposes, since "which Pi vs which x86 box" isn't something
+#   this module should have to know about directly.
+def _detect_hw_backend() -> str:
+    override = os.environ.get("HGC_HW_BACKEND")
+    if override:
+        return override
+    if Path("/dev/video11").exists() or Path("/dev/video10").exists():
+        return "v4l2m2m"
+    if Path(os.environ.get("HGC_VAAPI_DEVICE", "/dev/dri/renderD128")).exists():
+        return "vaapi"
+    return "software"
+
+
+HW_BACKEND = _detect_hw_backend()
+VAAPI_DEVICE = os.environ.get("HGC_VAAPI_DEVICE", "/dev/dri/renderD128")
+
 AUDIO_EXTS = {".mp3", ".m4a", ".aac", ".wav", ".flac", ".ogg", ".opus"}
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
 
