@@ -45,7 +45,7 @@ input[type=range]{accent-color:var(--accent)}
    title row below 767px) rather than at a literal 5-7% from the top, which would land
    inside/above those buttons on every viewport tested. Elegant on purpose: no border,
    only a very faint scrim behind the text for contrast on bright scenes. */
-.now-viewing{position:absolute;top:88px;right:6%;z-index:10;display:flex;flex-direction:column;align-items:flex-end;line-height:1.25;padding:5px 10px;border-radius:8px;background:rgba(0,0,0,.28);pointer-events:none;max-width:44vw}
+.now-viewing{position:absolute;top:88px;right:max(6%,100px);z-index:10;display:flex;flex-direction:column;align-items:flex-end;line-height:1.25;padding:5px 10px;border-radius:8px;background:rgba(0,0,0,.28);pointer-events:none;max-width:44vw}
 .now-viewing small{font-size:10px;font-weight:700;letter-spacing:.14em;color:$gold;text-shadow:0 1px 4px rgba(0,0,0,.65)}
 .now-viewing b{display:block;margin-top:1px;font-size:15px;font-weight:700;color:$ivory;text-shadow:0 1px 4px rgba(0,0,0,.65);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 
