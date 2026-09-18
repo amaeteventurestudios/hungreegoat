@@ -29,6 +29,37 @@ W, H = config.OVERLAY_W, config.OVERLAY_H
 FRAME_BYTES = W * H * 3 // 2 + W * H  # yuva420p: Y + U/4 + V/4 + A
 BG_FRAME_BYTES = config.VIDEO_W * config.VIDEO_H * 3 // 2  # yuv420p, no alpha
 
+# How long the main supervisor loop can go without proving it's still making forward
+# progress (see Streamer._beat/_watchdog) before we conclude it is wedged and force this
+# whole process to exit so systemd can start a clean one. Found via a real ~10-hour
+# incident where the supervisor process stayed alive and never logged another restart
+# attempt after a crash — "the wrapper is still running" turned out not to mean "the
+# stream is still running." Every intentional bounded wait in run() (10s "no target",
+# 15s "media drive unreadable", up to 60s restart backoff, 8s graceful-kill) already
+# re-beats on each of its own sleep ticks, so none of them can trip this on their own;
+# this is only for a genuinely stuck call we didn't (or can't) bound directly.
+WATCHDOG_TIMEOUT_SEC = 60
+
+
+def _ts() -> str:
+    return time.strftime("%Y-%m-%d %H:%M:%S")
+
+
+_LOG_LOCK = threading.Lock()
+
+
+def log_line(log_path: Path, tag: str, msg: str) -> None:
+    """Every supervisor/BgFeeder log line goes through here so an incident can be
+    reconstructed from timestamps alone — the previous BgFeeder logging had none, so a
+    `[bg] feeder stopped: ...` line could only be dated by whichever `starting ffmpeg`
+    line happened to be nearest it above."""
+    line = f"[{_ts()}] [{tag}] {msg}\n"
+    try:
+        with _LOG_LOCK, open(log_path, "ab") as lf:
+            lf.write(line.encode())
+    except OSError:
+        pass
+
 
 def _write_all(fd: int, data: bytes) -> None:
     """os.write() on a pipe/FIFO is not guaranteed to write the whole buffer in one call
@@ -131,11 +162,46 @@ class BgFeeder:
             pass
 
     def _log(self, msg: str) -> None:
-        try:
-            with open(self.log_path, "ab") as lf:
-                lf.write(f"[bg] {msg}\n".encode())
-        except OSError:
-            pass
+        log_line(self.log_path, "bg", msg)
+
+    def _open_fifo_wonly(self, is_alive) -> int | None:
+        """open(path, O_WRONLY) on a FIFO blocks in the kernel until some other process
+        has it open for reading — normally that's the main FFmpeg opening its input 0,
+        and the rendezvous resolves in well under a second. But a *plain* blocking open()
+        here is exactly the kind of call this module's own docstring warns about: if the
+        main FFmpeg process that's supposed to become the reader never gets that far
+        (stuck/erroring on a different input, or simply never started), this call — on
+        this thread, holding no lock the main supervisor loop depends on — would still
+        wait forever with nothing to time it out or make it visible. Poll for a reader
+        with a non-blocking open instead, so the wait is bounded, interruptible by
+        is_alive()/stop_flag, and shows up in the log if it's taking unusually long."""
+        path = str(self.fifo_path())
+        start = time.time()
+        warned = False
+        while not self.stop_flag and is_alive():
+            try:
+                fd = os.open(path, os.O_WRONLY | os.O_NONBLOCK)
+            except OSError as e:
+                import errno
+                if e.errno != errno.ENXIO:  # ENXIO: no reader yet, the expected/normal case
+                    self._log(f"fifo open error (not ENXIO): {e}")
+                    return None
+                if not warned and time.time() - start > 5:
+                    warned = True
+                    self._log(f"fifo open still waiting for a reader after {time.time()-start:.1f}s")
+                time.sleep(0.05)
+                continue
+            # Drop O_NONBLOCK now that a reader exists — the rest of this feeder's life
+            # uses normal blocking writes (see _write_all's own reasoning for why a
+            # short/non-blocking write here would desync the raw-video byte stream).
+            import fcntl
+            flags = fcntl.fcntl(fd, fcntl.F_GETFL)
+            fcntl.fcntl(fd, fcntl.F_SETFL, flags & ~os.O_NONBLOCK)
+            waited = time.time() - start
+            if waited > 1.0:
+                self._log(f"fifo reader rendezvous took {waited:.1f}s (usually <1s)")
+            return fd
+        return None
 
     def run(self, is_alive) -> None:
         """is_alive: callable, True while the owning main FFmpeg process is still the
@@ -152,7 +218,12 @@ class BgFeeder:
         ever matters as a safety margin, not a normal-path optimization."""
         import select
         from . import broadcast
-        fifo_fd = os.open(str(self.fifo_path()), os.O_WRONLY)  # blocks until FFmpeg opens it to read
+        self._log("BgFeeder starting, opening fifo for write")
+        fifo_fd = self._open_fifo_wonly(is_alive)
+        if fifo_fd is None:
+            self._log("BgFeeder exiting before a reader ever appeared (stopped or owner died)")
+            return
+        self._log(f"BgFeeder fifo opened, fd={fifo_fd}")
         last_check = 0.0
         current_path: Path | None = None
         partial = b""
@@ -207,6 +278,9 @@ class BgFeeder:
                     _write_all(fifo_fd, self._last_frame)
         except (BrokenPipeError, OSError) as e:
             self._log(f"feeder stopped: {e}")
+        except Exception as e:
+            import traceback
+            self._log(f"feeder crashed with unexpected exception: {e}\n{traceback.format_exc()}")
         finally:
             if self._helper:
                 self._kill_helper(self._helper)
@@ -214,6 +288,7 @@ class BgFeeder:
                 os.close(fifo_fd)
             except OSError:
                 pass
+            self._log(f"BgFeeder exiting (stop_flag={self.stop_flag}, is_alive={is_alive()})")
 
 
 def read_env_file(p: Path) -> dict:
@@ -243,6 +318,45 @@ class Streamer:
         self.progress = {}
         self._lock = threading.Lock()
         self._status_lock = threading.Lock()
+        self._heartbeat = time.time()
+        self._watchdog_stop = threading.Event()
+
+    def _log(self, tag: str, msg: str) -> None:
+        log_line(self.log_path, tag, msg)
+
+    def _beat(self) -> None:
+        """Called from the main thread at every point in run() that isn't itself
+        individually time-bounded (or, inside a bounded wait, on every sleep tick) —
+        proof that the supervisor's own control flow is still actually advancing, not
+        just that the Python process happens to still exist. See _watchdog()."""
+        self._heartbeat = time.time()
+
+    def _watchdog(self) -> None:
+        """Runs on its own daemon thread for the life of the process. This is the actual
+        fix for the failure mode this incident exposed: "the supervisor process is alive"
+        was being treated as equivalent to "the stream is being supervised", and there
+        was no code path that ever checked whether that was still true. A daemon thread
+        keeps running (CPython releases the GIL around blocking syscalls like the
+        blocking os.write()/os.open() calls elsewhere in this module) even while the main
+        thread is wedged inside one of them, which is exactly the scenario this needs to
+        catch — a Python-level exception can't fix a stuck call on another thread, but
+        os._exit() from over here can still end the whole process immediately, without
+        waiting on or depending on whatever the main thread is stuck in. That's also why
+        this must be os._exit(), not sys.exit() or raising: sys.exit() only works by
+        raising SystemExit on the calling (watchdog) thread, which would just end *this*
+        thread and leave the real, wedged main thread running exactly as before.
+        systemd (Restart=always, RestartSec=8) does the rest."""
+        while not self._watchdog_stop.wait(5):
+            idle = time.time() - self._heartbeat
+            if idle > WATCHDOG_TIMEOUT_SEC:
+                self._log("watchdog", f"CRITICAL: no supervisor heartbeat for {idle:.1f}s "
+                          f"(limit {WATCHDOG_TIMEOUT_SEC}s) — state={self.state} — "
+                          f"forcing process exit so systemd restarts a clean one")
+                try:
+                    self.write_status()
+                except Exception:
+                    pass
+                os._exit(1)
 
     # ---- configuration ---------------------------------------------------
     def target(self) -> tuple[str, list[str], dict]:
@@ -351,6 +465,9 @@ class Streamer:
                 cur = {}
 
     def write_status(self) -> None:
+        self._beat()   # called from the main loop constantly during normal operation, and
+                        # from progress_reader() on its own thread too — either is fine
+                        # proof of life, so this is the one place every path shares.
         with self._lock:
             p = dict(self.progress)
         st = dict(self.state)
@@ -404,8 +521,11 @@ class Streamer:
     def run(self) -> None:
         signal.signal(signal.SIGTERM, self._on_term)
         signal.signal(signal.SIGINT, self._on_term)
+        self._log("supervisor", f"supervisor loop starting, pid={os.getpid()}")
+        threading.Thread(target=self._watchdog, daemon=True).start()
         backoff = 3
         while not self.stop_flag:
+            self._beat()
             mode, out_args, info = self.target()
             self.state.update(target=mode, target_info=info)
             if mode == "none" and info.get("error"):
@@ -414,6 +534,7 @@ class Streamer:
                 for _ in range(20):
                     if self.stop_flag:
                         break
+                    self._beat()
                     time.sleep(0.5)
                 continue
             try:
@@ -422,16 +543,24 @@ class Streamer:
                     raise OSError("animation loop not readable")
             except OSError as e:
                 self.state.update(state="waiting", last_error=f"media drive: {e}", started_at=None)
-                self.write_status(); time.sleep(15); continue
+                self.write_status()
+                for _ in range(30):
+                    if self.stop_flag:
+                        break
+                    self._beat()
+                    time.sleep(0.5)
+                continue
             bg = BgFeeder(self.sid, self.log_path)
             bg.ensure_fifo()
             cmd = self.ffmpeg_cmd(out_args, bg.fifo_path())
+            self._log("supervisor", f"main ffmpeg starting, target={mode}")
             with open(self.log_path, "ab") as lf:
-                lf.write(f"\n=== {time.strftime('%Y-%m-%d %H:%M:%S')} starting ffmpeg target={mode}\n".encode())
+                lf.write(f"\n=== {_ts()} starting ffmpeg target={mode}\n".encode())
                 lf.write((" ".join(_redact(a) for a in cmd) + "\n").encode())
                 lf.flush()
                 self.proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0)
                 proc = self.proc   # captured for this cycle's threads, independent of the next restart's reassignment
+                self._log("supervisor", f"main ffmpeg started, pid={self.proc.pid}")
                 secret = next((a.rsplit("/", 1)[-1] for a in out_args if a.startswith("rtmp")), None)
                 threading.Thread(target=self.stderr_reader, args=(self.proc.stderr, lf, secret), daemon=True).start()
                 self.state.update(state="running", started_at=time.time(), last_error=None)
@@ -442,16 +571,51 @@ class Streamer:
                 t_bg = threading.Thread(target=bg.run, args=(lambda: proc.poll() is None,), daemon=True)
                 t_feed.start(); t_prog.start(); t_bg.start()
                 start = time.time()
+                stalled = False
+                got_first_progress = False
                 while self.proc.poll() is None and not self.stop_flag:
+                    self._beat()
                     time.sleep(2)
                     self.write_status()
-                    # stall detection: no progress update for 30s → restart
                     ts = self.progress.get("ts")
+                    if ts:
+                        got_first_progress = True
+                    # Stall detection has two distinct cases, not one: (a) it *was*
+                    # producing progress and stopped (ts is stale), and (b) it never
+                    # produced a first progress line at all (ts is still None). The
+                    # original check only covered (a) — `if ts and ...` — so a process
+                    # that started but hung before ever emitting one `-progress` line
+                    # (stuck negotiating an input, e.g.) was invisible to this loop
+                    # forever: not dead (poll() stays None), not "stalled" by the old
+                    # check either, since a still-None ts made the condition False. This
+                    # is the most likely explanation for the prior 10-hour incident: the
+                    # process itself never actually exited, so nothing downstream of that
+                    # (the exit-code branch, the backoff, the next restart) ever ran.
                     if ts and time.time() - ts > 30:
-                        lf.write(b"\n[supervisor] no progress for 30s, restarting ffmpeg\n")
-                        self._kill()
+                        self._log("supervisor", f"stall detected: no progress update for {time.time()-ts:.0f}s, restarting ffmpeg")
+                        stalled = True
+                    elif not got_first_progress and time.time() - start > 20:
+                        self._log("supervisor", f"stall detected: no progress line at all {time.time()-start:.0f}s after start, restarting ffmpeg")
+                        stalled = True
+                    if stalled:
+                        if not self._kill():
+                            # _kill() couldn't confirm death — spawning a replacement
+                            # anyway would leave the old, still-alive process (quite
+                            # possibly still holding the hardware encoder device) an
+                            # orphan competing with the new one for the same resource,
+                            # which is how one wedge turns into a wedge-on-every-attempt.
+                            # Don't hand this back to the retry/backoff path at all —
+                            # exit now so systemd tears down the whole cgroup (killing
+                            # the orphan too) and starts genuinely clean, rather than
+                            # waiting out the full watchdog timeout for a failure we
+                            # already know happened.
+                            self._log("supervisor", "CRITICAL: giving up on killing the wedged process — exiting immediately for systemd to recover")
+                            self.write_status()
+                            os._exit(1)
                         break
                 rc = self.proc.poll()
+                self._log("supervisor", f"main ffmpeg exited, pid={proc.pid} rc={rc} ran_for={time.time()-start:.1f}s"
+                          + (" (forced: stalled)" if stalled else ""))
             if self.stop_flag:
                 break
             ran = time.time() - start
@@ -459,25 +623,56 @@ class Streamer:
                               last_error=f"ffmpeg exited rc={rc} after {int(ran)}s")
             self.write_status()
             backoff = 3 if ran > 120 else min(60, backoff * 2)
+            self._log("supervisor", f"retry attempt #{self.state['restarts']}, delay={backoff:.0f}s")
             for _ in range(int(backoff * 2)):      # interruptible so a stop lands immediately
                 if self.stop_flag:
                     break
+                self._beat()
                 time.sleep(0.5)
         self._kill()
+        self._watchdog_stop.set()
         self.state.update(state="stopped")
         self.write_status()
+        self._log("supervisor", "supervisor loop exiting cleanly (stop requested)")
 
-    def _kill(self) -> None:
-        if self.proc and self.proc.poll() is None:
-            try:
-                self.proc.terminate()
-                self.proc.wait(timeout=8)
-            except Exception:
-                self.proc.kill()
+    def _kill(self) -> bool:
+        """Returns True once the process is confirmed actually gone. SIGKILL cannot be
+        blocked or ignored by a normal process, but it also isn't a promise of *instant*
+        death, and — for a process wedged in an uninterruptible kernel wait (e.g. stuck
+        on a hardware V4L2 M2M ioctl, a known class of issue on this Pi's encoder under
+        resource pressure) — it can do nothing at all until that syscall returns on its
+        own. The previous version fired kill() and returned immediately either way, with
+        nothing checking whether it actually worked; if it hadn't, every following
+        assumption (poll() will show it as exited, the next Popen() call is safe to
+        make, another attempt on the same hardware device won't just fail again) was
+        silently wrong. This can't force a truly wedged process to die — nothing in
+        userspace can — but it can tell the difference and say so loudly, and the
+        watchdog is what actually recovers from that case by taking the whole supervisor
+        process down for systemd to replace."""
+        if not self.proc or self.proc.poll() is not None:
+            return True
+        pid = self.proc.pid
+        try:
+            self.proc.terminate()
+            self.proc.wait(timeout=8)
+            self._log("supervisor", f"main ffmpeg pid={pid} terminated gracefully")
+            return True
+        except Exception:
+            pass
+        try:
+            self.proc.kill()
+            self.proc.wait(timeout=5)
+            self._log("supervisor", f"main ffmpeg pid={pid} required SIGKILL")
+            return True
+        except Exception as e:
+            self._log("supervisor", f"CRITICAL: main ffmpeg pid={pid} would not die after SIGKILL ({e}) "
+                      "— likely wedged in an uninterruptible kernel wait; relying on the watchdog")
+            return False
 
     def _on_term(self, *_):
         self.stop_flag = True
         self._kill()
+        self._watchdog_stop.set()
         self.state.update(state="stopped")
         try:
             self.write_status()
