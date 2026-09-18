@@ -28,17 +28,6 @@ input[type=range]{accent-color:var(--accent)}
 @media (max-aspect-ratio:16/9){
   .scene video,.scene img{object-fit:contain;background:#000}
   .layer-bg{opacity:1;filter:blur(28px) brightness(.45) saturate(1.15);transform:scale(1.15)}
-  /* The default .vignette (below) is tuned for full-bleed cover mode, where it subtly
-     darkens the very top/bottom edge of a video that already fills the whole screen —
-     fine there, since almost nothing sits in that narrow band. In contain mode those same
-     top/bottom regions ARE the new blurred-background letterbox area, and the vignette's
-     normal ~55-85%-opaque-black gradient was compositing on top of it and crushing an
-     already-darkened (brightness:.45) blur down to indistinguishable-from-black — found
-     by isolating the exact same filter chain in a standalone page (renders correctly
-     there) vs. in the real app (renders black), which narrowed it to this sibling layer
-     stacking above .layer-bg, not the blur/filter itself. Lightened here, scoped to this
-     breakpoint only, so cover mode (landscape/desktop) is completely unaffected. */
-  .scene .vignette{background:radial-gradient(120% 90% at 50% 45%,transparent 65%,rgba(3,6,12,.35) 100%),linear-gradient(180deg,rgba(3,6,12,.3),transparent 20%,transparent 75%,rgba(3,6,12,.5))}
 }
 
 /* ---------- rotate-device hint (portrait phones only, see RotateHint.tsx) ---------- */
@@ -56,6 +45,19 @@ input[type=range]{accent-color:var(--accent)}
 .scene.time-dusk .light{background:linear-gradient(180deg,rgba(255,110,60,.5),rgba(120,40,90,.35) 55%,rgba(10,10,40,.5))}
 .scene.time-night .light{background:linear-gradient(180deg,rgba(10,20,60,.55),rgba(5,8,25,.45))}
 .scene .vignette{position:absolute;inset:0;pointer-events:none;background:radial-gradient(120% 90% at 50% 45%,transparent 55%,rgba(3,6,12,.7) 100%),linear-gradient(180deg,rgba(3,6,12,.55),transparent 22%,transparent 70%,rgba(3,6,12,.85))}
+/* Must come after the base .vignette rule above — same selector, and a media query alone
+   doesn't add specificity, so whichever occurrence is later in the file wins the cascade
+   once its query matches. (An earlier version of this override sat before the base rule
+   here and was silently losing to it on every portrait viewport — the actual bug behind
+   the letterbox background rendering solid black; see the .layer-bg comment near the top
+   of this file for the full diagnosis.) The default gradient above is tuned for full-bleed
+   cover mode, where it only has to subtly darken the very top/bottom edge of a video that
+   already fills the screen; in contain mode those same regions are the new blurred-
+   background letterbox bars, and the full-strength (~55-85% opaque black) gradient was
+   crushing an already-darkened (brightness:.45) blur to indistinguishable-from-black. */
+@media (max-aspect-ratio:16/9){
+  .scene .vignette{background:radial-gradient(120% 90% at 50% 45%,transparent 65%,rgba(3,6,12,.35) 100%),linear-gradient(180deg,rgba(3,6,12,.3),transparent 20%,transparent 75%,rgba(3,6,12,.5))}
+}
 
 /* ---------- header (original .wrap) ---------- */
 .wrap{position:absolute;top:0;left:0;width:100%;z-index:10;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 18px;background:linear-gradient(180deg,rgba(3,6,12,.75),transparent)}
