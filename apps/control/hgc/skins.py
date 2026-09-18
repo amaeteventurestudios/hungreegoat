@@ -179,12 +179,12 @@ def slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:40] or "skin"
 
 
-def _asset_url(name: str | None) -> str | None:
+def _asset_url(name: str | None, prefix: str = "/v1/skins/assets/") -> str | None:
     if not name:
         return None
     if name.startswith("http://") or name.startswith("https://") or name.startswith("/"):
         return name   # already absolute (external hosting, e.g. the player's own bundled assets)
-    return f"/v1/skins/assets/{name}"
+    return f"{prefix}{name}"
 
 
 def _is_managed(name: str | None) -> bool:
@@ -193,37 +193,45 @@ def _is_managed(name: str | None) -> bool:
     return bool(name) and "/" not in name and not name.startswith("http")
 
 
-def _variants_public(s: dict) -> dict:
+def _variants_public(s: dict, asset_prefix: str) -> dict:
     out = {}
     for t, v in (s.get("time_variants") or {}).items():
         if t in TIMES and isinstance(v, dict) and (v.get("video") or v.get("image")):
-            out[t] = {"video": _asset_url(v.get("video")), "image": _asset_url(v.get("image"))}
+            out[t] = {"video": _asset_url(v.get("video"), asset_prefix), "image": _asset_url(v.get("image"), asset_prefix)}
     return out
 
 
-def _public_entry(s: dict, default_id: str | None) -> dict:
+def _public_entry(s: dict, default_id: str | None, asset_prefix: str = "/v1/skins/assets/") -> dict:
     return {
         "id": s["id"], "name": s["name"], "enabled": bool(s.get("enabled", True)), "order": s.get("order", 0),
         "accent": s.get("accent") or None, "description": s.get("description") or "",
         "time_mode": "variants" if s.get("time_mode") == "variants" else "always",
-        "video": _asset_url(s.get("video")), "image": _asset_url(s.get("image")),
-        "thumbnail": _asset_url(s.get("thumbnail")) or _asset_url(s.get("image")),
-        "time_variants": _variants_public(s), "ambience": s.get("ambience") or {},
+        "video": _asset_url(s.get("video"), asset_prefix), "image": _asset_url(s.get("image"), asset_prefix),
+        "thumbnail": _asset_url(s.get("thumbnail"), asset_prefix) or _asset_url(s.get("image"), asset_prefix),
+        "time_variants": _variants_public(s, asset_prefix), "ambience": s.get("ambience") or {},
         "default": default_id == s["id"], "source": s.get("source") or "custom",
         "broadcast_eligible": bool(s.get("broadcast_eligible")),
     }
 
 
-def public_list(include_disabled: bool = False) -> list[dict]:
+def public_list(include_disabled: bool = False, asset_prefix: str = "/v1/skins/assets/") -> list[dict]:
     """The authoritative inventory, sorted by operator order: this is exactly what the
     public player and the Control dashboard both read — there is no second, hidden list,
     and nothing here is exempt from the enabled filter, including former built-ins. A
     `draft` row (an in-progress New Skin that hasn't been saved yet — see create_draft) is
     excluded unconditionally, even from the operator's own `include_disabled` view: it is
     real storage-backed state so uploads work before Save, but it must never be visible as
-    a finished skin anywhere until the operator actually saves it."""
+    a finished skin anywhere until the operator actually saves it.
+
+    `asset_prefix` exists because control.hungreegoat.com's gateway vhost blocks /v1/ wholesale
+    (by design — it keeps the public tracks/audio/stream API off the operator-only domain), which
+    silently 404'd every thumbnail/video/image the Admin UI tried to render whenever it was
+    accessed through that real domain instead of localhost/LAN. The operator-facing callers
+    (GET /api/skins in main.py) pass "/api/skins/assets/" instead — a path under /api/, which that
+    same vhost already proxies through — so Admin's own asset URLs never depend on /v1/ being
+    reachable there. The public player and api.hungreegoat.com keep using the default (unchanged)."""
     d = load()
-    out = [_public_entry(s, d.get("default")) for s in d["skins"] if not s.get("draft")]
+    out = [_public_entry(s, d.get("default"), asset_prefix) for s in d["skins"] if not s.get("draft")]
     out.sort(key=lambda x: (x["order"], x["name"]))
     if not include_disabled:
         out = [s for s in out if s["enabled"]]

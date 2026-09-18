@@ -1674,11 +1674,28 @@ from . import skins as skins_mod  # noqa: E402
 @app.get("/api/skins")
 def skins_list(user: str = Depends(current_user)):
     d = skins_mod.load()
-    all_skins = skins_mod.public_list(include_disabled=True)
+    all_skins = skins_mod.public_list(include_disabled=True, asset_prefix="/api/skins/assets/")
     return {"skins": all_skins, "default": d.get("default"),
             "built_in_count": sum(1 for s in all_skins if s["source"] == "built-in"),
             "custom_count": sum(1 for s in all_skins if s["source"] == "custom"),
             "ambience_options": [{"key": k, "label": v} for k, v in skins_mod.AMBIENCE_LABELS.items()]}
+
+
+@app.get("/api/skins/assets/{name}")
+def skin_asset_admin(name: str, user: str = Depends(current_user)):
+    """Same file, same rules as public_api.py's /v1/skins/assets/{name} — this exists
+    only because control.hungreegoat.com's gateway vhost blocks /v1/ wholesale (on
+    purpose: it keeps the public tracks/audio/stream API off the operator-only domain),
+    which meant every thumbnail/video/image the Admin UI tried to render 404'd whenever
+    Admin was reached through that real domain instead of localhost/LAN. /api/ is already
+    proxied through there, so Admin's own <img>/<video> src values point here instead
+    (see skins.py::public_list's asset_prefix) while the public player keeps using /v1/."""
+    if "/" in name or name.startswith("."):
+        raise HTTPException(404)
+    p = skins_mod.SKINS_DIR / name
+    if not p.is_file():
+        raise HTTPException(404)
+    return FileResponse(p, headers={"Cache-Control": "public, max-age=604800"})
 
 
 class SkinBody(BaseModel):
@@ -1760,7 +1777,7 @@ async def skins_asset(skin_id: str, kind: str, time_key: str | None = None, file
     db.log_event("info", "system", f"Player skin asset uploaded: {skin_id} ({kind}{' '+time_key if time_key else ''})")
     row = skins_mod.get(skin_id) or {}
     thumb = row.get("thumbnail")
-    return {"ok": True, "file": name, "probe": probe, "thumbnail": f"/v1/skins/assets/{thumb}" if thumb else None}
+    return {"ok": True, "file": name, "probe": probe, "thumbnail": f"/api/skins/assets/{thumb}" if thumb else None}
 
 
 @app.post("/api/skins/{skin_id}/thumbnail/generate")

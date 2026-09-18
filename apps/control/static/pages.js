@@ -633,28 +633,37 @@ function skinEditorHtml(){ const e=SKIN_EDIT; const visUrl=e.video||e.image; con
     <label class="wide">Description <span class="muted2">(optional)</span><input class="inp" value="${h(e.description)}" placeholder="A quiet rooftop over Lagos at night" data-input="skin-field" data-key="description"></label>
     <div class="wide small muted2">An internal id is generated from the name automatically.</div>
 
-    <div class="wide" style="margin-top:4px"><b style="font:700 12px var(--display);color:var(--gold3)">2 · SKIN VISUAL</b></div>
-    <div class="wide" data-drop data-drop-kind="skin-visual"><div class="preview" style="aspect-ratio:16/9;max-width:420px">${isVideo?`<video src="${h(e.video)}" ${e.thumbnail?`poster="${h(e.thumbnail)}"`:''} autoplay muted loop playsinline></video>`:e.image?`<img class="bg" src="${h(e.image)}" alt="">`:`<div class="ph">No visual uploaded yet — upload or drag one below</div>`}</div>
-      ${visUrl?`<div class="small muted" style="margin-top:6px">This is the media currently attached to this skin.${e.probe?` ${e.probe.width&&e.probe.height?`${e.probe.width}×${e.probe.height} · `:''}${e.probe.duration?`${e.probe.duration}s · `:''}${fmtBytes(e.probe.bytes)} · ${h(e.probe.format).toUpperCase()} — ${e.probe.meets_recommended?'<span class="green">meets recommended specs</span>':'<span class="amber">below recommended specs (will still work)</span>'}`:''}</div>`:''}
+    <div class="wide" style="margin-top:4px"><b style="font:700 12px var(--display);color:var(--gold3)">2 · SKIN MEDIA</b></div>
+    ${isVideo?`
+    <div class="wide small" style="font-weight:700;color:var(--gold3);text-transform:uppercase;letter-spacing:.04em">Video</div>
+    <div class="wide" data-drop data-drop-kind="skin-visual"><div class="preview" style="aspect-ratio:16/9;max-width:420px"><video src="${h(e.video)}" ${e.thumbnail?`poster="${h(e.thumbnail)}"`:''} autoplay muted loop playsinline></video></div>
+      <div class="small muted" style="margin-top:6px">This is the video currently attached to this skin.${e.probe?` ${e.probe.width&&e.probe.height?`${e.probe.width}×${e.probe.height} · `:''}${e.probe.duration?`${e.probe.duration}s · `:''}${fmtBytes(e.probe.bytes)} · ${h(e.probe.format).toUpperCase()} — ${e.probe.meets_recommended?'<span class="green">meets recommended specs</span>':'<span class="amber">below recommended specs (will still work)</span>'}`:''}</div>
+      <div class="mediaActions">
+        <label class="mediaAction" title="Upload or drop a replacement video here">${I.upload}<b>Replace Video</b><small>MP4 / WebM — or drag &amp; drop</small><input type="file" accept="video/mp4,video/webm" class="hidden" data-change="skin-visual" data-kind="video"></label>
+      </div></div>
+    `:`
+    <div class="wide small" style="font-weight:700;color:var(--gold3);text-transform:uppercase;letter-spacing:.04em">Visual</div>
+    <div class="wide" data-drop data-drop-kind="skin-visual"><div class="preview" style="aspect-ratio:16/9;max-width:420px">${e.image?`<img class="bg" src="${h(e.image)}" alt="">`:`<div class="ph">No visual uploaded yet — upload or drag one below</div>`}</div>
+      ${e.image?`<div class="small muted" style="margin-top:6px">This is the still image currently attached to this skin (a static-image scene — most custom skins are video; see Broadcast Visuals for which types are broadcast-eligible).</div>`:''}
       <div class="mediaActions">
         <label class="mediaAction" title="Upload or drop a video here">${I.upload}<b>Upload Video</b><small>MP4 / WebM — or drag &amp; drop</small><input type="file" accept="video/mp4,video/webm" class="hidden" data-change="skin-visual" data-kind="video"></label>
-        <label class="mediaAction" title="Upload or drop an image here">${I.image}<b>Upload Image</b><small>PNG / JPEG / WebP — or drag &amp; drop</small><input type="file" accept="image/*" class="hidden" data-change="skin-visual" data-kind="image"></label>
+        <label class="mediaAction" title="Upload or drop an image here">${I.image}<b>${e.image?'Replace':'Upload'} Image</b><small>PNG / JPEG / WebP — or drag &amp; drop</small><input type="file" accept="image/*" class="hidden" data-change="skin-visual" data-kind="image"></label>
       </div></div>
+    `}
 
-    <div class="wide" style="margin-top:4px"><b style="font:700 12px var(--display);color:var(--gold3)">3 · THUMBNAIL</b></div>
+    <div class="wide small" style="font-weight:700;color:var(--gold3);text-transform:uppercase;letter-spacing:.04em;margin-top:4px">Thumbnail</div>
     <div class="wide" data-drop data-drop-kind="skin-thumbnail" style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
       <div class="preview" style="width:140px;aspect-ratio:8/5;flex:none">${e.thumbnail?`<img class="bg" src="${h(e.thumbnail)}" alt="">`:`<div class="ph small">No thumbnail yet</div>`}</div>
       <div class="mediaActions">
-        <button type="button" class="mediaAction ${visUrl?'':'disabled'}" data-act="skin-thumb-gen" ${visUrl?'':'disabled'} title="${visUrl?'Extract a still frame / resized copy from the visual above':'Upload a visual first'}">${I.image}<b>Generate</b><small>from visual</small></button>
-        <label class="mediaAction" title="Upload or drop a thumbnail image">${I.upload}<b>Upload Custom</b><small>PNG / JPEG / WebP — or drag &amp; drop</small><input type="file" accept="image/*" class="hidden" data-change="skin-visual" data-kind="thumbnail"></label>
+        <label class="mediaAction" title="Upload or drop a thumbnail image">${I.upload}<b>Replace Thumbnail</b><small>PNG / JPEG / WebP — or drag &amp; drop</small><input type="file" accept="image/*" class="hidden" data-change="skin-visual" data-kind="thumbnail"></label>
       </div></div>
 
-    <div class="wide" style="margin-top:4px"><b style="font:700 12px var(--display);color:var(--gold3)">4 · TIME BEHAVIOR</b></div>
+    <div class="wide" style="margin-top:4px"><b style="font:700 12px var(--display);color:var(--gold3)">3 · TIME BEHAVIOR</b></div>
     <div class="wide"><label style="display:flex;align-items:flex-start;gap:8px;font-weight:600;font-size:12.5px;cursor:pointer"><input type="radio" name="time_mode" style="margin-top:2px" ${e.time_mode==='always'?'checked':''} data-act="skin-timemode" value="always"> <span>Same scene all day <span class="muted2" style="display:block;font-weight:500;margin-top:2px">(recommended) One visual. The Player automatically dims/warms it for dawn, afternoon, dusk and night — you don't upload anything extra.</span></span></label>
     <label style="display:flex;align-items:flex-start;gap:8px;font-weight:600;font-size:12.5px;margin-top:10px;cursor:pointer"><input type="radio" name="time_mode" style="margin-top:2px" ${e.time_mode==='variants'?'checked':''} data-act="skin-timemode" value="variants"> <span>Different visual per time of day<span class="muted2" style="display:block;font-weight:500;margin-top:2px">Upload a separate video/image for Dawn, Afternoon, Dusk and/or Night. Any time you don't provide one for still uses the main visual above.</span></span></label>
     ${e.time_mode==='variants'?`<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-top:10px">${TIMES4.map(([tk,tl])=>{ const v=e.time_variants[tk]||{}; return `<div class="panel" style="padding:8px"><div class="small muted" style="margin-bottom:4px">${tl}</div><div class="preview" style="aspect-ratio:16/9">${v.video?`<video src="${h(v.video)}" muted loop playsinline autoplay></video>`:v.image?`<img class="bg" src="${h(v.image)}" alt="">`:`<div class="ph small">Uses the main visual</div>`}</div><label class="btn xs" style="margin-top:6px;width:100%;justify-content:center">${I.upload} Upload<input type="file" accept="video/mp4,video/webm,image/*" class="hidden" data-change="skin-variant" data-time="${tk}"></label></div>`; }).join('')}</div>`:''}</div>
 
-    <div class="wide" style="margin-top:4px"><b style="font:700 12px var(--display);color:var(--gold3)">5 · ACCENT COLOUR</b></div>
+    <div class="wide" style="margin-top:4px"><b style="font:700 12px var(--display);color:var(--gold3)">4 · ACCENT COLOUR</b></div>
     <div class="wide" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       <input type="color" value="${h(e.accent)}" data-input="skin-accent" style="width:44px;height:34px;padding:2px;border-radius:8px">
       <input class="inp mono" style="width:110px" value="${h(e.accent)}" data-input="skin-accent-hex" maxlength="7">
@@ -662,15 +671,15 @@ function skinEditorHtml(){ const e=SKIN_EDIT; const visUrl=e.video||e.image; con
       ${ACCENT_PRESETS.map(([n,c])=>`<button type="button" class="btn xs" data-act="skin-accent-preset" data-c="${c}" style="border-color:${c}"><span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:${c};margin-right:5px"></span>${n}</button>`).join('')}
     </div>
 
-    <div class="wide" style="margin-top:4px"><b style="font:700 12px var(--display);color:var(--gold3)">6 · DEFAULT AMBIENCE</b></div>
+    <div class="wide" style="margin-top:4px"><b style="font:700 12px var(--display);color:var(--gold3)">5 · DEFAULT AMBIENCE</b></div>
     <div class="wide">${ambRows||'<div class="small muted">No default ambience — the player opens with the mixer silent.</div>'}
       ${addable.length?`<div style="margin-top:8px"><select class="sel" id="skin-amb-add" style="height:34px">${addable.map(([k,l])=>`<option value="${k}">${l}</option>`).join('')}</select> <button type="button" class="btn xs" data-act="skin-amb-add">${I.plus} Add Ambient Sound</button></div>`:''}</div>
 
-    <div class="wide" style="margin-top:4px"><b style="font:700 12px var(--display);color:var(--gold3)">7 · PREVIEW SKIN</b></div>
+    <div class="wide" style="margin-top:4px"><b style="font:700 12px var(--display);color:var(--gold3)">6 · PREVIEW SKIN</b></div>
     <div class="wide"><div class="seg">${TIMES4.map(([tk,tl])=>`<button type="button" class="${e.previewTime===tk?'active':''}" data-act="skin-preview-time" data-t="${tk}">${tl}</button>`).join('')}</div>
       <div class="preview" style="aspect-ratio:16/9;max-width:420px;margin-top:8px;border-color:${h(e.accent)}55">${previewSrc?(previewSrc.match(/\.(mp4|webm)(\?|$)/)?`<video src="${h(previewSrc)}" ${e.thumbnail?`poster="${h(e.thumbnail)}"`:''} autoplay muted loop playsinline></video>`:`<img class="bg" src="${h(previewSrc)}" alt="">`):`<div class="ph">No visual yet</div>`}<span class="lbl">${e.previewTime.toUpperCase()}</span></div></div>
 
-    <div class="wide" style="margin-top:4px"><b style="font:700 12px var(--display);color:var(--gold3)">8 · PUBLISHING</b></div>
+    <div class="wide" style="margin-top:4px"><b style="font:700 12px var(--display);color:var(--gold3)">7 · PUBLISHING</b></div>
     <div class="wide rules"><div class="rule"><span class="lbl">Enabled — visible in the player's scene picker</span><span class="toggle ${e.enabled?'on':''}" data-act="skin-toggle-enabled"></span></div>
     <div class="rule"><span class="lbl">Set as default scene</span><span class="toggle ${e.default?'on':''}" data-act="skin-toggle-default"></span></div>
     <div class="rule"><span class="lbl">Also use for YouTube broadcast<small>${canBroadcast(e)?'Makes this video selectable in Broadcast Visuals — independent of whether it\'s enabled here':'Needs an uploaded video (not an image, and not an externally-hosted one) to be broadcast-eligible'}</small></span><span class="toggle ${e.broadcastEligible?'on':''} ${canBroadcast(e)?'':'disabled'}" data-act="skin-toggle-broadcast"></span></div></div>
@@ -708,7 +717,7 @@ Object.assign(ACTIONS, {
     // in /api/skins yet (see public_list's draft filter), so re-fetching the list here would
     // silently fail to find it.
     const r=await act(()=>post(`/api/skins/${e.id}/thumbnail/generate?source=${encodeURIComponent(source)}`),'Thumbnail generated',{noRefresh:true});
-    if(r){ e.thumbnail=`/v1/skins/assets/${r.file}`; delete state.pageData.skins; modal(()=>skinEditorHtml()); } else el.disabled=false; },
+    if(r){ e.thumbnail=`/api/skins/assets/${r.file}`; delete state.pageData.skins; modal(()=>skinEditorHtml()); } else el.disabled=false; },
   'skin-save': async()=>{ const e=SKIN_EDIT; if(!e.name.trim()){ toast('Give this skin a name first','err'); return; } e.saving=true; modal(()=>skinEditorHtml());
     // e.id always exists by now (New Skin creates a real draft row the moment the modal
     // opens — see skinEditOpen/'skin-new' — so every save, new or existing, is this same
@@ -732,7 +741,7 @@ async function skinUploadAsset(file, kind){
   const e=SKIN_EDIT; const fd=new FormData(); fd.append('file',file); toast(`Uploading ${file.name}…`);
   const r=await act(()=>api(`/api/skins/${e.id}/asset/${kind}`,{method:'POST',body:fd}),'Asset uploaded',{noRefresh:true});
   if(!r) return null;
-  const url=`/v1/skins/assets/${r.file}`;
+  const url=`/api/skins/assets/${r.file}`;
   if(kind==='video'){ e.video=url; e.image=null; } else if(kind==='image'){ e.image=url; e.video=null; } else e.thumbnail=url;
   if(r.thumbnail) e.thumbnail=r.thumbnail;   // a video/image upload can auto-generate one — reflect it immediately
   e.probe=r.probe||e.probe; delete state.pageData.skins; modal(()=>skinEditorHtml());
@@ -742,7 +751,7 @@ Object.assign(CHANGES, {
   'skin-visual': async(el)=>{ const f=el.files[0]; if(!f) return; await skinUploadAsset(f, el.dataset.kind); },
   'skin-variant': async(el)=>{ const f=el.files[0]; if(!f) return; const e=SKIN_EDIT; const kind=/\.(mp4|webm)$/i.test(f.name)?'video':'image'; const fd=new FormData(); fd.append('file',f); toast(`Uploading ${f.name}…`);
     const r=await act(()=>api(`/api/skins/${e.id}/asset/${kind}?time_key=${el.dataset.time}`,{method:'POST',body:fd}),'Variant uploaded',{noRefresh:true}); if(!r) return;
-    e.time_variants[el.dataset.time]={...(e.time_variants[el.dataset.time]||{}), [kind]:`/v1/skins/assets/${r.file}`}; delete state.pageData.skins; modal(()=>skinEditorHtml()); },
+    e.time_variants[el.dataset.time]={...(e.time_variants[el.dataset.time]||{}), [kind]:`/api/skins/assets/${r.file}`}; delete state.pageData.skins; modal(()=>skinEditorHtml()); },
   'skin-field': (el)=>{ SKIN_EDIT[el.dataset.key]=el.value; },
   'skin-amb-vol': (el)=>{ SKIN_EDIT.ambience[el.dataset.key]=Number(el.value); const b=el.nextElementSibling; if(b) b.textContent=el.value+'%'; },
   'skin-accent': (el)=>{ SKIN_EDIT.accent=el.value; const hex=document.querySelector('[data-input="skin-accent-hex"]'); if(hex) hex.value=el.value; },
@@ -796,8 +805,14 @@ pages.broadcast = { live:true, async load(){ return api('/api/broadcast'); }, vi
     <div class="grid eq" style="grid-template-columns:repeat(auto-fill,minmax(min(260px,100%),1fr));margin-bottom:18px">${d.collections.length?d.collections.map(c=>`<div class="panel" data-key="coll-${c.id}"><div class="panel-b"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><b style="font:800 15px var(--display);flex:1;min-width:0">${h(c.name)}</b>${c.id===d.active_collection?pill('gold','ACTIVE'):''}${pill('slate',c.order)}</div>
       <div class="chips" style="margin-top:8px">${c.videos.slice(0,4).map(v=>`<span class="chip slate">${h(v.name)}</span>`).join('')}${c.count>4?`<span class="chip slate">+${c.count-4} more</span>`:''}${!c.count?'<span class="small muted">No videos yet</span>':''}</div></div>
       <div class="panel-f"><button class="btn xs ${c.id===d.active_collection?'gold':''}" data-act="bc-activate-collection" data-id="${c.id}">${c.id===d.active_collection?'Active ✓':'Activate'}</button><button class="btn xs" data-act="coll-edit" data-id="${c.id}">${I.edit} Edit</button><button class="btn xs icon red" data-act="coll-del" data-id="${c.id}" style="margin-left:auto">${I.trash}</button></div></div>`).join(''):`<div class="panel"><div class="panel-b">${empty(I.film,'No collections yet','Group eligible visuals into a named set — Rainy Nights, Christmas, Lagos — then activate it.',`<button class="btn sm gold" data-act="coll-new">${I.plus} New Collection</button>`)}</div></div>`}</div>
-    <h3 style="margin:0 0 8px;font:800 15px var(--display)">${ic(I.image,'blue')}ALL ELIGIBLE VISUALS (${d.eligible_visuals.length})${help('Every video currently flagged for broadcast use, whether or not it is in an active collection.')}</h3>
-    <div class="grid eq" style="grid-template-columns:repeat(auto-fill,minmax(min(200px,100%),1fr))">${d.eligible_visuals.length?d.eligible_visuals.map(v=>`<div class="panel"><div class="preview" style="aspect-ratio:16/9;border-radius:16px 16px 0 0;border:0">${v.thumbnail?`<img class="bg" src="${h(v.thumbnail)}" alt="">`:`<div class="ph small">No thumbnail</div>`}</div><div class="panel-b"><b style="font:800 12.5px var(--display)">${h(v.name)}</b></div></div>`).join(''):`<div class="panel"><div class="panel-b">${empty(I.film,'No eligible visuals yet','Upload a video on Player Skins and turn on "Also use for YouTube broadcast".',`<a class="btn sm gold" href="#/skins">${I.image} Player Skins</a>`)}</div></div>`}</div>`}`; } };
+    ${(()=>{ const activeColl=d.collections.find(c=>c.id===d.active_collection);
+      const order=(activeColl?.video_ids||[]).filter(id=>d.eligible_visuals.some(v=>v.id===id));
+      const inRotation=order.map((id,i)=>({v:d.eligible_visuals.find(v=>v.id===id),pos:i+1}));
+      const notInRotation=d.eligible_visuals.filter(v=>!order.includes(v.id));
+      const card=(v,pos)=>{ const isNow=cur&&cur.id===v.id;
+        return `<div class="panel" style="${isNow?'border-color:var(--gold)':''}"><div class="preview" style="aspect-ratio:16/9;border-radius:16px 16px 0 0;border:0;position:relative">${v.thumbnail?`<img class="bg" src="${h(v.thumbnail)}" alt="">`:`<div class="ph small">No thumbnail</div>`}${pos?`<span class="lbl" style="background:rgba(7,13,24,.85)">#${pos}</span>`:''}${isNow?`<span class="lbl" style="left:auto;right:8px;background:var(--gold);color:#1a1204">${I.play} NOW PLAYING</span>`:''}</div><div class="panel-b"><b style="font:800 12.5px var(--display)">${h(v.name)}</b>${!pos?`<div class="small muted" style="margin-top:2px">Not in active collection</div>`:''}</div></div>`; };
+      return `<h3 style="margin:0 0 8px;font:800 15px var(--display)">${ic(I.image,'blue')}ALL ELIGIBLE VISUALS (${d.eligible_visuals.length})${help('Every video currently flagged for broadcast use. Numbered cards are in the active collection, in rotation order — the gold "NOW PLAYING" card is the one on air right now. Unnumbered, dimmed cards are eligible but not added to the active collection, so they never play.')}</h3>
+    <div class="grid eq" style="grid-template-columns:repeat(auto-fill,minmax(min(200px,100%),1fr))">${d.eligible_visuals.length?[...inRotation.map(({v,pos})=>card(v,pos)),...notInRotation.map(v=>`<div style="opacity:.55">${card(v,null)}</div>`)].join(''):`<div class="panel"><div class="panel-b">${empty(I.film,'No eligible visuals yet','Upload a video on Player Skins and turn on "Also use for YouTube broadcast".',`<a class="btn sm gold" href="#/skins">${I.image} Player Skins</a>`)}</div></div>`}</div>`; })()}`}`; } };
 Object.assign(ACTIONS, {
   'bc-mode-single': async()=>{ await act(()=>post('/api/broadcast/mode',{mode:'single'}),'Switched to Single Visual'); delete state.pageData.broadcast; render(); },
   'bc-mode-rotation': async()=>{ await act(()=>post('/api/broadcast/mode',{mode:'rotation'}),'Switched to Rotation'); delete state.pageData.broadcast; render(); },

@@ -66,10 +66,16 @@ def eligible_visuals() -> list[dict]:
 
 
 def _visual_public(s: dict) -> dict:
+    # Every caller of this (public_state/current_state) is Admin-only — Broadcast Visuals
+    # is an operator page, never read by the public player — so this always uses the
+    # /api/ prefix that control.hungreegoat.com's gateway actually proxies through,
+    # unlike /v1/ (blocked there on purpose; see skins.py::public_list's asset_prefix
+    # docstring for the full story).
+    prefix = "/api/skins/assets/"
     return {
         "id": s["id"], "name": s["name"],
-        "video": skins_mod._asset_url(s.get("video")),
-        "thumbnail": skins_mod._asset_url(s.get("thumbnail")) or skins_mod._asset_url(s.get("image")),
+        "video": skins_mod._asset_url(s.get("video"), prefix),
+        "thumbnail": skins_mod._asset_url(s.get("thumbnail"), prefix) or skins_mod._asset_url(s.get("image"), prefix),
         "player_enabled": bool(s.get("enabled", True)),
     }
 
