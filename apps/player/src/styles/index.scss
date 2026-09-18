@@ -4,7 +4,7 @@
 @font-face{font-family:"Montserrat";font-weight:600;src:url(/assets/fonts/Montserrat-SemiBold.ttf) format("truetype");font-display:swap}
 @font-face{font-family:"Inter";font-weight:100 900;src:url(/assets/fonts/Inter-Variable.ttf) format("truetype");font-display:swap}
 @font-face{font-family:"Great Vibes";src:url(/assets/fonts/GreatVibes-Regular.ttf) format("truetype");font-display:swap}
-$gold:#f2c14e;$gold3:#ffe08a;$navy:#070d18;$panel:rgba(7,13,24,.82);$line:rgba(128,168,214,.22);$muted:#a7b6c9;$green:#2ecc8a;$red:#ff5a6a;$cyan:#38d6e8;
+$gold:#f2c14e;$gold3:#ffe08a;$ivory:#f7f3e8;$navy:#070d18;$panel:rgba(7,13,24,.82);$line:rgba(128,168,214,.22);$muted:#a7b6c9;$green:#2ecc8a;$red:#ff5a6a;$cyan:#38d6e8;
 :root{--accent:#{$gold};--display:"Montserrat","Inter",system-ui,sans-serif;--sans:"Inter",system-ui,-apple-system,sans-serif;--script:"Great Vibes",cursive}
 *{box-sizing:border-box}html,body,#root{height:100%;margin:0;background:$navy;color:#eef2f8;font-family:var(--sans);-webkit-font-smoothing:antialiased}
 body{overflow:hidden;user-select:none;-webkit-user-select:none}
@@ -32,13 +32,22 @@ input[type=range]{accent-color:var(--accent)}
 .ptitle{font:800 17px/1.25 var(--display);letter-spacing:.05em;color:$gold3;text-shadow:0 2px 10px rgba(0,0,0,.85);white-space:nowrap;pointer-events:none}
 .dot{width:8px;height:8px;border-radius:50%;background:#7386a0;display:inline-block}.dot.live{background:$green;box-shadow:0 0 10px $green;animation:pulse 1.6s infinite}@keyframes pulse{50%{opacity:.4}}
 .nav-menu{display:flex;align-items:center;gap:6px}
-.scene-label{display:flex;flex-direction:column;align-items:flex-end;line-height:1.2;margin-right:2px;max-width:160px;pointer-events:none}
-.scene-label small{font-size:9px;font-weight:700;letter-spacing:.12em;color:rgba(255,255,255,.55);text-shadow:0 1px 6px rgba(0,0,0,.8)}
-.scene-label b{font-size:12.5px;font-weight:700;color:$gold3;text-shadow:0 2px 8px rgba(0,0,0,.85);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .nav-menu a,.nav-menu button{display:inline-flex;align-items:center;gap:6px;color:#fff;text-decoration:none;font-size:13px;font-weight:600;letter-spacing:.04em;padding:0 12px;height:38px;border-radius:12px;background:rgba(7,13,24,.55);border:1px solid $line;backdrop-filter:blur(8px)}
 .nav-menu .yt{background:linear-gradient(90deg,#ff3b4d,#c60024);border-color:rgba(255,120,130,.5)}
 .nav-menu svg{width:18px;height:18px}.nav-menu .time span{text-transform:capitalize}
 .fullscreen-btn{width:40px;justify-content:center;padding:0}
+
+/* ---------- "now viewing" scene-name label — independent of .wrap/.nav-menu so its
+   position is a real percentage of the viewport (.app), not of the header's own
+   content-sized height, and so it never has to compete with the header's own buttons
+   for space. Sits just below the header's button row (measured, not guessed: the
+   button row's own bottom edge is ~75px on desktop and ~84px including the mobile
+   title row below 767px) rather than at a literal 5-7% from the top, which would land
+   inside/above those buttons on every viewport tested. Elegant on purpose: no border,
+   only a very faint scrim behind the text for contrast on bright scenes. */
+.now-viewing{position:absolute;top:88px;right:6%;z-index:10;display:flex;flex-direction:column;align-items:flex-end;line-height:1.25;padding:5px 10px;border-radius:8px;background:rgba(0,0,0,.28);pointer-events:none;max-width:44vw}
+.now-viewing small{font-size:10px;font-weight:700;letter-spacing:.14em;color:$gold;text-shadow:0 1px 4px rgba(0,0,0,.65)}
+.now-viewing b{display:block;margin-top:1px;font-size:15px;font-weight:700;color:$ivory;text-shadow:0 1px 4px rgba(0,0,0,.65);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 
 /* ---------- modifier board (original) ---------- */
 .modifier{position:absolute;right:16px;top:45%;transform:translateY(-50%);width:60px;background:rgba(7,13,24,.85);z-index:11;border-radius:34px;padding:8px;display:flex;flex-direction:column;align-items:center;gap:4px;border:1px solid $line;backdrop-filter:blur(10px);transition:border-radius .1s}
@@ -107,8 +116,8 @@ input[type=range]{accent-color:var(--accent)}
 .start small{display:block;margin-top:14px;color:#7386a0;font-size:12px}
 
 /* ---------- responsive ---------- */
-@media (max-width:1024px){.fullscreen-btn{display:none}.nav-menu .home span{display:none}.nav-menu .yt-full{display:none}.scene-label{max-width:110px}}
-@media (max-width:767px){.scene-label{display:none}}
+@media (max-width:1024px){.fullscreen-btn{display:none}.nav-menu .home span{display:none}.nav-menu .yt-full{display:none}.now-viewing{max-width:38vw}}
+@media (max-width:767px){.now-viewing{top:92px;right:4%;padding:4px 8px;max-width:52vw}.now-viewing small{font-size:8.5px}.now-viewing b{font-size:12.5px}}
 @media (max-width:767px){
   /* Two real rows instead of one flex line: logo and controls stay on row 1 (naturally
      asymmetric widths - the YouTube+Time buttons are wider than the logo), and the title gets
