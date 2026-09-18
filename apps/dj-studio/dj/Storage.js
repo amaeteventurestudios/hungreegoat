@@ -107,7 +107,7 @@ export class Storage {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `aurdour-settings-${new Date().toISOString().slice(0, 10)}.json`;
+        a.download = `hungree-goat-settings-${new Date().toISOString().slice(0, 10)}.json`;
         a.click();
         URL.revokeObjectURL(url);
     }

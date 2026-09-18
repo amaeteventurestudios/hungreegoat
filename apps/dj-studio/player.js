@@ -1565,11 +1565,11 @@ class DJPlayer {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('%c[AURDOUR DJ] Initializing...', 'background:#00d4ff;color:#000;padding:4px 12px;border-radius:4px;font-weight:bold;font-size:14px');
+    console.log('%c[HUNGREE Goat DJ] Initializing...', 'background:#00d4ff;color:#000;padding:4px 12px;border-radius:4px;font-weight:bold;font-size:14px');
     const player = new DJPlayer();
     window._djPlayer = player; // expose for console debugging
 
-    console.log('%c[AURDOUR DJ] Ready!', 'background:#00ff88;color:#000;padding:4px 12px;border-radius:4px;font-weight:bold;font-size:14px');
+    console.log('%c[HUNGREE Goat DJ] Ready!', 'background:#00ff88;color:#000;padding:4px 12px;border-radius:4px;font-weight:bold;font-size:14px');
     console.log(`[AUDIO:INIT] AudioContext state: ${player.audioRouter.ctx.state}`);
     console.log(`[AUDIO:INIT] Sample rate: ${player.audioRouter.ctx.sampleRate}Hz`);
     console.log(`[AUDIO:INIT] Output: ${player.audioRouter.ctx.destination.channelCount}ch → default device`);

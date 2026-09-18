@@ -17,9 +17,29 @@ This directory is `Aurdour/web/` verbatim (a static, no-build two-deck DJ app �
   of upstream's own visual identity. Upstream product name/branding in the operator UI replaced —
   including the first-run onboarding tour's own "Welcome to AURDOUR DJ" copy, the page's
   `og:title`/`apple-mobile-web-app-title` meta tags, and `manifest.webmanifest`'s PWA
-  name/short_name, all now say HUNGREE Goat instead. `player.js`'s two `console.log` startup
-  messages still say "[AURDOUR DJ]" — devtools-only, never operator-visible UI, left as
-  harmless in-code attribution. This notice preserves the required attribution either way.
+  name/short_name, all now say HUNGREE Goat instead.
+- Second branding pass (production correction pass, 2026-09-18): the first pass above only
+  covered the main operator console. This pass found and fixed the remaining user-visible and
+  exported/shared surfaces still saying "AURDOUR": the standalone `audience.html` (title + header
+  logo), `overlay.html`/`obs-overlay.html` (titles, used as OBS browser-source overlays),
+  `manifest.webmanifest`'s 512×512 home-screen icon (had "AURDOUR" baked into the SVG artwork
+  itself, not just the name field), `dj/Setlist.js`'s share-card watermark image and share-sheet
+  HTML (both shown to and shareable by the operator), every exported filename across
+  `dj/Setlist.js`/`dj/Recorder.js`/`dj/CloudSync.js`/`dj/Storage.js` (mix recordings, CUE sheets,
+  setlist exports, cloud backups — files that land on the operator's own disk with the product
+  name in the filename), the CUE sheet's own `REM`/`TITLE`/`FILE` content, `dj/PluginManager.js`'s
+  bundled-plugin author field, and `dj/Audius.js`'s `app_name` identifier sent to the public
+  Audius API (this one was actually a correctness fix, not just cosmetic — a third-party service
+  should see our app's identity, not the vendored upstream's). `player.js`'s two console.log
+  startup messages are fixed too, for consistency, though they were already harmless
+  (devtools-only, never operator-visible UI).
+  Deliberately left alone: `localStorage` key prefixes, IndexedDB database names, BroadcastChannel
+  channel names, and the drag-and-drop `application/x-aurdour-track` MIME type string, all still
+  say "aurdour". These are internal wiring with zero user-facing surface — nothing renders them,
+  no exported file contains them — and several (BroadcastChannel names in particular) must match
+  identically across `audience.html`/`overlay.html`/`obs-overlay.html`/`StreamBroadcast.js` to keep
+  working, so renaming them would be pure risk for no visible benefit. This notice preserves the
+  required attribution either way.
 - `dj/Library.js`: `loadManifest()` now fetches `/api/dj/manifest?station=...&playlist=...` from
   HUNGREE Goat Control instead of the static `data/manifest.json` demo file. Everything else
   (FlowMode auto-DJ, AutoTransition crossfading, Recorder, BpmDetector, HarmonicMixer, Deck, FX,

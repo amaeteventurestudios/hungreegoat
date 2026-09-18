@@ -4,7 +4,7 @@
 export class Audius {
     constructor() {
         this.host = null;
-        this.appName = 'AURDOUR';
+        this.appName = 'HUNGREE-Goat-DJ-Studio';
         this._hostPromise = this._resolveHost();
     }
 

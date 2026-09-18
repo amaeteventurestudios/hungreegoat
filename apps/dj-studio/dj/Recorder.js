@@ -194,7 +194,7 @@ export class Recorder {
         const url = URL.createObjectURL(blob);
 
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const filename = `aurdour-mix-${timestamp}.${ext}`;
+        const filename = `hungree-goat-mix-${timestamp}.${ext}`;
 
         const a = document.createElement('a');
         a.href = url;
@@ -219,7 +219,7 @@ export class Recorder {
             const blob = new Blob(split.chunks, { type: mimeType });
             const url = URL.createObjectURL(blob);
             const safeName = split.trackName.replace(/[^a-zA-Z0-9_-]/g, '_');
-            const filename = `aurdour-split-${timestamp}-${String(index + 1).padStart(2, '0')}-${safeName}.${ext}`;
+            const filename = `hungree-goat-split-${timestamp}-${String(index + 1).padStart(2, '0')}-${safeName}.${ext}`;
 
             const a = document.createElement('a');
             a.href = url;
@@ -235,10 +235,10 @@ export class Recorder {
         const ts = timestamp || new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 
         // CUE sheet format
-        let cueContent = `REM RECORDED BY AURDOUR DJ\n`;
+        let cueContent = `REM RECORDED BY HUNGREE Goat DJ\n`;
         cueContent += `REM DATE ${new Date().toISOString()}\n`;
-        cueContent += `TITLE "AURDOUR Mix ${ts}"\n`;
-        cueContent += `FILE "aurdour-mix-${ts}.webm"\n\n`;
+        cueContent += `TITLE "HUNGREE Goat Mix ${ts}"\n`;
+        cueContent += `FILE "hungree-goat-mix-${ts}.webm"\n\n`;
 
         this.cueSheet.forEach((entry, index) => {
             const mins = Math.floor(entry.time / 60);
@@ -256,7 +256,7 @@ export class Recorder {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `aurdour-mix-${ts}.cue`;
+        a.download = `hungree-goat-mix-${ts}.cue`;
         a.click();
         URL.revokeObjectURL(url);
     }

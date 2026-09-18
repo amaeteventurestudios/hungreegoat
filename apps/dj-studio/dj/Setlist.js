@@ -248,7 +248,7 @@ export class Setlist {
     _buildTextSetlist() {
         const date = this._getFormattedDate();
         const lines = [
-            `AURDOUR DJ Set — ${date}`,
+            `HUNGREE Goat DJ Set — ${date}`,
             '================================',
         ];
 
@@ -283,14 +283,14 @@ export class Setlist {
 
     _exportTXT() {
         const text = this._buildTextSetlist();
-        this._downloadFile(text, 'text/plain', `aurdour-setlist-${this._fileTimestamp()}.txt`);
+        this._downloadFile(text, 'text/plain', `hungree-goat-setlist-${this._fileTimestamp()}.txt`);
     }
 
     // ====== EXPORT: JSON ======
 
     _exportJSON() {
         const data = {
-            app: 'AURDOUR DJ',
+            app: 'HUNGREE Goat DJ',
             date: new Date().toISOString(),
             sessionStart: this.sessionStart ? new Date(this.sessionStart).toISOString() : null,
             tracks: this.history.map(entry => ({
@@ -305,13 +305,13 @@ export class Setlist {
             stats: this.getSessionStats(),
         };
         const json = JSON.stringify(data, null, 2);
-        this._downloadFile(json, 'application/json', `aurdour-setlist-${this._fileTimestamp()}.json`);
+        this._downloadFile(json, 'application/json', `hungree-goat-setlist-${this._fileTimestamp()}.json`);
     }
 
     // ====== EXPORT: M3U ======
 
     _exportM3U() {
-        const lines = ['#EXTM3U', `#PLAYLIST:AURDOUR DJ Set — ${this._getFormattedDate()}`];
+        const lines = ['#EXTM3U', `#PLAYLIST:HUNGREE Goat DJ Set — ${this._getFormattedDate()}`];
 
         this.history.forEach(entry => {
             const duration = entry.durationPlayed ? Math.round(entry.durationPlayed) : -1;
@@ -322,7 +322,7 @@ export class Setlist {
         });
 
         const text = lines.join('\n');
-        this._downloadFile(text, 'audio/x-mpegurl', `aurdour-setlist-${this._fileTimestamp()}.m3u`);
+        this._downloadFile(text, 'audio/x-mpegurl', `hungree-goat-setlist-${this._fileTimestamp()}.m3u`);
     }
 
     // ====== EXPORT: CSV ======
@@ -348,7 +348,7 @@ export class Setlist {
         });
 
         const text = rows.join('\n');
-        this._downloadFile(text, 'text/csv', `aurdour-setlist-${this._fileTimestamp()}.csv`);
+        this._downloadFile(text, 'text/csv', `hungree-goat-setlist-${this._fileTimestamp()}.csv`);
     }
 
     // ====== EXPORT: PNG (Visual Setlist Card) ======
@@ -385,7 +385,7 @@ export class Setlist {
         // Header
         ctx.fillStyle = '#00d4ff';
         ctx.font = 'bold 14px "JetBrains Mono", monospace';
-        ctx.fillText('AURDOUR DJ', padding, padding + 10);
+        ctx.fillText('HUNGREE Goat DJ', padding, padding + 10);
 
         ctx.fillStyle = '#eaeaf2';
         ctx.font = 'bold 28px "Bricolage Grotesque", "DM Sans", sans-serif';
@@ -481,7 +481,7 @@ export class Setlist {
         const footerY = canvasHeight - 20;
         ctx.fillStyle = '#525278';
         ctx.font = '10px "JetBrains Mono", monospace';
-        ctx.fillText('Powered by AURDOUR DJ', padding, footerY);
+        ctx.fillText('Powered by HUNGREE Goat DJ', padding, footerY);
 
         // Download
         canvas.toBlob(blob => {
@@ -489,7 +489,7 @@ export class Setlist {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `aurdour-setlist-${this._fileTimestamp()}.png`;
+            a.download = `hungree-goat-setlist-${this._fileTimestamp()}.png`;
             a.click();
             URL.revokeObjectURL(url);
         }, 'image/png');
@@ -623,14 +623,14 @@ export class Setlist {
         overlay.innerHTML = `
             <div class="share-card">
                 <div class="share-header">
-                    <div class="share-brand">AURDOUR <span class="share-brand-accent">DJ</span></div>
+                    <div class="share-brand">HUNGREE Goat <span class="share-brand-accent">DJ</span></div>
                     <h1 class="share-title">DJ SET</h1>
                     <div class="share-date">${data.d || ''}</div>
                     ${statsHtml}
                 </div>
                 <div class="share-tracklist">${trackRows}</div>
                 <div class="share-footer">
-                    <span>Powered by AURDOUR DJ</span>
+                    <span>Powered by HUNGREE Goat DJ</span>
                     <button class="btn-toolbar" id="share-close-btn">CLOSE</button>
                 </div>
             </div>

@@ -102,7 +102,7 @@ export class PluginManager {
         this.builtinPlugins.autoGain = {
             name: 'Auto-Gain',
             version: '1.0',
-            author: 'AURDOUR',
+            author: 'HUNGREE Goat',
             type: 'analyzer',
             _enabled: false,
             _analyserA: null,
@@ -143,7 +143,7 @@ export class PluginManager {
         this.builtinPlugins.trackStats = {
             name: 'Track Stats',
             version: '1.0',
-            author: 'AURDOUR',
+            author: 'HUNGREE Goat',
             type: 'panel',
             _enabled: false,
             _stats: { tracksPlayed: 0, totalDuration: 0, avgBpm: 0, bpmSum: 0, keys: {} },
@@ -198,7 +198,7 @@ export class PluginManager {
         this.builtinPlugins.transitionLog = {
             name: 'Transition Log',
             version: '1.0',
-            author: 'AURDOUR',
+            author: 'HUNGREE Goat',
             type: 'panel',
             _enabled: false,
             _log: [],

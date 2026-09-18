@@ -17,7 +17,7 @@ export class CloudSync {
         const data = {
             version: 1,
             exportedAt: new Date().toISOString(),
-            app: 'AURDOUR DJ',
+            app: 'HUNGREE Goat DJ',
             settings: this._getAllSettings(),
             likedTracks: this._getLikedTracks(),
             playlists: this._getPlaylists(),
@@ -30,7 +30,7 @@ export class CloudSync {
 
         const a = document.createElement('a');
         a.href = url;
-        a.download = `aurdour-backup-${new Date().toISOString().slice(0, 10)}.json`;
+        a.download = `hungree-goat-backup-${new Date().toISOString().slice(0, 10)}.json`;
         a.click();
         URL.revokeObjectURL(url);
 
@@ -42,7 +42,7 @@ export class CloudSync {
             const text = await file.text();
             const data = JSON.parse(text);
 
-            if (!data.version || data.app !== 'AURDOUR DJ') {
+            if (!data.version || data.app !== 'HUNGREE Goat DJ') {
                 this._showToast('Invalid backup file', 'error');
                 return;
             }
