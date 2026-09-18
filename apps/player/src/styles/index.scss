@@ -16,7 +16,28 @@ input[type=range]{accent-color:var(--accent)}
 /* ---------- scene (original videoIn/videoOut crossfade) ---------- */
 .scene{position:absolute;inset:0;z-index:1;background:#000}
 .scene .layer{position:absolute;inset:0;transition:opacity 1.2s ease}.scene .layer.in{opacity:1}.scene .layer.out{opacity:0}
-.scene video,.scene img{width:100%;height:100%;object-fit:cover;display:block}
+.scene video,.scene img{width:100%;height:100%;object-fit:cover;display:block;position:relative;z-index:1}
+.layer-bg{position:absolute;inset:0;background-size:cover;background-position:center;opacity:0;z-index:0}
+/* Portrait / narrower-than-16:9 viewports (phones in portrait, tall tablets) — the
+   inverse of what .scene video/img does above. object-fit:cover on a 16:9 source
+   inside a much-taller-than-wide box crops most of the width away; contain shows the
+   complete, unstretched, uncropped animation instead, and the blurred/darkened
+   thumbnail behind it (see Scene.tsx's .layer-bg) fills the resulting top/bottom bars.
+   Purely a CSS breakpoint, not JS-driven, so it already responds to a real device
+   rotation instantly with no reload and no extra listener needed for the layout itself. */
+@media (max-aspect-ratio:16/9){
+  .scene video,.scene img{object-fit:contain;background:#000}
+  .layer-bg{opacity:1;filter:blur(28px) brightness(.45) saturate(1.15);transform:scale(1.15)}
+}
+
+/* ---------- rotate-device hint (portrait phones only, see RotateHint.tsx) ---------- */
+.rotate-hint{position:fixed;left:50%;top:22%;transform:translateX(-50%);z-index:15;display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;background:rgba(7,13,24,.55);backdrop-filter:blur(6px);box-shadow:0 4px 18px rgba(0,0,0,.35);pointer-events:none;animation:rotateHintIn .4s ease,rotateHintOut .4s ease 4.6s}
+.rotate-hint svg{width:18px;height:18px;color:$gold;flex:none;animation:rotateHintSpin 2.2s ease-in-out infinite}
+.rotate-hint span{font-size:12.5px;font-weight:600;color:$ivory;text-shadow:0 1px 4px rgba(0,0,0,.65);white-space:nowrap}
+@keyframes rotateHintIn{from{opacity:0;transform:translateX(-50%) translateY(-6px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+@keyframes rotateHintOut{to{opacity:0}}
+@keyframes rotateHintSpin{0%,100%{transform:rotate(0deg)}50%{transform:rotate(90deg)}}
+@media (min-width:768px){.rotate-hint{display:none}}
 .scene-pending{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;background:#0d1420}.scene-pending b{font:800 22px var(--display);color:#fff}.scene-pending small{color:$muted;font-size:13px}
 .scene .light{position:absolute;inset:0;pointer-events:none;transition:background 1.5s ease,opacity 1.5s ease;mix-blend-mode:soft-light}
 .scene.time-dawn .light{background:linear-gradient(180deg,rgba(255,170,90,.55),rgba(255,120,60,.25) 60%,rgba(20,20,60,.2))}
