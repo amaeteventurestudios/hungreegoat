@@ -537,6 +537,40 @@ Object.assign(FORMS, { 'youtube': async(f,b)=>{ const body={rtmps_url:b.rtmps_ur
 /* ======================= PLAYER SKINS ======================= */
 const TIMES4=[['dawn','Dawn'],['afternoon','Afternoon'],['dusk','Dusk'],['night','Night']];
 const ACCENT_PRESETS=[['Gold','#f2c14e'],['Blue','#4f8cff'],['Orange','#ff8a3d'],['Green','#2ecc8a'],['Teal','#38d6e8']];
+/* Mirrors hgc/broadcast.py::local_path exactly — only a managed local video file (a bare
+   filename under SKINS_DIR, not an image and not an externally-hosted URL) can ever be
+   broadcast-eligible, so the bulk table never lets you flip on something the backend would
+   reject anyway. */
+const skinCanBroadcast=(s)=>!!(s.video && !/^https?:\/\//i.test(s.video));
+const SKIN_MGMT={open:true,selected:new Set()};
+function skinManageTableHtml(list){
+  const e=SKIN_MGMT; const rows=list;
+  const allChecked=rows.length>0 && rows.every(s=>e.selected.has(s.id));
+  const row=(s)=>{ const bc=skinCanBroadcast(s);
+    return `<div class="rule" data-key="mgmt-${s.id}" style="align-items:center">
+      <input type="checkbox" data-act="skin-mgmt-sel" data-id="${s.id}" ${e.selected.has(s.id)?'checked':''} style="width:16px;height:16px;flex:none">
+      <span class="preview" style="width:56px;height:35px;flex:none;border-radius:8px;overflow:hidden;position:relative">${(s.thumbnail||s.image)?`<img class="bg" src="${h(s.thumbnail||s.image)}" alt="" style="width:100%;height:100%;object-fit:cover">`:''}</span>
+      <span class="lbl" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700">${h(s.name)}${s.default?` ${pill('gold','default')}`:''}</span>
+      ${pill(s.source==='built-in'?'blue':'gold',s.source==='built-in'?'built-in':'custom')}
+      <span class="small muted" style="width:76px;text-align:center;flex:none">Player</span><span class="toggle ${s.enabled?'on':''}" data-act="skin-toggle" data-id="${s.id}" title="Visible in Player"></span>
+      <span class="small muted" style="width:86px;text-align:center;flex:none">Broadcast</span><span class="toggle ${s.broadcast_eligible?'on':''} ${bc?'':'disabled'}" data-act="skin-toggle-bc" data-id="${s.id}" title="${bc?'Use in YouTube broadcast rotation':'Needs a managed uploaded video (not an image, not externally-hosted) to be broadcast-eligible'}"></span>
+    </div>`; };
+  return `<div class="panel" style="margin-bottom:18px">
+    <div class="panel-h" style="cursor:pointer" data-act="skin-mgmt-open"><h3 style="margin:0">${ic(I.image,'cyan')}Manage visibility${help('Quickly control which skins are visible in the Player and which are eligible for the YouTube broadcast rotation, across every skin at once — no need to open each one individually.')}</h3><button class="btn xs ghost icon" data-act="skin-mgmt-open">${e.open?I.up:I.down}</button></div>
+    ${e.open?`<div class="panel-b">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+        <button class="btn xs" data-act="skin-mgmt-select-all">${allChecked?'Clear selection':'Select all'}</button>
+        <span class="small muted">${e.selected.size} selected</span>
+        <span style="flex:1"></span>
+        <button class="btn xs" data-act="skin-mgmt-bulk" data-field="enabled" data-value="1" ${e.selected.size?'':'disabled'}>Enable selected for Player</button>
+        <button class="btn xs ghost" data-act="skin-mgmt-bulk" data-field="enabled" data-value="0" ${e.selected.size?'':'disabled'}>Disable selected for Player</button>
+        <button class="btn xs" data-act="skin-mgmt-bulk" data-field="broadcast_eligible" data-value="1" ${e.selected.size?'':'disabled'}>Enable selected for Broadcast</button>
+        <button class="btn xs ghost" data-act="skin-mgmt-bulk" data-field="broadcast_eligible" data-value="0" ${e.selected.size?'':'disabled'}>Disable selected for Broadcast</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px">${rows.map(row).join('')}</div>
+    </div>`:''}
+  </div>`;
+}
 pages.skins = { async load(){ return api('/api/skins'); }, view(d){ const list=d.skins; const builtIn=list.filter(s=>s.source==='built-in'); const custom=list.filter(s=>s.source==='custom');
   const card=(s,i,arr)=>{ const cover=s.thumbnail||s.image;
     // A <video> at rest with no poster paints nothing (preload="metadata" never decodes a
@@ -566,6 +600,7 @@ pages.skins = { async load(){ return api('/api/skins'); }, view(d){ const list=d
       <b>Thumbnail:</b> 640×400, PNG/JPEG/WebP — generate one automatically from the visual, or upload your own.<br>
       Assets are stored on the HUNGREE-GOAT drive under <span class="mono">/media/hungree-goat/skins/</span>; the manifest (<span class="mono">data/skins.json</span>) is included in the regular data backup. Changes reach the public player within about 30 seconds. A skin can also be marked for the YouTube broadcast — see <a class="link" href="#/broadcast">Broadcast Visuals</a>.</div></details>
   </div>
+  ${skinManageTableHtml(list)}
   <h3 style="margin:0 0 8px;font:800 15px var(--display);display:flex;align-items:center;gap:8px">${ic(I.image,'blue')}ORIGINAL SKINS (${builtIn.length})${help('The scenes HUNGREE Goat first shipped with. They work exactly like any custom skin here — enable/disable, reorder, set a default, upload or replace their art, or delete them for good.')}</h3>
   <div class="grid eq" style="grid-template-columns:repeat(auto-fill,minmax(min(280px,100%),1fr));margin-bottom:18px">${builtIn.length?builtIn.map((s,i)=>card(s,i,builtIn)).join(''):`<div class="panel"><div class="panel-b">${empty(I.image,'No original skins left','Every scene this player shipped with has been deleted. Add one from scratch below.')}</div></div>`}</div>
   <h3 style="margin:0 0 8px;font:800 15px var(--display);display:flex;align-items:center;gap:8px">${ic(I.image,'gold')}MY SKINS <span class="muted" style="font-weight:600">/ CUSTOM (${custom.length})</span>${help('Scenes you have added yourself.')}</h3>
@@ -645,7 +680,17 @@ Object.assign(ACTIONS, {
   'skin-new': async()=>{ const draft=await post('/api/skins/draft'); skinEditOpen(draft,true); },
   'skin-edit': (el)=>skinEditOpen(state.pageData.skins.skins.find(x=>x.id===el.dataset.id),false),
   'skin-preview': (el)=>{ const s=state.pageData.skins.skins.find(x=>x.id===el.dataset.id); modal(()=>{ const src=s.video||s.image; return `<h3>${I.eye} Preview — ${h(s.name)}<button class="btn xs ghost icon x" data-act="close-modal">${I.x}</button></h3><div class="preview" style="aspect-ratio:16/9">${src?(s.video?`<video src="${h(src)}" autoplay muted loop playsinline></video>`:`<img class="bg" src="${h(src)}" alt="">`):`<div class="ph">No visual uploaded yet</div>`}</div><div class="chips" style="margin-top:10px">${pill(s.source==='built-in'?'blue':'gold',s.source)}${pill(s.enabled?'on':'off',s.enabled?'enabled':'disabled')}${s.default?pill('gold','default'):''}${s.broadcast_eligible?pill('cyan','broadcast-eligible'):''}</div>`; }); },
-  'skin-toggle': async(el)=>{ const s=state.pageData.skins.skins.find(x=>x.id===el.dataset.id); await act(()=>put(`/api/skins/${s.id}`,{name:s.name,description:s.description,enabled:!s.enabled,accent:s.accent,ambience:s.ambience,order:s.order,time_mode:s.time_mode,time_variants:s.time_variants}), s.enabled?'Skin disabled':'Skin enabled'); delete state.pageData.skins; render(); },
+  'skin-toggle': async(el)=>{ const s=state.pageData.skins.skins.find(x=>x.id===el.dataset.id); await act(()=>put(`/api/skins/${s.id}`,{name:s.name,description:s.description,enabled:!s.enabled,accent:s.accent,ambience:s.ambience,order:s.order,time_mode:s.time_mode,time_variants:s.time_variants,broadcast_eligible:s.broadcast_eligible}), s.enabled?'Skin disabled':'Skin enabled'); delete state.pageData.skins; render(); },
+  'skin-toggle-bc': async(el)=>{ const s=state.pageData.skins.skins.find(x=>x.id===el.dataset.id); if(!skinCanBroadcast(s)) return; await act(()=>put(`/api/skins/${s.id}`,{name:s.name,description:s.description,enabled:s.enabled,accent:s.accent,ambience:s.ambience,order:s.order,time_mode:s.time_mode,time_variants:s.time_variants,broadcast_eligible:!s.broadcast_eligible}), s.broadcast_eligible?'Removed from broadcast rotation':'Added to broadcast rotation'); delete state.pageData.skins; render(); },
+  'skin-mgmt-open': ()=>{ SKIN_MGMT.open=!SKIN_MGMT.open; render(); },
+  'skin-mgmt-sel': (el)=>{ if(el.checked) SKIN_MGMT.selected.add(el.dataset.id); else SKIN_MGMT.selected.delete(el.dataset.id); render(); },
+  'skin-mgmt-select-all': ()=>{ const list=state.pageData.skins.skins; if(list.every(s=>SKIN_MGMT.selected.has(s.id))) SKIN_MGMT.selected=new Set(); else SKIN_MGMT.selected=new Set(list.map(s=>s.id)); render(); },
+  'skin-mgmt-bulk': async(el)=>{ const field=el.dataset.field, value=el.dataset.value==='1'; const list=state.pageData.skins.skins; const ids=[...SKIN_MGMT.selected];
+    const targets=ids.map(id=>list.find(x=>x.id===id)).filter(Boolean).filter(s=>field!=='broadcast_eligible'||value===false||skinCanBroadcast(s));
+    const skipped=ids.length-targets.length;
+    await act(()=>Promise.all(targets.map(s=>put(`/api/skins/${s.id}`,{name:s.name,description:s.description,enabled:field==='enabled'?value:s.enabled,accent:s.accent,ambience:s.ambience,order:s.order,time_mode:s.time_mode,time_variants:s.time_variants,broadcast_eligible:field==='broadcast_eligible'?value:s.broadcast_eligible}))),
+      `${targets.length} skin${targets.length===1?'':'s'} updated${skipped?`, ${skipped} skipped (no broadcastable video)`:''}`);
+    delete state.pageData.skins; render(); },
   'skin-default': async(el)=>{ await act(()=>post(`/api/skins/${el.dataset.id}/default`),'Default skin set'); delete state.pageData.skins; render(); },
   'skin-move': async(el)=>{ const list=state.pageData.skins.skins; const group=list.filter(x=>x.source===list.find(y=>y.id===el.dataset.id).source); const ids=group.map(x=>x.id); const i=ids.indexOf(el.dataset.id), j=i+Number(el.dataset.dir); if(j<0||j>=ids.length) return; [ids[i],ids[j]]=[ids[j],ids[i]]; const fullOrder=list.map(x=>x.id===ids[i]?ids[j]:x.id===ids[j]?ids[i]:x.id); await act(()=>post('/api/skins/reorder',{order:fullOrder})); delete state.pageData.skins; render(); },
   'skin-del': async(el)=>{ const s=state.pageData.skins.skins.find(x=>x.id===el.dataset.id); const msg=`Delete "${s.name}"? This will remove it from the HUNGREE Goat Player for good, including any uploaded video/image and thumbnail. This can't be undone.`; if(await confirmDlg(msg,'Delete',true)){ await act(()=>del(`/api/skins/${el.dataset.id}`),'Skin deleted'); delete state.pageData.skins; render(); } },
