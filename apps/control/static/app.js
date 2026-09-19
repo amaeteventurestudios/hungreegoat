@@ -45,9 +45,54 @@ const st = () => state.overview && state.overview.stations[state.station];
 const artUrl = (t, size=400) => { const id = t && (t.id ?? t.track_id); return id ? `/api/library/${id}/artwork` : ASSET.defaultArt; };
 
 /* ---------------- icons ---------------- */
-/* ---------------- help tooltips (hover + keyboard focus on desktop, tap on mobile) ---------------- */
-function help(text, cls='') { return `<button type="button" class="help ${cls}" data-act="help-toggle" aria-label="What this does">?<span class="tip" role="tooltip">${h(text)}</span></button>`; }
-document.addEventListener('click', e => { if (!e.target.closest('.help')) $$('.help.open').forEach(b => b.classList.remove('open')); }, true);
+/* ---------------- help tooltips (hover + keyboard focus on desktop, tap-to-pin on mobile) ----------------
+   See the matching comment in app.css for why this is a single body-level portal rather
+   than a popover nested inside the triggering card. */
+function help(text, cls='') { return `<button type="button" class="help ${cls}" data-tip="${h(text)}" aria-label="What this does"><span aria-hidden="true">?</span></button>`; }
+let ttEl = null, ttOpenFor = null, ttPinned = false, ttShowT = null, ttHideT = null;
+function ttEnsure() { if (!ttEl) { ttEl = document.createElement('div'); ttEl.className = 'tt-portal'; ttEl.setAttribute('role', 'tooltip'); document.body.appendChild(ttEl); } return ttEl; }
+function ttPosition(trigger) {
+  const el = ttEnsure(); const r = trigger.getBoundingClientRect(); const gap = 9, margin = 8;
+  el.style.left = '0px'; el.style.top = '0px'; el.classList.add('show'); el.style.visibility = 'hidden';
+  const tw = el.offsetWidth, th = el.offsetHeight;
+  const above = (r.top - th - gap) >= margin;   // flip below the trigger when there isn't room above
+  let top = above ? (r.top - th - gap) : (r.bottom + gap);
+  top = Math.max(margin, Math.min(top, window.innerHeight - th - margin));
+  let left = r.left + r.width/2 - tw/2;
+  left = Math.max(margin, Math.min(left, window.innerWidth - tw - margin));   // clamp horizontally at both edges
+  el.style.setProperty('--tt-arrow-x', Math.max(10, Math.min(r.left + r.width/2 - left, tw - 10)) + 'px');
+  el.classList.toggle('above', above); el.classList.toggle('below', !above);
+  el.style.left = left + 'px'; el.style.top = top + 'px'; el.style.visibility = '';
+}
+function ttShow(trigger, pin) {
+  clearTimeout(ttHideT); clearTimeout(ttShowT);
+  ttShowT = setTimeout(() => {
+    const el = ttEnsure(); el.textContent = trigger.getAttribute('data-tip') || '';
+    ttOpenFor = trigger; if (pin) { ttPinned = true; trigger.classList.add('open'); }
+    ttPosition(trigger); el.classList.add('show');
+  }, pin ? 0 : 90);
+}
+function ttHideNow() { clearTimeout(ttShowT); clearTimeout(ttHideT); if (ttEl) ttEl.classList.remove('show'); if (ttOpenFor) ttOpenFor.classList.remove('open'); ttOpenFor = null; ttPinned = false; }
+function ttHide() {
+  if (ttPinned) return;   // a click-pinned tooltip only closes via an explicit close (see below), never a stray mouseleave
+  clearTimeout(ttShowT);
+  ttHideT = setTimeout(ttHideNow, 260);   // long enough to actually read, short enough to not feel stuck
+}
+document.addEventListener('mouseover', e => { const t = e.target.closest('.help'); if (t) ttShow(t, false); });
+document.addEventListener('mouseout', e => { const t = e.target.closest('.help'); if (t && !t.contains(e.relatedTarget)) ttHide(); });
+document.addEventListener('focusin', e => { const t = e.target.closest('.help'); if (t) ttShow(t, false); });
+document.addEventListener('focusout', e => { const t = e.target.closest('.help'); if (t) ttHide(); });
+// Capture phase + stopPropagation: a `?` button nested inside a clickable card header
+// (e.g. one with its own data-act, like the skins page's "Manage visibility" header)
+// must only toggle the tooltip, never also fire that ancestor's click action.
+document.addEventListener('click', e => {
+  const t = e.target.closest('.help');
+  if (t) { e.preventDefault(); e.stopPropagation(); if (ttOpenFor === t && ttPinned) ttHideNow(); else ttShow(t, true); }
+  else if (ttPinned) ttHideNow();
+}, true);
+window.addEventListener('scroll', () => { if (ttOpenFor) ttPosition(ttOpenFor); }, true);
+window.addEventListener('resize', () => { if (ttOpenFor) ttPosition(ttOpenFor); });
+window.addEventListener('hashchange', ttHideNow);
 
 const P = (d, extra='') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${extra}>${d}</svg>`;
 const I = {
@@ -185,7 +230,7 @@ async function render(){ const root=$('#root');
 async function refresh(force=false){ if(!state.user) return; try{ const [ov, al] = await Promise.all([api('/api/overview'), api('/api/alerts?state=all&limit=100')]); const s=ov.stations[state.station];
     const [sch, pls] = await Promise.all([api(`/api/stations/${state.station}/schedules`), api(`/api/stations/${state.station}/playlists`)]);
     s.today_schedule=sch.today; s.playlists=pls; s.jingles={jingles:(pls.find(p=>p.kind==='jingles')||{}).track_count||0, station_ids:(pls.find(p=>p.kind==='station_ids')||{}).track_count||0};
-    state.overview=ov; state.alerts=al; state.overviewAt=Date.now(); pushHist(ov.system);
+    state.overview=ov; state.alerts=al; state.overviewAt=Date.now(); pushHist(ov);
     const pg=HGC.pages[state.page]; if(pg && pg.load && (force || pg.live)) state.pageData[state.page] = await pg.load();
     await render(); }catch(e){ if(e.message!=='Not signed in') { console.warn('refresh', e); } } }
 function route(){ const p=(location.hash.replace(/^#\/?/,'')||'dashboard').split('/')[0]; state.page=HGC.pages[p]?p:'dashboard'; state.modal=null; state.navOpen=false; delete state.pageData[state.page]; render(); window.scrollTo(0,0); }
@@ -193,9 +238,48 @@ window.addEventListener('hashchange', route);
 window.addEventListener('resize', ()=>{ clearTimeout(state._rz); state._rz=setTimeout(()=>render(),150); });
 
 /* ---------------- sparklines / meters / clock ---------------- */
-const hist = { cpu:[], temp:[] };
-function pushHist(sys){ hist.cpu.push(sys.cpu_percent); hist.temp.push(sys.temp_c||0); for (const k in hist) hist[k]=hist[k].slice(-60); }
+const hist = { cpu:[], temp:[], yt:{} };
+// Per-station stream history (bitrate/speed/fps), sampled once per poll (~5s), kept
+// ~30 min trailing — same rolling-buffer idea as cpu/temp above, just keyed by station
+// so switching stations (or leaving/returning to the YouTube page) doesn't mix or lose data.
+function pushHist(ov){ const sys=ov.system; hist.cpu.push(sys.cpu_percent); hist.temp.push(sys.temp_c||0);
+  hist.cpu=hist.cpu.slice(-60); hist.temp=hist.temp.slice(-60);
+  for (const sid in ov.stations||{}) { const s=ov.stations[sid].stream||{}; const b=hist.yt[sid] || (hist.yt[sid]={bitrate:[],speed:[],fps:[],t:[]});
+    const running = s.state==='running' && !s.stale;
+    b.bitrate.push(running ? (s.bitrate_kbps||0) : null);
+    b.speed.push(running ? (parseFloat(String(s.speed||'').replace('x',''))||null) : null);
+    b.fps.push(running ? (s.fps||0) : null);
+    b.t.push(Date.now());
+    const cap=360; if (b.t.length>cap) { b.bitrate=b.bitrate.slice(-cap); b.speed=b.speed.slice(-cap); b.fps=b.fps.slice(-cap); b.t=b.t.slice(-cap); } } }
 function drawSparks(){ $$('canvas[data-spark]').forEach(c=>{ const d=hist[c.dataset.spark]; const W=c.width=Math.max(60,c.clientWidth*2), H=c.height=52; const ctx=c.getContext('2d'); ctx.clearRect(0,0,W,H); if(d.length<2) return; const max=Math.max(100, ...d); ctx.beginPath(); d.forEach((v,i)=>{ const x=i/59*W, y=H-(v/max)*(H-6)-3; i?ctx.lineTo(x,y):ctx.moveTo(x,y); }); ctx.strokeStyle=c.dataset.spark==='temp'?'#ffb454':'#4f8cff'; ctx.lineWidth=2.5; ctx.stroke(); }); }
+/* General-purpose line chart for the YouTube dashboard's bitrate/speed panels: gridlines,
+   an optional dashed target line (e.g. 1.0x realtime), an optional gradient fill, and a
+   "no data yet" placeholder so a freshly (re)loaded page never renders a blank canvas. */
+function drawLineChart(canvas, series, opts={}) {
+  if (!canvas) return;
+  const dpr = Math.min(2, window.devicePixelRatio||1);
+  const cw = canvas.clientWidth||300, ch = canvas.clientHeight||150;
+  canvas.width = Math.max(1,cw*dpr); canvas.height = Math.max(1,ch*dpr);
+  const ctx = canvas.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,cw,ch);
+  const padL=36, padR=8, padT=10, padB=16, w=Math.max(1,cw-padL-padR), h=Math.max(1,ch-padT-padB);
+  const vals = series.filter(v=>v!=null);
+  const maxV = Math.max(opts.min||0.01, ...(vals.length?vals:[0]), opts.floor||0) * 1.2;
+  ctx.font='10px Inter, sans-serif'; ctx.fillStyle='#6f8199'; ctx.strokeStyle='rgba(128,168,214,.12)'; ctx.lineWidth=1;
+  for (let i=0;i<=3;i++) { const y=padT+h-h*i/3; ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(padL+w,y); ctx.stroke();
+    ctx.fillText(opts.fmtY ? opts.fmtY(maxV*i/3) : Math.round(maxV*i/3), 2, y+3); }
+  if (opts.target!=null && opts.target <= maxV) { const y=padT+h-h*(opts.target/maxV); ctx.setLineDash([4,4]); ctx.strokeStyle='rgba(159,176,198,.55)';
+    ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(padL+w,y); ctx.stroke(); ctx.setLineDash([]); }
+  const n = series.length;
+  if (n<2 || !vals.length) { ctx.fillStyle='#6f8199'; ctx.font='12px Inter, sans-serif'; ctx.textAlign='center'; ctx.fillText('No data yet — keep this page open while streaming', padL+w/2, padT+h/2); ctx.textAlign='left'; return; }
+  const pts = series.map((v,i)=>[padL + w*i/(n-1), v==null?null:padT+h-h*Math.min(1,v/maxV)]);
+  if (opts.fill) { ctx.beginPath(); let started=false, first=null, last=null;
+    pts.forEach(([x,y])=>{ if(y==null) return; if(!started){ ctx.moveTo(x,y); started=true; first=x; } else ctx.lineTo(x,y); last=x; });
+    if (started) { ctx.lineTo(last,padT+h); ctx.lineTo(first,padT+h); ctx.closePath();
+      const grad=ctx.createLinearGradient(0,padT,0,padT+h); grad.addColorStop(0,opts.color+'59'); grad.addColorStop(1,opts.color+'00'); ctx.fillStyle=grad; ctx.fill(); } }
+  ctx.beginPath(); let started=false;
+  pts.forEach(([x,y])=>{ if(y==null){ started=false; return; } if(!started){ ctx.moveTo(x,y); started=true; } else ctx.lineTo(x,y); });
+  ctx.strokeStyle=opts.color||'#4f8cff'; ctx.lineWidth=2; ctx.lineJoin='round'; ctx.stroke();
+}
 let meterLevel=0, meterTarget=0;
 function animateMeter(){ meterLevel += (meterTarget-meterLevel)*0.25; const t=performance.now()/1000;
   $$('.meter').forEach(m=>{ const bars=m.children; for(let i=0;i<bars.length;i++){ const env=Math.sin(i/bars.length*Math.PI); const jitter=0.65+0.35*Math.abs(Math.sin(t*3.1+i*0.9)); bars[i].style.height=Math.max(4, meterLevel*100*env*jitter)+'%'; } });
@@ -220,7 +304,7 @@ function loginView(err=''){ return `<div class="scene"></div><div class="login">
 // rather than firing a duplicate start/stop/restart/etc.
 const BUSY = new Set();
 const GUARDED_ACTIONS = new Set(['skip','restart-all','stream-start','stream-stop','stream-restart','svc','usb-repair',
-  'alert','alerts-bulk','fallback-toggle','queue-clear','dj-take','dj-return','rescan']);
+  'alert','alerts-bulk','fallback-toggle','queue-clear','dj-take','dj-return','rescan','yt-reconnect']);
 function delegate(){ const root=document.body;
   root.addEventListener('click', e=>{ const el=e.target.closest('[data-act]'); if(!el) return; const name=el.dataset.act; const fn=ACTIONS[name]; if(!fn) return;
     // container actions (backdrop, dropzones) must not swallow clicks on their own controls
@@ -237,10 +321,9 @@ function delegate(){ const root=document.body;
   root.addEventListener('input', e=>{ const t=e.target; if(t && (t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT') && t.form && t.form.hasAttribute('data-form')) { t.setAttribute('data-dirty','1'); t.form.setAttribute('data-dirty','1'); } }, true);
   root.addEventListener('change', e=>{ const el=e.target.closest('[data-change]'); if(!el) return; const fn=CHANGES[el.dataset.change]; if(fn) fn(el, e); });
   root.addEventListener('input', e=>{ const el=e.target.closest('[data-input]'); if(!el) return; const fn=CHANGES[el.dataset.input]; if(fn) fn(el, e); });
-  root.addEventListener('keydown', e=>{ if(e.key==='Enter'){ const el=e.target.closest('[data-act-enter]'); if(el){ e.preventDefault(); const fn=ACTIONS[el.dataset.actEnter]; if(fn) fn(el,e); } } if(e.key==='Escape'){ if(state.modal){ if(state.modal.res) state.modal.res(false); state.modal=null; render(); } else if(state.drawer){ state.drawer=null; render(); } } });
+  root.addEventListener('keydown', e=>{ if(e.key==='Enter'){ const el=e.target.closest('[data-act-enter]'); if(el){ e.preventDefault(); const fn=ACTIONS[el.dataset.actEnter]; if(fn) fn(el,e); } } if(e.key==='Escape'){ if(state.modal){ if(state.modal.res) state.modal.res(false); state.modal=null; render(); } else if(state.drawer){ state.drawer=null; render(); } else if(ttPinned){ ttHideNow(); } } });
 }
 Object.assign(ACTIONS, {
-  'help-toggle': (el,e)=>{ e.stopPropagation(); const open=!el.classList.contains('open'); $$('.help.open').forEach(b=>b.classList.remove('open')); el.classList.toggle('open',open); },
   'nav-toggle': ()=>{ state.navOpen=!state.navOpen; render(); }, 'nav-close': ()=>{ if(state.navOpen){ state.navOpen=false; render(); } },
   'drawer-close': ()=>{ state.drawer=null; render(); }, 'alerts-open': ()=>{ state.drawer = state.drawer==='alerts'?null:'alerts'; render(); }, 'alert-view': (el)=>{ state.alertView=el.dataset.v; render(); },
   'alert': async(el)=>{ const verb={ack:'Acknowledged',read:'Marked as read',resolve:'Resolved',clear:'Cleared'}[el.dataset.op]||'Updated'; await act(()=>post(`/api/alerts/${el.dataset.id}/${el.dataset.op}`), `${verb} 1 alert.`); },
@@ -290,5 +373,5 @@ Object.assign(FORMS, {
   setInterval(pollMeter, 2500); setInterval(tickClock, 1000); animateMeter();
   setInterval(async()=>{ try{ const v=await api('/api/version'); if(window.HGC_V && v.assets!==window.HGC_V){ toast('HUNGREE Goat Control was updated — reloading','ok'); setTimeout(()=>location.reload(), 1500); } }catch{} }, 60000);
 })();
-return { state, api, post, put, patch, del, act, toast, confirmDlg, render, refresh, h, I, fmtDur, fmtLong, fmtBytes, fmtTime, fmtDate, st, artUrl, ASSET, ACTIONS, FORMS, CHANGES, previewTrack, listenStart, mobile, help, pages:{} };
+return { state, api, post, put, patch, del, act, toast, confirmDlg, render, refresh, h, I, fmtDur, fmtLong, fmtBytes, fmtTime, fmtDate, st, artUrl, ASSET, ACTIONS, FORMS, CHANGES, previewTrack, listenStart, mobile, help, hist, drawLineChart, pages:{} };
 })();

@@ -511,28 +511,282 @@ pages.outputs = { live:true, async load(){ return api(`${P()}/outputs`); }, view
     <div class="preview" style="margin-top:6px" data-static><img class="bg" src="${ASSET.loopFrame}" alt=""><img class="ov" src="${P()}/overlay.png?t=${Math.floor(Date.now()/15000)}" alt=""><span class="lbl">COMPOSITION</span></div></div></div></div>`; } };
 
 /* ======================= YOUTUBE SETUP ======================= */
-pages.youtube = { live:true, async load(){ return api(`${P()}/youtube`); }, view(y){ const s=st(); const m=y.meta||{}; const show=state._showKey;
-  return `<div class="page-h"><h2>YouTube Setup</h2><span class="chip ${y.configured?'green':'amber'}">${y.configured?'stream key saved':'stream key needed'}</span><span class="chip ${y.output_enabled?'blue':'slate'}">${y.output_enabled?'output enabled':'output disabled'}</span></div>
-  <div class="two"><div class="panel"><div class="panel-h"><h3>${ic(I.yt,'red')}Credentials — ${h(s.short)}</h3><span class="right small">${y.saved_at?'saved '+fmtDate(y.saved_at):''}</span></div><div class="panel-b">
-    <form data-form="youtube" class="form"><label class="wide">RTMPS endpoint<input class="inp mono" name="rtmps_url" value="${h(y.rtmps_url)}" required></label>
+pages.youtube = { live:true,
+  async load(){ const [yr, evr] = await Promise.allSettled([api(`${P()}/youtube`), api(`/api/events?station=${S()}&limit=80`)]);
+    // allSettled, not all: an events hiccup (or an older backend missing a field) must not blank
+    // the whole page — each half degrades to a safe empty value independently instead.
+    return { y: (yr.status==='fulfilled' && yr.value) ? yr.value : {}, ev: (evr.status==='fulfilled' && Array.isArray(evr.value)) ? evr.value : [] }; },
+  after(){ const b=(HGC.hist.yt||{})[S()]||{bitrate:[],speed:[]};
+    HGC.drawLineChart(document.querySelector('canvas[data-ytchart="bitrate"]'), b.bitrate, {color:'#2ecc8a', fill:true, fmtY:v=>(v/1000).toFixed(1)+'M'});
+    HGC.drawLineChart(document.querySelector('canvas[data-ytchart="speed"]'), b.speed, {color:'#ff5a6a', target:1.0, min:1.0, fmtY:v=>v.toFixed(1)+'×'}); },
+  view({y, ev}) {
+  y = y || {}; ev = Array.isArray(ev) ? ev : [];
+  const s=st(); const m=y.meta||{}; const show=state._showKey;
+  // Defensive by design: this page must render something usable even when talking to an
+  // older backend (no `health` key yet — e.g. right after a frontend-only deploy, before the
+  // Control service has restarted to pick up its half of this redesign), or when any single
+  // nested block below is missing, null, or malformed. Nothing here assumes a shape beyond
+  // "y is an object" — every nested object gets its own safe default before first use.
+  const healthAvailable = !!(y.health && typeof y.health === 'object');
+  const H = y.health || {};
+  const OV = (H.overall && typeof H.overall === 'object') ? H.overall : { level: 'unverified', title: 'Health Information Unavailable',
+    message: "The Control service hasn't reported detailed health data for this station yet — this page usually needs the Control service to restart once after an update before this section fills in. Basic stream status below still reflects the real, current state." };
+  const AR = (H.auto_recovery && typeof H.auto_recovery === 'object') ? H.auto_recovery
+    : { armed: false, in_progress: false, layers: [], attempts_this_run: 0, lifetime_restarts_video: 0, lifetime_restarts_audio: 0, watchdog_timeout_sec: 60, last_error: null };
+  const DG = (H.diagnostics && typeof H.diagnostics === 'object') ? H.diagnostics : {};
+  const pipeline = Array.isArray(H.pipeline) ? H.pipeline : [];
+  const encoder = (y.encoder && typeof y.encoder === 'object') ? y.encoder : { resolution: '—', fps: 30, video_kbps: 0, audio_kbps: 0 };
+  const running = y.state==='running' && !y.stale; const speedN = (H.speed!=null) ? H.speed : null;
+  const LVL_LABEL={healthy:'Healthy',warning:'Warning',critical:'Critical',offline:'Offline',unverified:'Unverified'};
+  const LVL_ICON={healthy:I.check,warning:I.alert,critical:I.alert,offline:I.stop,unverified:I.info};
+  const STAGE_HELP={music:"The part of the system that keeps your station's music playing.",
+    audio:"This checks whether your music is successfully reaching the stream.",
+    video:"This combines your audio and visuals into the live video stream.",
+    bg:"This checks whether your looping background visuals are working properly.",
+    send:"This shows whether HUNGREE Goat is trying to send the stream to YouTube.",
+    receive:"This shows whether YouTube is actually receiving your stream.",
+    live:"This shows whether your viewers can actually watch the stream live on YouTube."};
+  const STAGE_LED={ok:'on',warn:'warn',err:'err',off:'',unverified:'cyan'};
+  const stageCard = t => `<div class="pipe ${t.status}" data-key="pipe-${t.key}"><div class="h">${led(STAGE_LED[t.status]||'')}<span>${h(t.label)}</span>${STAGE_HELP[t.key]?help(STAGE_HELP[t.key]):''}</div><div class="d">${h(t.detail)}</div>${t.tech?`<div class="t" title="${h(t.tech)}">${h(t.tech)}</div>`:''}</div>`;
+  const card = (cls,k,v,d_,icon,iconCls,helpTxt='') => `<div class="panel card ${cls}"><div class="k">${h(k)}${helpTxt?help(helpTxt):''}</div><div class="v"><span class="ic ${iconCls}">${icon}</span><span>${v}</span></div><div class="d">${d_}</div></div>`;
+  const CLR={green:'onair',amber:'onair wait',red:'onair off',slate:''}; const ICN={green:'green',amber:'amber',red:'red',slate:''};
+
+  const resLabel = {'1280x720':'720p HD','1920x1080':'1080p Full HD','854x480':'480p SD'}[encoder.resolution] || encoder.resolution;
+  const smooth = !running ? ['—','slate'] : ((y.fps||0)>=encoder.fps*0.9 && (y.drop_frames||0)<5) ? ['Good','green'] : ((y.fps||0)>=encoder.fps*0.6) ? ['Fair','amber'] : ['Poor','red'];
+  const speedLbl = !running||speedN==null ? ['—','slate'] : speedN>=0.97 ? ['Good','green'] : speedN>=0.85 ? ['Slightly Slow','amber'] : ['Too Slow','red'];
+  const streamQ = !running ? ['Offline','slate'] : (smooth[1]==='red'||speedLbl[1]==='red') ? ['Poor','red'] : (smooth[1]==='amber'||speedLbl[1]==='amber') ? ['Fair','amber'] : ['Good','green'];
+  const audioQ = running ? ['Good','green'] : ['—','slate'];
+
+  const heroHtml = `<div class="panel yt-status ${OV.level}" data-key="yt-hero"><span class="ic badge-lvl ${ICN[{healthy:'green',warning:'amber',critical:'red',offline:'slate',unverified:'cyan'}[OV.level]]||''}">${LVL_ICON[OV.level]||I.info}</span>
+    <div class="body"><span class="lvl-tag ${OV.level}">${h(LVL_LABEL[OV.level]||OV.level)}</span><h2>${h(OV.title)}</h2><p>${h(OV.message)}</p>
+    <div class="yt-mini">
+      <div class="m"><div class="k">Uptime</div><div class="v">${running?fmtLong(y.uptime_sec):'—'}</div></div>
+      <div class="m"><div class="k">Auto-Recovery</div><div class="v">${AR.armed?(AR.in_progress?'Recovering…':'Armed'):'Disabled'}</div></div>
+      <div class="m"><div class="k">Watchdog</div><div class="v">${AR.watchdog_timeout_sec}s</div></div>
+    </div></div></div>`;
+  // Deliberately NOT a solid, urgent-looking call-to-action button: this is disabled because
+  // the feature doesn't exist yet, not because something is broken, and it must read that way.
+  const apiCardHtml = `<div class="panel" data-key="yt-api"><div class="panel-b" style="gap:9px;justify-content:center">
+    <div style="display:flex;align-items:center;gap:8px"><span class="ic amber">${I.alert}</span><b style="font:800 13.5px var(--display)">YouTube Account Integration</b><span class="right">${help("This connection lets HUNGREE Goat verify whether YouTube is actually receiving the stream and whether the broadcast is live.")}</span></div>
+    <span class="pill off" style="align-self:flex-start">Not configured yet</span>
+    <p class="small muted" style="margin:0">Connecting your YouTube account would let HUNGREE Goat Control verify whether YouTube is actually receiving your stream and whether the broadcast is live — instead of only inferring it from the local encoder, which is all this page can see today.</p>
+    <button class="btn ghost wide" type="button" data-act="yt-connect" disabled title="Coming soon — this page is ready for it, but the YouTube OAuth connection hasn't been implemented yet.">${I.link} Connect YouTube Account <span class="pill off" style="margin-left:6px">Coming soon</span></button>
+  </div></div>`;
+
+  const pipeHtml = `<div class="panel"><div class="panel-h"><h3>${ic(I.stream,'blue')}Pipeline Health</h3><span class="right">${help("The chain that turns your music into a live YouTube broadcast, stage by stage — from the local station right through to whether YouTube is actually airing it.")}</span></div><div class="panel-b">
+    ${pipeline.length?`<div class="pipe-row">${pipeline.map(stageCard).join('')}</div>`:empty(I.info,'Waiting for stream health data','Stage-by-stage status isn\'t available from the Control service yet — this usually clears up on its own shortly after an update.')}
+  </div></div>`;
+
+  // "Reconnect to YouTube" is deliberately the exact same backend action as Danger Zone's
+  // "Restart engine" (services.action("stream","restart",sid) — verified against
+  // app/hgc/main.py's stream_action route and app/hgc/services.py's UNITS map): in this
+  // architecture the RTMPS connection to YouTube is not a separable component — it lives
+  // inside the same FFmpeg process that also does the audio/video encode, so there is no
+  // finer-grained "just reconnect the YouTube leg" available yet. This panel exists so an
+  // operator never has to know that and go digging in Danger Zone to fix a dropped YouTube
+  // connection — the copy says plainly what actually restarts (video/YouTube process only;
+  // Liquidsoap/music is untouched), rather than implying something lighter-weight.
+  const sendStage = pipeline.find(p=>p.key==='send'); const bgStage = pipeline.find(p=>p.key==='bg');
+  const sendOk = !!(sendStage && sendStage.status==='ok');
+  const sendBad = !!(sendStage && (sendStage.status==='err'||sendStage.status==='warn'));
+  // A restart command completing (act() resolving) doesn't mean the stream is back up yet —
+  // FFmpeg starts in "starting" state for a few seconds. Rather than a separate timer, this
+  // just re-checks on every render (the page already polls live data every 5s): once real
+  // pipeline data confirms sending resumed, or 25s pass without that, resolve to a real
+  // success/failure banner — never claiming success before the data actually shows it.
+  if (state._reconnectPending) {
+    if (sendOk) { state._reconnectResult = {ok:true, at:Date.now()}; state._reconnectPending = null; }
+    else if (Date.now() - state._reconnectPending.since > 25000) { state._reconnectResult = {ok:false, at:Date.now(), error:'The stream did not come back up in time — check Diagnostics, or try again.'}; state._reconnectPending = null; }
+  }
+  if (state._reconnectResult && Date.now() - state._reconnectResult.at > 12000) state._reconnectResult = null;   // a one-off event, not a permanent panel state — real-time truth takes back over
+  const recovering = !state._reconnecting && !state._reconnectPending && !!AR.in_progress;   // backend auto-recovery already restarting — never implies a manual click is also needed
+  let connState;
+  if (state._reconnecting || state._reconnectPending) connState = 'reconnecting';
+  else if (recovering) connState = 'recovering';
+  else if (state._reconnectResult) connState = state._reconnectResult.ok ? 'success' : 'failed';
+  else if (!running) connState = 'stopped';
+  else if (sendBad) connState = 'disconnected';
+  else if (sendOk) connState = 'sending';
+  else connState = 'stopped';
+  const CONN_LABEL = {sending:'SENDING',disconnected:'DISCONNECTED',reconnecting:'RECONNECTING',recovering:'RECOVERING',success:'OUTPUT RESTARTED',failed:'RECONNECT FAILED',stopped:'STOPPED'};
+  const outputLabel = (connState==='reconnecting'||connState==='recovering') ? ['Restarting','amber'] : (connState==='sending'||connState==='success') ? ['Sending','green'] : (connState==='disconnected'||connState==='failed') ? ['Not Sending','red'] : ['Not Sending','muted2'];
+  const bgLbl = !healthAvailable ? ['Unavailable','muted2'] : bgStage ? (bgStage.status==='ok'?['Running','green']:(running?['Stopped','red']:['Unavailable','muted2'])) : ['Unavailable','muted2'];
+  const elapsedS = state._reconnecting ? Math.max(0,Math.round((Date.now()-state._reconnecting.since)/1000)) : state._reconnectPending ? Math.max(0,Math.round((Date.now()-state._reconnectPending.since)/1000)) : 0;
+  const btnBusy = connState==='reconnecting';
+  const btnDisabled = btnBusy || connState==='recovering' || !running;
+  const btnCls = (connState==='disconnected'||connState==='failed') ? 'recover' : btnBusy||connState==='recovering' ? 'amber' : '';
+  const btnLabel = btnBusy ? `Reconnecting…${elapsedS?` (${elapsedS}s)`:''}` : connState==='recovering' ? 'Auto-Recovery in Progress…' : connState==='failed' ? 'Try Again' : 'Reconnect to YouTube';
+  const stateNote = {
+    sending: `<div class="note" style="margin-top:10px">Sending locally — <b>YouTube confirmation unavailable.</b></div>`,
+    disconnected: `<div class="note red" style="margin-top:10px"><b>${I.alert} YouTube is not receiving the stream right now.</b><br>Your music can keep playing while HUNGREE Goat restarts the video/YouTube streaming process.</div>`,
+    reconnecting: `<div class="note warn" style="margin-top:10px"><b><span class="spin" style="display:inline-flex">${I.restart}</span> ${state._reconnectPending?'Waiting for the stream to come back up…':'Restarting the video/YouTube streaming process…'}</b></div>`,
+    recovering: `<div class="note warn" style="margin-top:10px"><b><span class="spin" style="display:inline-flex">${I.restart}</span> Auto-recovery is already restarting the stream…</b><br>Manual reconnect is disabled for a moment so we don't start a second, overlapping restart.</div>`,
+    success: `<div class="note green" style="margin-top:10px"><b>${I.check} Local streaming output restarted successfully.</b><br><b>YouTube confirmation unavailable</b> — this means the local restart worked, not that YouTube has verified the broadcast.</div>`,
+    failed: `<div class="note red" style="margin-top:10px"><b>${I.alert} Could not restart the YouTube streaming output.</b><br>${h((state._reconnectResult&&state._reconnectResult.error)||'')}</div>`,
+    stopped: `<div class="note" style="margin-top:10px">Start the engine first — see Advanced Settings → Danger Zone.</div>`,
+  }[connState] || '';
+  const reconnectHtml = `<div class="panel yt-conn ${connState}" data-key="yt-reconnect"><div class="panel-h"><h3>${ic(I.link,{sending:'green',success:'green',disconnected:'red',failed:'red',reconnecting:'amber',recovering:'amber',stopped:''}[connState])}YouTube Connection</h3><span class="right"><span class="yt-conn-badge ${connState}">${CONN_LABEL[connState]}</span>${help("This shows whether HUNGREE Goat is sending the stream toward YouTube and lets you restart that connection if it stops working.")}</span></div><div class="panel-b">
+    <dl class="kv"><dt>Engine</dt><dd>${running?'<span class="green">Running</span>':'<span class="red">Stopped</span>'}</dd><dt>Music</dt><dd>${s.liquidsoap.alive?'<span class="green">Playing</span>':'<span class="muted2">Not Playing</span>'}</dd><dt>Background Visuals</dt><dd><span class="${bgLbl[1]}">${bgLbl[0]}</span></dd><dt>Stream Output</dt><dd><span class="${outputLabel[1]}">${outputLabel[0]}</span></dd><dt>YouTube Verification</dt><dd><span class="muted2">Unavailable</span></dd></dl>
+    ${stateNote}
+    <button class="btn ${btnCls} wide" type="button" style="margin-top:10px" data-act="yt-reconnect" title="This restarts the video streaming connection. Your music keeps playing." ${btnDisabled?'disabled':''}>${btnBusy?`<span class="spin">${I.restart}</span>`:I.restart} ${btnLabel}</button>
+    <div class="small muted" style="margin-top:8px">Restarts the video/YouTube streaming process only — Liquidsoap and your music are not affected. Same action as "Restart engine" in Advanced Settings → Danger Zone.${(y.restarts||0)>0?` Restarted ${y.restarts} time${y.restarts===1?'':'s'} this run.`:''}</div>
+  </div></div>`;
+
+  const metricsHtml = `<div class="panel"><div class="panel-h"><h3>${ic(I.cpu,'cyan')}Local Encoder Metrics</h3><span class="right">${help("These cards show how well the local streaming system is running — not what YouTube does with the stream once it leaves this building.")}</span></div><div class="panel-b">
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(148px,1fr))">
+    ${card(CLR[streamQ[1]],'Stream Quality',streamQ[0],running?(streamQ[0]==='Poor'?'Needs attention':streamQ[0]==='Fair'?'Some issues detected':'Stable and steady'):'Not currently streaming',I.wave,ICN[streamQ[1]],'This shows how strong and stable the outgoing video stream is.')}
+    ${card('','Video Quality',resLabel,`${encoder.fps} fps target · ${encoder.video_kbps} kbps`,I.image,'blue','This shows the picture quality viewers should receive.')}
+    ${card(CLR[smooth[1]],'Video Smoothness',smooth[0],running?`${(y.fps||0).toFixed(1)} / ${encoder.fps} frames per second${(y.drop_frames||0)?` · ${y.drop_frames} dropped`:''}`:'—',I.bars,ICN[smooth[1]],'This shows whether the video is playing smoothly or dropping too many frames.')}
+    ${card(CLR[speedLbl[1]],'Streaming Speed',speedLbl[0],running&&speedN!=null?`${Math.round(speedN*100)}% of realtime<br><span class="muted2" style="font-size:10px">Technical: ${speedN.toFixed(2)}× realtime</span>`:'—',I.restart,ICN[speedLbl[1]],'This shows whether the system is keeping up with live video in real time.')}
+    ${card(CLR[audioQ[1]],'Audio Quality',audioQ[0],`${encoder.audio_kbps} kbps AAC · 48 kHz stereo`,I.headphones,ICN[audioQ[1]],'This shows the sound quality being sent with the stream.')}
+    ${card('','Running Time',running?fmtLong(y.uptime_sec):'—',running?'since last (re)start':'not running',I.clock,'gold','This shows how long the current streaming process has been running.')}
+    </div>
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(148px,1fr));margin-top:2px">
+    ${card('','Output Bitrate',running?`${((y.bitrate_kbps||0)/1000).toFixed(1)}<small> Mbps</small>`:'—',running?`${Math.round(y.bitrate_kbps||0)} kbps`:'not streaming',I.stream,'blue','This shows how much video data is being sent each second.')}
+    ${card('','Main Encoder PID',y.pid||'—','FFmpeg',I.cpu,'','This is the internal ID of the main streaming process. You normally do not need this number.')}
+    ${card('','Background Visuals PID',DG.bg_pid||'—','BgFeeder helper',I.film,'','This is the internal ID of the helper that keeps the background visuals running.')}
+    ${card('','Encoder Restarts',y.restarts||0,'this run',I.restart,(y.restarts||0)>0?'amber':'','This shows how many times the main streaming process restarted during this run.')}
+    ${card('','Background Restarts',DG.bg_restarts||0,'this run',I.restart,(DG.bg_restarts||0)>0?'amber':'','This shows how many times the background-visual process restarted during this run.')}
+    </div>
+  </div></div>`;
+
+  const chartsHtml = `<div class="two">
+    <div class="panel"><div class="panel-h"><h3>${ic(I.bars,'green')}Output Bitrate<span class="small muted" style="font-weight:500;margin-left:4px">(last 30 min)</span></h3><span class="right">${help("This graph shows how much video data has been sent over the last 30 minutes.")}</span></div><div class="panel-b">
+      <div class="mini-chart"><span class="chart-tag">${running?((y.bitrate_kbps||0)/1000).toFixed(1)+' Mbps':'—'}</span><canvas data-ytchart="bitrate"></canvas></div>
+      <div class="small muted2">Recorded in this browser tab only — refreshing the page or reopening this later starts the graph over. Not stored on the server yet.</div>
+    </div></div>
+    <div class="panel"><div class="panel-h"><h3>${ic(I.restart,'cyan')}Realtime Speed<span class="small muted" style="font-weight:500;margin-left:4px">(last 30 min)</span></h3><span class="right">${help("This graph shows whether the stream is keeping up with real time. The dashed line is 1.0× — right on pace.")}</span></div><div class="panel-b">
+      <div class="mini-chart"><span class="chart-tag">${running&&speedN!=null?speedN.toFixed(2)+'×':'—'}</span><canvas data-ytchart="speed"></canvas></div>
+      <div class="small muted2">Recorded in this browser tab only — refreshing the page or reopening this later starts the graph over. Not stored on the server yet.</div>
+    </div></div>
+  </div>`;
+
+  const relevant = (ev||[]).filter(e=>['stream','silence','fallback'].includes(e.category)).slice(0,14);
+  const incidentHtml = `<div class="panel"><div class="panel-h"><h3>${ic(I.logs,'amber')}Incident Timeline</h3><span class="right">${help("This shows recent problems, warnings, recoveries, and important stream events — recorded on the server, so refreshing the page never loses the story.")}</span><a class="link" href="#/logs">View All ${I.chev}</a></div><div class="panel-b scroll" style="max-height:280px">
+    ${relevant.length?`<div class="events">${relevant.map(evRow).join('')}</div>`:empty(I.check,'No incidents recently','Warnings, errors and recoveries for this station will show up here as they happen.')}
+  </div></div>`;
+
+  const myAlerts=(state.alerts.alerts||[]).filter(a=>a.station===S()); const activeAlerts=myAlerts.filter(a=>a.state!=='resolved'); const lastAlert=myAlerts[0];
+  const notifHtml = `<div class="panel" data-key="yt-notif"><div class="panel-h"><h3>${ic(I.bell,activeAlerts.length?'red':'green')}Notifications</h3><span class="right">${activeAlerts.length?pill('err',activeAlerts.length+' active'):pill('green','clear')}${help("This shows current warnings or problems that may need your attention.")}</span></div><div class="panel-b">
+    ${activeAlerts.length?`<div class="note red">${activeAlerts.slice(0,3).map(a=>`<div style="margin-bottom:6px"><b>${h(a.title)}</b> — ${h(a.message)}<div class="small muted2">${fmtDate(a.updated_at||a.ts)}</div></div>`).join('')}</div>`:`<div class="note">No active warnings for this station.</div>`}
+    <dl class="kv" style="margin-top:8px"><dt>Last alert</dt><dd>${lastAlert?fmtDate(lastAlert.updated_at||lastAlert.ts):'never'}</dd><dt>Recovery attempts</dt><dd>${AR.attempts_this_run} this run · ${AR.lifetime_restarts_video} lifetime</dd></dl>
+    <button class="btn sm ghost wide" type="button" data-act="alerts-open">${I.bell} Open Alerts</button>
+  </div></div>`;
+
+  // AR.armed reflects a real, verified check the backend runs against the live systemd unit
+  // (`systemctl show -p Restart`) — not a guess and not a hardcoded "true". If it's ever
+  // false, that's a genuine finding (someone changed the unit file), not this page lying.
+  const autorecHtml = `<div class="panel" data-key="yt-autorec"><div class="panel-h"><h3>${ic(I.shield,AR.armed?'green':'red')}Auto-Recovery & Watchdog</h3><span class="right">${AR.armed?(AR.in_progress?pill('warn','recovering'):pill('green','armed')):pill('err','disabled')}${help("This watches the stream and can help recover it when something stops working.")}</span></div><div class="panel-b">
+    ${!AR.armed?`<div class="note red"><b>${I.alert} Auto-Recovery: Disabled</b><br>The stream won't restart itself if it fails — use Reconnect to YouTube above, or Danger Zone below, if it goes down.</div>`
+      :AR.in_progress?`<div class="note warn"><b>${I.restart} Attempting reconnection…</b></div>`:(AR.last_error?`<div class="note small">Last issue: ${h(AR.last_error)}</div>`:'')}
+    <dl class="kv" style="margin-top:8px"><dt>Attempts (this run)</dt><dd>${AR.attempts_this_run}</dd><dt>Lifetime restarts</dt><dd>${AR.lifetime_restarts_video} video · ${AR.lifetime_restarts_audio} audio</dd><dt>Stall watchdog</dt><dd>${AR.watchdog_timeout_sec}s of no progress</dd><dt>Restart delay</dt><dd>${AR.restart_sec_video||'?'} video · ${AR.restart_sec_audio||'?'} audio</dd></dl>
+    <div class="small muted" style="margin-top:6px">${(Array.isArray(AR.layers)&&AR.layers.length)?AR.layers.map(l=>`<div style="margin-bottom:4px"><b style="color:var(--text)">${h((l&&l.name)||'')}:</b> ${h((l&&l.detail)||'')}</div>`).join(''):'No recovery details reported yet.'}</div>
+  </div></div>`;
+
+  const metaHtml = `<div class="panel" data-key="yt-meta"><div class="panel-h"><h3>${ic(I.tag)}YouTube & Broadcast Details</h3><span class="right">${pill('warn','reference only')}${help("This shows the basic information for your YouTube live broadcast.")}</span></div><div class="panel-b">
+    <form data-form="youtube-meta" class="form">
+    <label class="wide">Stream title<input class="inp" name="title" value="${h(m.title||'')}" placeholder="HUNGREE Goat ${h(s.short)} — 24/7 Study · Chill · Relax"></label>
+    <label>Category<input class="inp" name="category" value="${h(m.category||'Music')}"></label>
+    <label>Visibility<input class="inp" name="visibility" value="${h(m.visibility||'Public')}"></label>
+    <label>Latency<input class="inp" name="latency" value="${h(m.latency||'Normal')}"></label>
+    <label>Channel<input class="inp" name="channel" value="${h(m.channel||'')}" placeholder="e.g. HUNGREE Goat Music"></label>
+    <div class="row-actions"><button class="btn sm gold" type="submit">Save details</button></div>
+    </form>
+  </div></div>`;
+
+  const destHtml = `<div class="panel" data-key="yt-dest"><div class="panel-h"><h3>${ic(I.link,'blue')}Stream URLs & Key</h3><span class="right">${help("This contains the secure address and key used to send the stream to YouTube.")}</span></div><div class="panel-b">
+    <form data-form="youtube" class="form">
+    <label class="wide">RTMPS endpoint<div style="display:flex;gap:6px"><input class="inp mono" name="rtmps_url" value="${h(y.rtmps_url)}" required style="flex:1"><button type="button" class="btn icon" data-act="copy" data-copy="${h(y.rtmps_url)}" title="Copy">${I.copy}</button></div></label>
     <label class="wide">Stream key ${y.configured?`<span class="muted2">(currently ${h(y.key_masked)} — leave blank to keep)</span>`:''}<div style="display:flex;gap:6px"><input class="inp mono" name="stream_key" type="${show?'text':'password'}" placeholder="${y.configured?'••••••••••••••••':'paste the stream key from YouTube Studio'}" autocomplete="off" style="flex:1"><button type="button" class="btn icon" data-act="key-show" title="${show?'Hide':'Show'} while typing">${I.eye}</button></div></label>
-    <label>Output enabled<select class="sel" name="output_enabled"><option value="1" ${y.output_enabled?'selected':''}>Yes — publish to YouTube</option><option value="0" ${!y.output_enabled?'selected':''}>No — encode only</option></select></label><label>Station destination<input class="inp" value="${h(s.name)}" disabled></label>
-    <div class="wide note small">The key is written to <code>~/hungree-goat/secrets/youtube-${S()}.env</code> (mode 600), never logged, never sent back to the browser, and never committed to Git. Saving a new key restarts the video output.</div>
-    <div class="row-actions">${y.configured?`<button type="button" class="btn red" data-act="yt-clear">${I.x} Remove key</button>`:''}<button type="button" class="btn" data-act="yt-test">${I.link} Test connection</button><button class="btn gold" type="submit">${I.check} Save</button></div></form>
-    <div id="yt-test" class="small" style="min-height:18px">${state._ytTest?`<span class="${state._ytTest.ok?'green':'red'}">${h(state._ytTest.ok?`Reachable: ${state._ytTest.host} (${state._ytTest.ip}) · ${state._ytTest.tls} · ${state._ytTest.ms} ms`:`Failed: ${state._ytTest.error}`)}</span><div class="muted2">${h(state._ytTest.note||'')}</div>`:''}</div>
-    <dl class="kv" style="margin-top:8px"><dt>Connection</dt><dd>${y.state==='running'&&y.target==='youtube'?`<span class="green">publishing</span> · ${Math.round(y.bitrate_kbps||0)} kbps · up ${fmtLong(y.uptime_sec)}`:y.state==='waiting'?`<span class="amber">waiting</span> · ${h(y.last_error||'')}`:h(y.state||'stopped')}</dd><dt>Last successful</dt><dd>${y.last_connected?fmtDate(y.last_connected):'never'}</dd><dt>Encoder</dt><dd>${y.encoder.resolution} @ ${y.encoder.fps} fps · ${y.encoder.video_kbps} kbps video · ${y.encoder.audio_kbps} kbps AAC</dd></dl></div>
-    <div class="panel-f qa">${svcButtons(s.stream.service,{startAct:'stream-start',stopAct:'stream-stop',restartAct:'stream-restart',startDisabled:s.library.empty,startDisabledTitle:'Station library is empty — add media first',suffix:'Output'})}</div></div>
-  <div class="panel"><div class="panel-h"><h3>${ic(I.tag)}Broadcast Details</h3><span class="right">${pill('warn','Requires YouTube Studio')}</span></div><div class="panel-b">
-    <div class="note warn small">HUNGREE Goat Control has no YouTube API authorization, so these fields are kept as your operator reference and for a future integration — apply them in YouTube Studio → Go live → Stream settings.</div>
-    <form data-form="youtube-meta" class="form"><label class="wide">Stream title<input class="inp" name="title" value="${h(m.title||'')}" placeholder="HUNGREE Goat ${h(s.short)} — 24/7 Study · Chill · Relax"></label><label class="wide">Description<textarea class="inp" name="description" rows="3">${h(m.description||'')}</textarea></label>
-    <label>Category<select class="sel" name="category">${['Music','Entertainment','People & Blogs'].map(c=>`<option ${(m.category||'Music')===c?'selected':''}>${c}</option>`).join('')}</select></label><label>Latency<select class="sel" name="latency">${[['normal','Normal (recommended 24/7)'],['low','Low'],['ultra','Ultra-low']].map(([v,l])=>`<option value="${v}" ${(m.latency||'normal')===v?'selected':''}>${l}</option>`).join('')}</select></label><label>Visibility<select class="sel" name="visibility">${['Public','Unlisted','Private'].map(c=>`<option ${(m.visibility||'Public')===c?'selected':''}>${c}</option>`).join('')}</select></label><label>Channel<input class="inp" name="channel" value="${h(m.channel||'')}" placeholder="HUNGREE Goat Music"></label>
-    <label class="wide">Public watch URL <span class="muted2">(used by hungreegoat.com "Watch on YouTube")</span><input class="inp mono" name="public_url" value="${h(m.public_url||'')}" placeholder="https://www.youtube.com/@yourchannel/live"></label>
-    <label class="wide">Public station description<input class="inp" name="public_description" value="${h(m.public_description||'')}" placeholder="Shown on the public homepage and player"></label>
-    <div class="row-actions"><button class="btn gold" type="submit">Save details</button></div></form>
-    <div class="small muted">Human-only steps in YouTube Studio: enable live streaming on the channel, create the stream, set title/description/category/visibility/latency/DVR, copy the stream key here.</div></div></div></div>`; } };
-Object.assign(ACTIONS, { 'key-show': ()=>{ state._showKey=!state._showKey; render(); }, 'yt-clear': async()=>{ if(await confirmDlg('Remove the saved YouTube stream key? The output will stop publishing.','Remove key',true)){ const r=await act(()=>post(`${P()}/youtube`,{rtmps_url:state.pageData.youtube.rtmps_url, clear_key:true}),'Stream key removed'); if(r){ delete state.pageData.youtube; render(); } } }, 'yt-test': async()=>{ state._ytTest=null; render(); state._ytTest=await post(`${P()}/youtube/test`).catch(e=>({ok:false,error:e.message})); render(); } });
-Object.assign(FORMS, { 'youtube': async(f,b)=>{ const body={rtmps_url:b.rtmps_url, output_enabled:b.output_enabled==='1'}; if(b.stream_key&&b.stream_key.trim()) body.stream_key=b.stream_key.trim(); const r=await act(()=>post(`${P()}/youtube`,body), body.stream_key?'Stream key saved — output restarting':'Saved'); if(r){ f.stream_key.value=''; state._showKey=false; delete state.pageData.youtube; render(); } },
-  'youtube-meta': async(f,b)=>{ const r=await act(()=>post(`${P()}/youtube`,{rtmps_url:state.pageData.youtube.rtmps_url, meta:b}),'Broadcast details saved'); if(r){ delete state.pageData.youtube; render(); } } });
+    <label>Output<select class="sel" name="output_enabled"><option value="1" ${y.output_enabled?'selected':''}>Yes — publish to YouTube</option><option value="0" ${!y.output_enabled?'selected':''}>No — encode only</option></select></label>
+    <div class="row-actions">${y.configured?`<button type="button" class="btn sm red ghost" data-act="yt-clear">${I.trash} Remove key</button>`:''}<button type="button" class="btn sm" data-act="yt-test" ${state._ytTesting?'disabled':''}>${I.link} ${state._ytTesting?'Testing…':'Test connection'}</button><button class="btn sm gold" type="submit">Save</button></div>
+    </form>
+    ${state._ytTesting?`<div class="note" style="margin-top:8px"><b>${I.info} Testing connection to YouTube…</b></div>`
+      :state._ytTest?(state._ytTest.ok
+        ? `<div class="note green" style="margin-top:8px"><b>${I.check} Connection test passed</b><br>Reached ${h(state._ytTest.host||'YouTube')} in ${state._ytTest.ms||'?'} ms. The network path is working.<div class="small" style="margin-top:5px;opacity:.85">This only proves HUNGREE Goat can reach YouTube's server. It does not prove the stream key is valid, that YouTube is receiving media, or that the broadcast is live.</div></div>`
+        : `<div class="note red" style="margin-top:8px"><b>${I.alert} Connection test failed</b><br>${h(state._ytTest.error||'Could not reach YouTube. Check your network or stream settings.')}</div>`)
+      :''}
+    <div class="small muted" style="margin-top:6px">Stored on the server only (mode 600), never shown again after saving, never logged, never committed to Git.</div>
+  </div></div>`;
+
+  // A small card-panel factory so every Advanced Settings section uses the exact same
+  // polished panel/header/help language as the rest of the dashboard, instead of the old
+  // plain stacked-text blocks.
+  const advCard = (icon, iconCls, title, helpTxt, bodyHtml, rightExtra='') =>
+    `<div class="panel"><div class="panel-h"><h3>${ic(icon,iconCls)}${h(title)}</h3><span class="right">${rightExtra}${help(helpTxt)}</span></div><div class="panel-b">${bodyHtml}</div></div>`;
+
+  const advHtml = `<details class="adv" data-key="yt-adv"${state._advOpen?' open':''}>
+    <summary data-act="adv-toggle">${ic(I.cog)}<span style="flex:1">Advanced Settings</span>${help("These are extra controls for video, audio, recovery, YouTube connection, and troubleshooting.")}<span class="chev">${I.chev}</span></summary>
+    <div class="adv-body">
+      <div class="two">
+        ${advCard(I.link,'blue','Stream Destination',"This is where HUNGREE Goat sends your live stream.",
+          `<dl class="kv"><dt>Server</dt><dd class="mono small">${h(y.rtmps_url)}</dd><dt>Stream key</dt><dd class="mono">${y.configured?h(y.key_masked):'Not set'}</dd><dt>Destination</dt><dd>${(y.output_target||'youtube')==='youtube'?'YouTube Live':h(y.output_target)}</dd></dl>
+          <div class="small muted" style="margin-top:8px">Edit these in the Stream URLs &amp; Key panel above.</div>`)}
+        ${advCard(I.image,'cyan','Video Settings',"These settings control the picture quality and how smoothly the video plays.",
+          `<dl class="kv"><dt>Video Quality</dt><dd>${h(resLabel)}</dd><dt>Frame Rate</dt><dd>${encoder.fps} frames/sec</dd><dt>Video Bitrate</dt><dd>${encoder.video_kbps} kbps</dd><dt>Keyframe Interval</dt><dd>2 seconds</dd></dl>
+          <div class="small muted" style="margin-top:8px">Read-only — fixed in the station's profile, not editable from this page yet.</div>`)}
+      </div>
+      <div class="two">
+        ${advCard(I.headphones,'gold','Audio Settings',"These settings control the sound quality of your live stream.",
+          `<dl class="kv"><dt>Audio Quality</dt><dd>${encoder.audio_kbps} kbps</dd><dt>Sample Rate</dt><dd>48 kHz</dd><dt>Channels</dt><dd>Stereo</dd></dl>
+          <div class="small muted" style="margin-top:8px">Read-only — fixed in the station's profile, not editable from this page yet.</div>`)}
+        ${advCard(I.shield,AR.armed?'green':'red','Recovery Settings',"These settings control how HUNGREE Goat tries to recover when the stream stops working.",
+          `<dl class="kv"><dt>Auto-Recovery</dt><dd>${AR.armed?'<span class="green">Enabled</span>':'<span class="red">Disabled</span>'}</dd><dt>Grace Period</dt><dd>${AR.watchdog_timeout_sec} seconds</dd><dt>Restart Delay</dt><dd>${AR.restart_sec_video||'?'} video · ${AR.restart_sec_audio||'?'} audio</dd><dt>Attempts This Run</dt><dd>${AR.attempts_this_run}</dd><dt>Lifetime Recoveries</dt><dd>${AR.lifetime_restarts_video} video · ${AR.lifetime_restarts_audio} audio</dd></dl>
+          <div class="small muted" style="margin-top:8px">Fixed in the stream supervisor and systemd — not yet operator-configurable from here.</div>`)}
+      </div>
+      <div class="two">
+        ${advCard(I.yt,'red','YouTube Connection',"This connection lets HUNGREE Goat verify whether YouTube is actually receiving the stream and whether the broadcast is live.",
+          `<dl class="kv"><dt>Account Authorization</dt><dd><span class="pill off">Not configured</span></dd><dt>YouTube Verification</dt><dd><span class="pill off">Unavailable</span></dd><dt>Channel <span class="muted2">(reference only)</span></dt><dd>${h(m.channel||'—')}</dd></dl>
+          <div class="small muted" style="margin-top:8px">See the YouTube Account Integration card near the top of this page.</div>`)}
+        ${advCard(I.cpu,'','Diagnostics',"This contains technical troubleshooting information. You normally will not need this unless something goes wrong.",
+          `<dl class="kv"><dt>Main FFmpeg PID</dt><dd>${y.pid||'—'}</dd><dt>Background helper PID</dt><dd>${DG.bg_pid||'—'}</dd><dt>Dropped frames</dt><dd>${y.drop_frames||0}</dd><dt>Duplicate frames</dt><dd>${y.dup_frames||0}</dd><dt>Restart counters</dt><dd>${y.restarts||0} video (this run) · ${DG.bg_restarts||0} background</dd><dt>Status file</dt><dd class="mono small">${h(DG.status_file||'—')}</dd><dt>FFmpeg log</dt><dd class="mono small">${h(DG.ffmpeg_log||'—')}</dd></dl>
+          <div class="row-actions" style="margin-top:8px"><button type="button" class="btn sm" data-act="yt-viewlog">${I.logs} View FFmpeg log</button><button type="button" class="btn sm ghost" data-act="yt-raw-toggle">${I.info} ${state._ytRaw?'Hide':'Show'} raw health JSON</button></div>
+          ${state._ytRaw?`<pre class="raw">${h(JSON.stringify(H,null,2))}</pre>`:''}`)}
+      </div>
+      <div class="panel danger"><div class="panel-h"><h3>${ic(I.alert,'red')}Danger Zone</h3><span class="right">${help("These controls directly start, stop, or restart the streaming system. Viewers may be interrupted.")}</span></div><div class="panel-b">
+        <div class="qa">${svcButtons(s.stream.service,{startAct:'stream-start',stopAct:'stream-stop',restartAct:'stream-restart',startDisabled:s.library.empty,startDisabledTitle:'Station library is empty — add media first',suffix:'engine'})}</div>
+        <div class="small muted" style="margin-top:8px">Restart reconnects to YouTube from scratch — this is the same action as "Reconnect to YouTube" above, and restarts the video/YouTube streaming process only (Liquidsoap and your music are not affected). Stop ends the broadcast until you start it again. Both interrupt viewers briefly.</div>
+      </div></div>
+    </div></details>`;
+
+  return `<div class="page-h"><h2>YouTube Setup</h2><span class="small muted">Monitors and manages ${h(s.name)}'s YouTube live stream — local encoder health, sending to YouTube, and what YouTube itself reports, kept separate on purpose.</span>
+    <span class="right"><a class="btn sm ghost" href="https://studio.youtube.com" target="_blank" rel="noopener">${I.link} Open in YouTube Studio</a></span></div>
+    <div class="grid yt-hero">${heroHtml}${apiCardHtml}</div>
+    <div class="grid g-yt">
+      <div style="display:flex;flex-direction:column;gap:var(--gap)">${reconnectHtml}${pipeHtml}${metricsHtml}${chartsHtml}${incidentHtml}</div>
+      <div style="display:flex;flex-direction:column;gap:var(--gap)">${notifHtml}${autorecHtml}${metaHtml}${destHtml}</div>
+    </div>
+    ${advHtml}`;
+  } };
+Object.assign(ACTIONS, {
+  'key-show': ()=>{ state._showKey=!state._showKey; render(); },
+  'copy': async(el)=>{ try{ await navigator.clipboard.writeText(el.dataset.copy||''); toast('Copied to clipboard','ok'); }catch(e){ toast('Could not copy — select and copy manually','err'); } },
+  'adv-toggle': ()=>{ state._advOpen=!state._advOpen; render(); },
+  'yt-raw-toggle': ()=>{ state._ytRaw=!state._ytRaw; render(); },
+  'yt-viewlog': ()=>{ state._logSrc='ffmpeg'; state._logAll=false; location.hash='#/logs'; },
+  'yt-connect': ()=>toast("YouTube account connection isn't built yet.",'err'),
+  // Same backend action as Danger Zone's "Restart engine" (see the comment above
+  // reconnectHtml) — deliberately not a separate, lighter-weight endpoint that doesn't exist.
+  // GUARDED_ACTIONS already blocks a second click while a request is in flight; this extra
+  // check also blocks a manual reconnect while the backend's own auto-recovery is already
+  // mid-restart (health.auto_recovery.in_progress) — belt-and-braces against ever issuing
+  // two overlapping "systemctl restart" calls for the same unit (a restart storm).
+  'yt-reconnect': async()=>{
+    const yd = state.pageData.youtube && state.pageData.youtube.y;
+    const inProgress = yd && yd.health && yd.health.auto_recovery && yd.health.auto_recovery.in_progress;
+    if (state._reconnecting || state._reconnectPending || inProgress) { toast('A restart is already in progress.'); return; }
+    state._reconnecting = {since: Date.now()}; state._reconnectResult = null; state._reconnectPending = null; render();
+    const r = await act(()=>post(`${P()}/stream/restart`), 'Restart requested — waiting for the stream to come back up');
+    state._reconnecting = false;
+    if (r === null) state._reconnectResult = {ok:false, at:Date.now(), error:'Could not restart the streaming output — see the error above.'};
+    else state._reconnectPending = {since: Date.now()};
+    render();
+  },
+  'yt-clear': async()=>{ if(await confirmDlg('Remove the saved YouTube stream key? The output will stop publishing.','Remove key',true)){ const r=await act(()=>post(`${P()}/youtube`,{rtmps_url:state.pageData.youtube.y.rtmps_url, clear_key:true}),'Stream key removed'); if(r){ delete state.pageData.youtube; render(); } } },
+  'yt-test': async()=>{ state._ytTesting=true; state._ytTest=null; render(); try{ state._ytTest=await post(`${P()}/youtube/test`); }catch(e){ state._ytTest={ok:false,error:e.message}; } state._ytTesting=false; render(); } });
+Object.assign(FORMS, {
+  'youtube': async(f,b)=>{ const body={rtmps_url:b.rtmps_url, output_enabled:b.output_enabled==='1'}; if(b.stream_key&&b.stream_key.trim()) body.stream_key=b.stream_key.trim(); const r=await act(()=>post(`${P()}/youtube`,body), body.stream_key?'Stream key saved — output restarting':'Saved'); if(r){ f.stream_key.value=''; state._showKey=false; delete state.pageData.youtube; render(); } },
+  'youtube-meta': async(f,b)=>{ const r=await act(()=>post(`${P()}/youtube`,{rtmps_url:state.pageData.youtube.y.rtmps_url, meta:b}),'Broadcast details saved'); if(r){ delete state.pageData.youtube; render(); } } });
 
 /* ======================= PLAYER SKINS ======================= */
 const TIMES4=[['dawn','Dawn'],['afternoon','Afternoon'],['dusk','Dusk'],['night','Night']];
