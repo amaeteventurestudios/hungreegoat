@@ -54,14 +54,14 @@ integration exists today), and a single scripted installer (see
 
 ### Control Dashboard
 
-![HUNGREE Goat Control Dashboard](docs/images/control-dashboard.jpg)
+![HUNGREE Goat Control Dashboard](docs/images/control-dashboard.webp)
 
 Manage playback, schedules, playlists, music sources, broadcast outputs, metadata, health,
 alerts, and station controls from one browser-based dashboard.
 
 ### YouTube Streaming & Health
 
-![HUNGREE Goat YouTube Streaming and Health Dashboard](docs/images/youtube-dashboard.jpg)
+![HUNGREE Goat YouTube Streaming and Health Dashboard](docs/images/youtube-dashboard.webp)
 
 Monitor the local streaming pipeline, stream quality, YouTube output, bitrate, realtime
 performance, recovery status, warnings, and recent incidents. Note the honest "Local Output
