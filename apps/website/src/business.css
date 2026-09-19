@@ -94,11 +94,34 @@
   .usecase-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
 }
 @media (max-width:767px){
+  /* header: the desktop CTA pair (View Community Edition / Talk to Us) has no
+     yt-cta/player-link hook for site.css's existing mobile-hide rule to catch, so it was
+     staying visible right alongside .mobile-cta's own copy of the same two buttons — two
+     stacked CTA rows before the hero even started. Hide the top-bar pair; .mobile-cta
+     (already sized with .btn.sm) is the single mobile CTA row, same pattern the homepage
+     already uses for its own header buttons. */
+  .top .cta .btn,.cta-divider{display:none}
+
+  /* hero: drop the desktop/tablet vh-based min-height in favor of pure content-driven
+     sizing — sidesteps Safari's dynamic-toolbar vh miscalculation entirely (the actual
+     cause of the second CTA button disappearing under the browser chrome) rather than
+     swapping to another viewport unit that has the same category of edge case. */
+  .hero.biz{min-height:auto}
+  .hero.biz .hero-inner{padding:30px 0 34px}
+  .hero.biz .brandline{font-size:11px;margin-bottom:8px}
+  .hero.biz h1{font-size:clamp(32px,9vw,48px);line-height:1.08}
+  .hero.biz .lede{font-size:16px;line-height:1.5;margin-top:12px}
+  .hero.biz .hero-ctas{flex-direction:column;align-items:stretch;gap:10px;margin-top:18px}
+  .hero.biz .hero-ctas .btn{width:100%;min-height:44px;padding:0 18px;font-size:14px}
+
   .path-grid,.work-grid{grid-template-columns:1fr}
   .usecase-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .showcase-grid{grid-template-columns:1fr}
-  .hero.biz .hero-ctas{flex-direction:column;align-items:stretch}
-  .hero.biz .hero-ctas .btn{width:100%}
+  /* "Why teams choose" cards: true mobile is single-column so the text wraps at a
+     readable measure instead of squeezing into a narrow column (tablet keeps the shared
+     2-column .features breakpoint from site.css). */
+  .why-grid{grid-template-columns:1fr}
+  .why-grid li{min-height:0;padding:20px 22px}
   #lightbox{padding:16px}
   .lightbox-inner{gap:10px}
   .lightbox-frame{max-height:calc(100vh - 120px)}
