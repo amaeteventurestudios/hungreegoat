@@ -15,6 +15,27 @@
   const titleEl = $('#lightboxTitle', box), descEl = $('#lightboxDesc', box);
   const closeBtn = $('[data-lightbox-close]', box);
   let lastFocused = null;
+  let savedScrollY = 0;
+
+  // overflow:hidden on <body> alone doesn't reliably block touch scrolling in iOS Safari,
+  // and it doesn't remember where you were. Pin the body at its current scroll offset instead
+  // (so it physically can't scroll) and put that offset straight back on close — no jump.
+  function lockScroll() {
+    savedScrollY = window.scrollY || window.pageYOffset || 0;
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${savedScrollY}px`;
+    document.body.style.left = '0';
+    document.body.style.right = '0';
+    document.body.style.width = '100%';
+  }
+  function unlockScroll() {
+    document.body.style.position = '';
+    document.body.style.top = '';
+    document.body.style.left = '';
+    document.body.style.right = '';
+    document.body.style.width = '';
+    window.scrollTo(0, savedScrollY);
+  }
 
   function openLightbox(trigger) {
     lastFocused = trigger;
@@ -24,14 +45,14 @@
     descEl.textContent = trigger.dataset.desc || '';
     frame.classList.remove('zoomed');
     box.hidden = false;
-    document.body.style.overflow = 'hidden';
-    closeBtn.focus();
+    lockScroll();
+    closeBtn.focus({ preventScroll: true });
   }
   function closeLightbox() {
     box.hidden = true;
-    document.body.style.overflow = '';
+    unlockScroll();
     img.src = '';
-    if (lastFocused) lastFocused.focus();
+    if (lastFocused) lastFocused.focus({ preventScroll: true });
   }
   function toggleZoom() { frame.classList.toggle('zoomed'); }
 
@@ -52,7 +73,7 @@
       const i = focusables.indexOf(document.activeElement);
       e.preventDefault();
       const next = e.shiftKey ? (i <= 0 ? focusables.length - 1 : i - 1) : (i === focusables.length - 1 ? 0 : i + 1);
-      focusables[next < 0 ? 0 : next].focus();
+      focusables[next < 0 ? 0 : next].focus({ preventScroll: true });
     }
   });
 })();
