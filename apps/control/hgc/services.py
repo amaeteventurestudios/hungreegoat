@@ -30,7 +30,9 @@ def systemctl(*args: str, timeout: int = 30) -> subprocess.CompletedProcess:
 
 def state(kind: str, sid: str | None = None) -> dict:
     u = unit(kind, sid)
-    r = systemctl("show", u, "-p", "ActiveState,SubState,UnitFileState,NRestarts,ExecMainStartTimestampMonotonic,ActiveEnterTimestamp,MainPID")
+    r = systemctl("show", u, "-p",
+                  "ActiveState,SubState,UnitFileState,NRestarts,ExecMainStartTimestampMonotonic,ActiveEnterTimestamp,"
+                  "MainPID,Restart,RestartUSec")
     out = {"unit": u}
     for line in r.stdout.splitlines():
         if "=" in line:
@@ -38,6 +40,11 @@ def state(kind: str, sid: str | None = None) -> dict:
             out[k] = v
     out["active"] = out.get("ActiveState") == "active"
     out["enabled"] = out.get("UnitFileState") in ("enabled", "static", "enabled-runtime")
+    # Whether the unit actually has a crash-restart policy configured (Restart=always /
+    # on-failure / etc, as opposed to the default "no") — the real signal for "is this
+    # service's auto-recovery armed", as distinct from `enabled` above (which only means
+    # "will systemd start this at boot", not "will it come back if it dies while running").
+    out["auto_restart"] = out.get("Restart") not in (None, "no")
     return out
 
 

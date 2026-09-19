@@ -405,6 +405,16 @@ def _stream_status(sid: str) -> dict:
         return {"state": "stopped", "stale": True}
 
 
+def _parse_speed(v) -> float | None:
+    """FFmpeg's -progress speed is like '1.02x' (or 'N/A'); returns the numeric multiplier."""
+    if not v:
+        return None
+    try:
+        return float(str(v).rstrip("x"))
+    except ValueError:
+        return None
+
+
 def _youtube_configured(sid: str) -> bool:
     p = Path(config.station(sid)["youtube_secret"])
     if not p.exists():
@@ -1484,6 +1494,126 @@ def _yt_write(sid: str, url: str, key: str | None) -> None:
         f.write(f"SAVED_AT={int(time.time())}\n")
 
 
+def _youtube_health(sid: str, stream: dict, st: dict) -> dict:
+    """Assembles the honest, plain-English health picture for the YouTube dashboard:
+    what's locally verifiable (Liquidsoap, FFmpeg, BgFeeder, RTMPS send) vs. what
+    genuinely cannot be confirmed without a YouTube API connection (ingest receipt,
+    live/broadcast state) — the two must never be collapsed into one status."""
+    ls = liq.status(sid)
+    liq_alive = "uptime" in ls
+    lib = db.q1("SELECT COUNT(*) n FROM tracks WHERE station=? AND corrupt=0", (sid,))
+    lib_empty = lib["n"] == 0
+    svc_stream = services.state("stream", sid)
+    svc_liq = services.state("liquidsoap", sid)
+    bg = stream.get("bg") or {}
+    state_ = stream.get("state")
+    stale = bool(stream.get("stale"))
+    running = state_ == "running" and not stale
+    yt_target = (st.get("output_target") or "youtube") == "youtube"
+    configured = _youtube_configured(sid)
+    speed = _parse_speed(stream.get("speed"))
+    source_label = {"main": "Scheduled playlist", "backup": "Backup playlist", "emergency": "Emergency loop",
+                     "live": "Live input", "remote": "Remote input"}.get((liq_alive and NOW[sid].get("source")) or "", "—")
+
+    def stage(key, label, status, detail, tech=None):
+        return {"key": key, "label": label, "status": status, "detail": detail, "tech": tech}
+
+    pipeline = []
+    pipeline.append(stage("music", "Music Player",
+        "off" if lib_empty else ("ok" if liq_alive else "err"),
+        "Station library is empty" if lib_empty else ("Playing music" if liq_alive else "Not running"),
+        "Liquidsoap"))
+    audio_ok = liq_alive and state_ in ("running", "starting")
+    pipeline.append(stage("audio", "Audio Feed",
+        "off" if lib_empty else ("ok" if audio_ok else ("warn" if liq_alive else "err")),
+        "Reaching the encoder" if audio_ok else ("Music is playing but not yet reaching the encoder" if liq_alive else "No audio source"),
+        f"harbor → FFmpeg (WAV) · {source_label or '—'}"))
+    video_status = "ok" if running else ("warn" if state_ in ("starting", "restarting") else ("err" if state_ == "waiting" else "off"))
+    pipeline.append(stage("video", "Video Streamer", video_status,
+        {"running": "Combining audio + visuals into the live stream", "starting": "Starting up…",
+         "restarting": "Restarting…", "waiting": "Waiting", "stopped": "Stopped"}.get(state_, state_ or "Unknown"),
+        f"PID {stream.get('pid') or '—'} · {stream.get('resolution', '')} {stream.get('encoder', '')}".strip()))
+    bg_ok = running and bool(bg.get("pid"))
+    pipeline.append(stage("bg", "Background Visuals",
+        "ok" if bg_ok else ("off" if not running else "warn"),
+        "Looping visuals active" if bg_ok else ("Not running" if not running else "No background helper yet"),
+        f"PID {bg.get('pid') or '—'} · {bg.get('restarts', 0)} restart(s) this run"))
+    sending_ok = running and yt_target
+    pipeline.append(stage("send", "Sending to YouTube",
+        "ok" if sending_ok else ("off" if not yt_target else ("warn" if state_ in ("starting", "restarting") else "err")),
+        "Publishing over RTMPS" if sending_ok else ("YouTube output is turned off" if not yt_target else "Not currently sending"),
+        (f"{round(stream.get('bitrate_kbps') or 0)} kbps out" if sending_ok else (stream.get("last_error") or "—"))))
+    pipeline.append(stage("receive", "YouTube Receiving",
+        "unverified" if sending_ok else "off",
+        "Can't be confirmed — no YouTube API connection" if sending_ok else "Not sending, so nothing to receive",
+        "Needs YouTube API authorization (not connected)"))
+    pipeline.append(stage("live", "YouTube Live",
+        "unverified" if sending_ok else "off",
+        "Can't be confirmed here — check YouTube Studio" if sending_ok else "Not live",
+        "Needs YouTube API authorization (not connected)"))
+
+    if lib_empty:
+        level, title, message = "offline", "No Media", "The station library is empty — there's nothing to stream yet."
+    elif not yt_target:
+        level, title, message = "offline", "YouTube Output Off", "This station isn't set to send to YouTube right now."
+    elif not configured:
+        level, title, message = "critical", "No Stream Key", "YouTube output is on but no stream key is saved yet."
+    elif stale or state_ in ("restarting", "waiting"):
+        level, title = "critical", "Local Output Not Running"
+        message = stream.get("last_error") or "The encoder isn't currently producing a stream."
+    elif not running:
+        level, title, message = "offline", "Stopped", "The video stream is stopped."
+    else:
+        degraded = (speed is not None and speed < 0.85) or (stream.get("drop_frames") or 0) > 50
+        if degraded:
+            level, title = "warning", "Stream Degraded"
+            message = "Local output is active but quality looks degraded (slow encode and/or dropped frames)."
+        else:
+            level, title = "unverified", "Local Output Active — YouTube Not Confirmed"
+            message = ("Main encoder is running and sending to YouTube, but HUNGREE Goat Control has no YouTube "
+                       "API connection to confirm YouTube is actually receiving it or airing it live. Check YouTube Studio.")
+
+    # "Armed" reflects the real, verified systemd Restart= policy on both units (checked via
+    # `systemctl show -p Restart`), not UnitFileState/"enabled" — enabled only means "starts
+    # at boot", it says nothing about whether a crash while running gets restarted. If this
+    # is ever false, that's not this function guessing wrong; it means someone genuinely
+    # changed the unit file to drop Restart=always, and the dashboard should say so plainly.
+    auto_restart_video = bool(svc_stream.get("auto_restart"))
+    auto_restart_audio = bool(svc_liq.get("auto_restart"))
+    auto_recovery = {
+        "armed": auto_restart_video and auto_restart_audio,
+        "in_progress": state_ == "restarting" or (not lib_empty and not liq_alive),
+        "layers": [
+            {"name": "Video supervisor", "detail": "Restarts FFmpeg on crash or a stall (no progress for 30s, or no output "
+                                                      "20s after start). Backoff 3s → 60s, doubling on repeat failures."
+                                                      + ("" if auto_restart_video else " — DISARMED: the systemd unit's own Restart= policy is currently \"no\".")},
+            {"name": "Audio watchdog", "detail": "Restarts Liquidsoap if playback position freezes, or output is silent, "
+                                                    "for 90s while a track is on air."
+                                                    + ("" if auto_restart_audio else " — DISARMED: the systemd unit's own Restart= policy is currently \"no\".")},
+            {"name": "systemd", "detail": f"Restart={svc_stream.get('Restart', 'no')} (video, {svc_stream.get('RestartUSec', '?')} delay), "
+                                          f"Restart={svc_liq.get('Restart', 'no')} (audio, {svc_liq.get('RestartUSec', '?')} delay) — "
+                                          "brings the process back if it dies while running."},
+        ],
+        "attempts_this_run": stream.get("restarts") or 0,
+        "lifetime_restarts_video": int(svc_stream.get("NRestarts") or 0),
+        "lifetime_restarts_audio": int(svc_liq.get("NRestarts") or 0),
+        "watchdog_timeout_sec": 60,
+        "restart_sec_video": svc_stream.get("RestartUSec"),
+        "restart_sec_audio": svc_liq.get("RestartUSec"),
+        "last_error": stream.get("last_error"),
+    }
+    diagnostics = {
+        "main_pid": stream.get("pid"), "bg_pid": bg.get("pid"), "bg_restarts": bg.get("restarts", 0),
+        "encoder": stream.get("encoder"), "resolution": stream.get("resolution"), "fps_target": stream.get("fps_target"),
+        "video_bitrate_k": stream.get("video_bitrate_k"), "audio_bitrate_k": stream.get("audio_bitrate_k"),
+        "drop_frames": stream.get("drop_frames"), "dup_frames": stream.get("dup_frames"),
+        "status_file": str(config.RUN_DIR / f"stream-{sid}.json"), "ffmpeg_log": str(config.LOG_DIR / f"ffmpeg-{sid}.log"),
+        "liquidsoap_unit": svc_liq.get("unit"), "stream_unit": svc_stream.get("unit"),
+    }
+    return {"pipeline": pipeline, "overall": {"level": level, "title": title, "message": message},
+            "auto_recovery": auto_recovery, "diagnostics": diagnostics, "speed": speed}
+
+
 @app.get("/api/stations/{sid}/youtube")
 def youtube_get(sid: str, user: str = Depends(current_user)):
     _sid(sid)
@@ -1491,17 +1621,22 @@ def youtube_get(sid: str, user: str = Depends(current_user)):
     key = d.get("YOUTUBE_STREAM_KEY", "")
     stream = _stream_status(sid)
     st = db.get_settings(sid)
+    health = _youtube_health(sid, stream, st)
     return {
         "rtmps_url": d["YOUTUBE_RTMPS_URL"], "configured": len(key) > 4,
         "key_masked": ("•" * max(0, len(key) - 4) + key[-4:]) if len(key) > 4 else "",
         "saved_at": int(d.get("SAVED_AT") or 0) or None,
         "output_enabled": st.get("output_target") == "youtube",
+        "output_target": st.get("output_target") or "youtube",
         "state": stream.get("state"), "target": stream.get("target"), "bitrate_kbps": stream.get("bitrate_kbps"),
-        "uptime_sec": stream.get("uptime_sec"), "last_error": stream.get("last_error"),
+        "uptime_sec": stream.get("uptime_sec"), "last_error": stream.get("last_error"), "stale": stream.get("stale"),
+        "fps": stream.get("fps"), "speed": stream.get("speed"), "restarts": stream.get("restarts"),
+        "drop_frames": stream.get("drop_frames"), "dup_frames": stream.get("dup_frames"), "pid": stream.get("pid"),
         "last_connected": db.get_setting(sid, "youtube_last_connected"),
         "meta": st.get("youtube_meta") or {},
         "encoder": {"resolution": f"{config.VIDEO_W}x{config.VIDEO_H}", "fps": config.VIDEO_FPS,
                     "video_kbps": config.station(sid)["video_bitrate_k"], "audio_kbps": config.station(sid)["audio_bitrate_k"]},
+        "health": health,
     }
 
 

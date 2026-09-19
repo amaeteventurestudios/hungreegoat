@@ -98,6 +98,11 @@ class BgFeeder:
         self._last_frame: bytes | None = None
         self._consecutive_failures = 0
         self._codec_cache: dict[str, str | None] = {}
+        self.total_restarts = 0   # lifetime count of unexpected helper exits (dashboard diagnostics)
+
+    def status(self) -> dict:
+        h = self._helper
+        return {"pid": h.pid if h and h.poll() is None else None, "restarts": self.total_restarts}
 
     def fifo_path(self) -> Path:
         return config.RUN_DIR / f"bg-{self.sid}.fifo"
@@ -279,6 +284,7 @@ class BgFeeder:
                 if self._helper is None or self._helper.poll() is not None:
                     if self._helper is not None:
                         self._consecutive_failures += 1
+                        self.total_restarts += 1
                         self._log(f"background helper exited unexpectedly (failure #{self._consecutive_failures}) for {current_path}")
                         if self._consecutive_failures == 3:
                             self._log(f"giving up on {broadcast_path} after 3 failures, falling back to the default loop until the broadcast selection actually changes")
@@ -348,6 +354,7 @@ class Streamer:
         self.state = {"station": sid, "state": "starting", "target": None, "started_at": None,
                       "restarts": 0, "last_error": None}
         self.progress = {}
+        self.bg: BgFeeder | None = None
         self._lock = threading.Lock()
         self._status_lock = threading.Lock()
         self._heartbeat = time.time()
@@ -554,6 +561,7 @@ class Streamer:
             "encoder": {"v4l2m2m": "h264_v4l2m2m", "vaapi": "h264_vaapi", "software": "libx264"}[config.HW_BACKEND],
             "resolution": f"{config.VIDEO_W}x{config.VIDEO_H}", "fps_target": config.VIDEO_FPS,
             "video_bitrate_k": self.st["video_bitrate_k"], "audio_bitrate_k": self.st["audio_bitrate_k"],
+            "bg": self.bg.status() if self.bg else {"pid": None, "restarts": 0},
         })
         with self._status_lock:
             tmp = self.status_path.with_suffix(f".{threading.get_ident()}.tmp")
@@ -619,6 +627,7 @@ class Streamer:
                     time.sleep(0.5)
                 continue
             bg = BgFeeder(self.sid, self.log_path)
+            self.bg = bg
             bg.ensure_fifo()
             cmd = self.ffmpeg_cmd(out_args, bg.fifo_path())
             self._log("supervisor", f"main ffmpeg starting, target={mode}")
