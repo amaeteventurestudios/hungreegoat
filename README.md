@@ -52,10 +52,25 @@ integration exists today), and a single scripted installer (see
 
 ## Screenshots
 
-_Add screenshots here before publishing — none are committed yet. Suggested set: the
-public player, the Control dashboard, the YouTube Setup page, Broadcast Visuals, and
-Workout DJ. Don't include anything showing a real stream key, session token, private
-domain/IP, or other account-specific data — mask or crop it out first._
+### Control Dashboard
+
+![HUNGREE Goat Control Dashboard](docs/images/control-dashboard.jpg)
+
+Manage playback, schedules, playlists, music sources, broadcast outputs, metadata, health,
+alerts, and station controls from one browser-based dashboard.
+
+### YouTube Streaming & Health
+
+![HUNGREE Goat YouTube Streaming and Health Dashboard](docs/images/youtube-dashboard.jpg)
+
+Monitor the local streaming pipeline, stream quality, YouTube output, bitrate, realtime
+performance, recovery status, warnings, and recent incidents. Note the honest "Local Output
+Active — YouTube Not Confirmed" status in the screenshot above: this app can see and control
+its own local encoder, but has no YouTube API connection yet to confirm YouTube itself is
+receiving the stream or airing it live — see [YouTube streaming](#youtube-streaming) below.
+
+_Still needed: the public player, Broadcast Visuals, and Workout DJ. Add them here the same
+way — real screenshots, checked for anything account-specific before committing._
 
 ## Requirements
 
