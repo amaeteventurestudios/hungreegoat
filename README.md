@@ -9,6 +9,8 @@ recovery, and a browser-based DJ/mixing studio.
 
 You can run HUNGREE Goat on your own Linux computer or home server.
 
+HUNGREE Goat was created by **Amaete Umanah**.
+
 ---
 
 ## What does it do?
@@ -379,18 +381,24 @@ something larger than a small fix, opening an issue first to discuss it is a goo
 
 ## License
 
-The code and brand assets original to this repository are **proprietary** — see `LICENSE`
-("all rights reserved", no license granted to copy, modify, or distribute without written
-permission). This is not currently an open-source project as a whole, even though parts of
-it are:
+Original HUNGREE Goat code and documentation is **Copyright © 2023–2026 Amaete Umanah**,
+**proprietary** — see `LICENSE` ("all rights reserved", no license granted to copy, modify,
+or distribute without written permission). This is not currently an open-source project as
+a whole, even though parts of it are separately licensed and not covered by that notice —
+see `THIRD_PARTY_NOTICES.md` for the full breakdown:
 
 - **`apps/player`** is distributed under **AGPL-3.0** (it's a derivative of a third-party
-  AGPL-3.0 project) — see `apps/player/LICENSE` and `apps/player/NOTICE.md` for exactly what
-  that requires (including that this repository's player source stay published).
-- **`apps/dj-studio`**'s DJ engine is built on **Aurdour** (MIT-licensed) — see
-  `apps/dj-studio/LICENSE.aurdour` and `apps/dj-studio/NOTICE.md`.
+  AGPL-3.0 project, copyright Gilles Momeni) — see `apps/player/LICENSE` and
+  `apps/player/NOTICE.md` for exactly what that requires (including that this repository's
+  player source stay published).
+- **`apps/dj-studio`**'s DJ engine is built on **Aurdour** (MIT) and its mastering DSP on
+  **noisyloop/mastering** (ISC) — see `apps/dj-studio/NOTICE.md` for the full, file-by-file
+  provenance breakdown, and `THIRD_PARTY_NOTICES.md` for the copyright holders.
 - Third-party runtime components keep their own licenses regardless of the above:
   Liquidsoap (GPL-2.0), FFmpeg (LGPL/GPL depending on build), fonts (SIL OFL 1.1).
+
+The root `LICENSE`'s proprietary notice applies only to the code and documentation original
+to this repository — it does not and cannot override the separate licenses above.
 
 If you're evaluating this repository for a public/open-source release, read `docs/RECOVERY.md`'s
 open-source-readiness notes first — the root `LICENSE` and the AGPL-3.0 `apps/player`

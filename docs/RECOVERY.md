@@ -100,12 +100,41 @@ this repository was pointed at a real GitHub remote:
   `operator-password.txt`, `*.key`/`*.pem`/`*.crt`/`*.token`, `logs/`, `run/`, `data/`,
   `*.sqlite3*`.
 
-**Before making this repository public, still resolve the licensing question** described in
-the root README's License section: the top-level `LICENSE` currently says "all rights
-reserved," while `apps/player` is separately AGPL-3.0 and `apps/dj-studio`'s DJ engine is
-MIT-derived. That's a real inconsistency to decide on deliberately (e.g. dual-license the
-monorepo explicitly, or carve those subtrees out) — not something this audit can resolve on
-its own, and not something to guess at.
+**Before making this repository public, a full licensing audit was run** (root `LICENSE`,
+component `LICENSE`/`NOTICE` files, package manifests, vendored source headers) — see
+`THIRD_PARTY_NOTICES.md` for the complete component-by-component breakdown. Summary:
+
+- Root `LICENSE` now correctly attributes original HUNGREE Goat code to its actual creator
+  (`Copyright © 2023–2026 Amaete Umanah`) and explicitly excludes the components below,
+  rather than silently claiming "all rights reserved" over code it doesn't own.
+- **`apps/player`** is AGPL-3.0 (derivative of a third-party project, copyright Gilles
+  Momeni). Checked whether AGPL's copyleft extends into the rest of the monorepo: it does
+  not appear to. `apps/player` has zero source-level imports of any other package in this
+  repo (`packages/shared`, `packages/ui`, etc. — checked directly), talks to the backend
+  only over a plain HTTP/REST API (`fetch`, `/v1/*`), and builds/deploys as a fully separate
+  Vercel project. That's the "mere aggregation via a network interface" case, not a combined
+  or derivative work — under the FSF's own guidance on AGPL §13, aggregation like this does
+  not pull the rest of the monorepo under AGPL. This is a legal reading, not a certainty;
+  get your own legal review before relying on it, especially before any public release.
+- **`apps/dj-studio`** bundles two upstream projects rather than reimplementing DSP:
+  Aurdour (MIT, the DJ engine) and noisyloop/mastering (ISC, the mastering DSP, itself
+  vendoring one MIT file from npm `fft.js`). All three require their own copyright/license
+  notice to be preserved, not replaced with HUNGREE Goat's own — done correctly today (see
+  `apps/dj-studio/LICENSE.aurdour`, `vendor/mastering-dsp/LICENSE.mastering`); HUNGREE
+  Goat's own contribution there is credited separately in `apps/dj-studio/NOTICE.md`
+  without touching upstream's copyright line.
+- **Gap found**: the bundled fonts (Montserrat, Inter, Great Vibes — `packages/brand/fonts/`)
+  are SIL OFL 1.1, correctly *referenced* in `LICENSE`, but the actual OFL license text was
+  never committed alongside them — only the font binaries. Fix before public release (see
+  `THIRD_PARTY_NOTICES.md`).
+- **Root license type is still undecided** — original HUNGREE Goat code stays proprietary
+  for now; a plain-English comparison of the realistic open-source options (MIT, Apache-2.0,
+  GPL-family, AGPL) was presented separately for a deliberate decision, not applied
+  automatically. Whatever is chosen only needs to be compatible with what it *depends on*
+  (this repo doesn't statically link AGPL/GPL code into original HUNGREE Goat code — the
+  vendored components above are either separately-deployed (`apps/player`) or MIT/ISC
+  (`apps/dj-studio`'s vendored DSP), so compatibility is a smaller concern than it would be
+  if AGPL code were compiled directly into the backend).
 
 Other things worth a look before a public release, not secrets but still worth generalizing
 or flagging:

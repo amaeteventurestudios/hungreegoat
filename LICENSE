@@ -1,5 +1,14 @@
-Copyright (c) 2026 Amaete Venture Studios / HUNGREE Goat Music. All rights reserved.
+Copyright © 2023–2026 Amaete Umanah. All rights reserved.
 
-This repository contains the proprietary source code and brand assets of the HUNGREE Goat platform.
-No licence is granted to copy, modify, distribute or use any part of it without written permission.
-Third-party components keep their own licences (Liquidsoap: GPL-2.0, FFmpeg: LGPL/GPL, fonts: SIL OFL 1.1).
+This repository contains the proprietary source code and brand assets of the HUNGREE Goat
+platform, created by Amaete Umanah.
+
+No licence is granted to copy, modify, distribute or use any part of it without written
+permission, EXCEPT for the components below, which are separately licensed and are not
+covered by this notice — see THIRD_PARTY_NOTICES.md for the full breakdown:
+- `apps/player` — GNU Affero General Public License v3.0 (see `apps/player/LICENSE`)
+- `apps/dj-studio`'s DJ engine (Aurdour) and mastering DSP (noisyloop/mastering) — MIT and
+  ISC respectively (see `apps/dj-studio/LICENSE.aurdour`,
+  `apps/dj-studio/vendor/mastering-dsp/LICENSE.mastering`)
+- Liquidsoap (GPL-2.0), FFmpeg (LGPL/GPL depending on build), and the bundled fonts
+  (SIL OFL 1.1) keep their own upstream licences as runtime/build dependencies.
