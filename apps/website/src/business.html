@@ -15,11 +15,12 @@
 <div class="site-bg" aria-hidden="true"></div>
 <header class="top" id="top">
   <div class="wrap bar">
-    <a class="logo" href="/" aria-label="HUNGREE Goat home"><img src="assets/img/hungree-goat-logo-color.png" alt="" width="52" height="52"><span><b>HUNGREE GOAT</b><small>MEDIA</small></span></a>
-    <nav class="nav" aria-label="Primary"><a href="/">Home</a><a href="/#stations">Stations</a><a href="/#about">About</a><a href="/business" class="active">For Business</a><a href="https://github.com/amaeteventurestudios/hungreegoat" target="_blank" rel="noopener noreferrer">Community Edition</a></nav>
+    <a class="logo" href="/" aria-label="HUNGREE Goat home"><img src="assets/img/hungree-goat-logo-color.png" alt="" width="52" height="52"><span class="wordmark">HUNGREE GOAT MEDIA</span></a>
+    <nav class="nav" aria-label="Primary"><a href="/">Home</a><a href="/#stations">Stations</a><a href="/#about">About</a><a href="/business" class="active">For Business</a></nav>
     <div class="cta">
       <a class="btn ghost sm" href="https://github.com/amaeteventurestudios/hungreegoat" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v12a3 3 0 0 0 3 3h9M6 3a3 3 0 1 0 0 6M6 3a3 3 0 1 1 0 6M18 15a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/></svg>View Community Edition</a>
       <a class="btn red sm" href="mailto:info@hungreegoat.com?subject=HUNGREE%20Goat%20Media%20Inquiry"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Talk to Us</a>
+      <span class="cta-divider" aria-hidden="true"></span>
       <span class="script tagline">Music Feeds Different</span>
       <button class="burger" data-menu aria-label="Menu" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
     </div>
@@ -90,11 +91,17 @@
   <div class="sec-head"><p class="eyebrow">See It Running</p><h2 class="sec">HUNGREE Goat <span style="color:var(--hg-gold)">in action</span></h2><p class="muted">A powerful control dashboard and a complete YouTube streaming setup.</p></div>
   <div class="showcase-grid">
     <figure class="card showcase-card">
-      <img class="shot" src="assets/img/control-dashboard.webp" alt="HUNGREE Goat Control dashboard showing now playing, schedule, playback rules, queue, fallback sources, library, and stream health" loading="lazy">
+      <button type="button" class="shot-btn" data-lightbox-trigger data-full="assets/img/control-dashboard.webp" data-title="Control Dashboard" data-desc="Monitor your stream, manage content, schedule programming, control playback, and keep your station running.">
+        <img class="shot" src="assets/img/control-dashboard.webp" alt="HUNGREE Goat Control dashboard showing now playing, schedule, playback rules, queue, fallback sources, library, and stream health" loading="lazy">
+        <span class="expand-hint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Click to expand</span>
+      </button>
       <figcaption class="cap"><h3>Control Dashboard</h3><p>Monitor your stream, manage content, schedule programming, control playback, and keep your station running.</p></figcaption>
     </figure>
     <figure class="card showcase-card">
-      <img class="shot" src="assets/img/youtube-dashboard.webp" alt="HUNGREE Goat YouTube Setup page showing pipeline health, local encoder metrics, and an honest unverified YouTube status" loading="lazy">
+      <button type="button" class="shot-btn" data-lightbox-trigger data-full="assets/img/youtube-dashboard.webp" data-title="YouTube Setup" data-desc="Configure your YouTube output, monitor stream health, reconnect when needed, and see local performance in real time.">
+        <img class="shot" src="assets/img/youtube-dashboard.webp" alt="HUNGREE Goat YouTube Setup page showing pipeline health, local encoder metrics, and an honest unverified YouTube status" loading="lazy">
+        <span class="expand-hint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Click to expand</span>
+      </button>
       <figcaption class="cap"><h3>YouTube Setup</h3><p>Configure your YouTube output, monitor stream health, reconnect when needed, and see local performance in real time.</p></figcaption>
     </figure>
   </div>
@@ -161,6 +168,14 @@
   <nav class="foot-nav" aria-label="Footer"><a href="/">Home</a><a href="/#stations">Stations</a><a href="/#about">About</a><a href="/business">For Business</a><a href="https://github.com/amaeteventurestudios/hungreegoat" target="_blank" rel="noopener noreferrer">Community Edition</a></nav>
   <p class="copy">Copyright © 2023–<span data-year></span> HUNGREE Goat Media. All rights reserved.</p>
 </div></footer>
+
+<div class="lightbox" id="lightbox" hidden role="dialog" aria-modal="true" aria-label="Screenshot preview">
+  <div class="lightbox-inner">
+    <button type="button" class="lightbox-close" data-lightbox-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <div class="lightbox-frame" id="lightboxFrame" tabindex="0" role="button" aria-label="Toggle zoom"><img id="lightboxImg" src="" alt=""></div>
+    <p class="lightbox-cap"><b id="lightboxTitle"></b><span id="lightboxDesc"></span></p>
+  </div>
+</div>
 
 <script src="business.js?v=__V__"></script>
 </body>

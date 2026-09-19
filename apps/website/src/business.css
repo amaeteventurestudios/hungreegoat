@@ -1,6 +1,16 @@
 /* hungreegoat.com/business — same brand system as the homepage (tokens.css, hg-ui.css,
    site.css for header/hero/footer chrome), this file only adds the business-page sections. */
 
+/* ---- header (this page only: single-line wordmark, no duplicate Community Edition
+   nav item since the CTA button already covers it, tighter gaps so nothing wraps) ---- */
+.top .logo{gap:12px}
+.top .logo .wordmark{font:800 17px/1.15 var(--hg-display);letter-spacing:.04em;color:var(--hg-gold);white-space:nowrap}
+.top .bar{gap:16px}
+.top .nav{gap:16px}
+.top .nav a{white-space:nowrap}
+.top .cta{gap:8px}
+.cta-divider{width:1px;height:24px;background:var(--hg-line2);margin:0 2px;flex:none}
+
 /* ---- hero ---- */
 .hero.biz{min-height:min(60vh,520px)}
 .hero.biz .hero-inner{padding:56px 0 64px;max-width:760px;margin-inline:auto}
@@ -10,10 +20,13 @@
 .hero.biz .lede{max-width:620px}
 .hero.biz .hero-ctas{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:26px}
 .btn.red{background:linear-gradient(90deg,#ff3b4d,#d90429);color:#fff;border-color:rgba(255,120,130,.5);box-shadow:0 10px 28px rgba(255,0,51,.22)}
+/* controlled reading zone: darker directly behind the copy, fading out toward the
+   edges so the people/skyline/water stay vibrant instead of a flat dark hero */
+.hero.biz .hero-shade{background:radial-gradient(closest-side at 50% 56%,rgba(5,9,18,.85),rgba(5,9,18,.55) 48%,transparent 74%),linear-gradient(180deg,rgba(7,13,24,.55) 0%,rgba(7,13,24,.15) 35%,rgba(7,13,24,.2) 70%,rgba(7,13,24,.95) 100%),radial-gradient(60% 70% at 50% 40%,rgba(7,13,24,.25),transparent 70%)}
 
 /* ---- shared section chrome ---- */
 .biz-sec{padding:56px 0}
-.biz-sec .sec-head{text-align:center;max-width:640px;margin:0 auto 28px}
+.biz-sec .sec-head{display:block;text-align:center;max-width:640px;margin:0 auto 28px}
 .biz-sec .sec-head p.muted{margin-top:8px}
 
 /* ---- choose your path ---- */
@@ -34,10 +47,27 @@
 /* ---- HUNGREE Goat in action ---- */
 .showcase-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
 .showcase-card{overflow:hidden;padding:0}
-.showcase-card .shot{display:block;width:100%;aspect-ratio:16/10;object-fit:cover;object-position:top;border-bottom:1px solid var(--hg-line)}
+.shot-btn{display:block;position:relative;width:100%;padding:0;border:0;background:none;cursor:zoom-in}
+.shot-btn .shot{display:block;width:100%;aspect-ratio:16/10;object-fit:cover;object-position:top;border-bottom:1px solid var(--hg-line);transition:filter .15s}
+.shot-btn:hover .shot{filter:brightness(1.06)}
+.shot-btn .expand-hint{position:absolute;right:10px;bottom:10px;display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:999px;background:rgba(5,9,18,.72);border:1px solid var(--hg-line2);color:var(--hg-text);font:700 11.5px var(--hg-sans);backdrop-filter:blur(6px)}
+.shot-btn .expand-hint svg{width:13px;height:13px;flex:none}
 .showcase-card .cap{padding:16px 18px}
 .showcase-card h3{margin:0 0 4px;font:800 15.5px var(--hg-display)}
 .showcase-card p{margin:0;color:var(--hg-muted);font-size:13px;line-height:1.5}
+
+/* ---- screenshot lightbox ---- */
+.lightbox{position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;padding:min(6vh,48px) 20px;background:rgba(5,9,18,.92);backdrop-filter:blur(6px)}
+.lightbox-inner{position:relative;max-width:min(1400px,94vw);max-height:100%;display:flex;flex-direction:column;align-items:center;gap:12px}
+.lightbox-frame{max-width:100%;max-height:calc(100vh - 160px);overflow:auto;border-radius:14px;box-shadow:0 30px 80px rgba(0,0,0,.6);border:1px solid var(--hg-line-gold)}
+.lightbox-frame img{display:block;width:100%;height:auto;cursor:zoom-in}
+.lightbox-frame.zoomed{max-width:94vw}
+.lightbox-frame.zoomed img{width:auto;max-width:none;cursor:zoom-out}
+.lightbox-cap{color:var(--hg-muted);font-size:13px;text-align:center;max-width:640px}
+.lightbox-cap b{color:var(--hg-text);font:800 14px var(--hg-display);display:block;margin-bottom:2px}
+.lightbox-close{position:absolute;top:-46px;right:0;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;background:rgba(14,26,42,.9);border:1px solid var(--hg-line2);color:var(--hg-text)}
+.lightbox-close svg{width:20px;height:20px}
+.lightbox-close:hover{border-color:rgba(242,193,78,.6)}
 
 /* ---- how you can work with us ---- */
 .work-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
@@ -64,4 +94,8 @@
   .showcase-grid{grid-template-columns:1fr}
   .hero.biz .hero-ctas{flex-direction:column;align-items:stretch}
   .hero.biz .hero-ctas .btn{width:100%}
+  .lightbox{padding:16px}
+  .lightbox-inner{gap:10px}
+  .lightbox-frame{max-height:calc(100vh - 120px)}
+  .lightbox-close{position:fixed;top:12px;right:12px}
 }
