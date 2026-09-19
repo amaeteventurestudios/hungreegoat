@@ -176,7 +176,14 @@ def _watchdog() -> None:
                             synced[sid] = False
                             continue
                     else:
+                        # Bug fix: a "silence" alert previously had no matching resolve call anywhere
+                        # in the codebase (only "usb" and "stream" categories were ever auto-resolved),
+                        # so once raised it stayed open/acknowledged forever regardless of recovery —
+                        # an operator had to notice and resolve it by hand even though the station had
+                        # long since started producing audio again. Mirrors the "stream" category's
+                        # existing resolve-on-recovery pattern immediately above.
                         silent_since.pop(sid, None)
+                        db.resolve_alerts("silence", sid)
                 if alive and not synced.get(sid):
                     _push_settings(sid)
                     synced[sid] = True
