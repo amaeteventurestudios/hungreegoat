@@ -1,0 +1,18 @@
+[Unit]
+Description=HUNGREE Goat Control (API + dashboard) [Docker, Beelink]
+After=network-online.target docker.service
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+Type=simple
+ExecStartPre=%h/hungree-goat/bin/hgc-wait-docker.sh
+ExecStartPre=%h/hungree-goat/bin/hgc-wait-media.sh
+ExecStart=%h/hungree-goat/bin/hgc-control-run.sh
+ExecStopPost=-/usr/bin/docker rm -f hgc-control
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,20 @@
+[Unit]
+Description=HUNGREE Goat video stream (FFmpeg, VAAPI) — station %i [Docker, Beelink]
+After=hungree-goat-liquidsoap@%i.service hungree-goat-control.service
+Wants=hungree-goat-liquidsoap@%i.service
+StartLimitIntervalSec=600
+StartLimitBurst=8
+
+[Service]
+Type=simple
+ExecStartPre=%h/hungree-goat/bin/hgc-wait-media.sh
+ExecStartPre=%h/hungree-goat/bin/hgc-wait-docker.sh
+ExecStartPre=%h/hungree-goat/bin/hgc-wait-backend.sh
+ExecStart=%h/hungree-goat/bin/hgc-stream-run.sh %i
+ExecStopPost=-/usr/bin/docker rm -f hgc-stream-%i
+Restart=always
+RestartSec=8
+TimeoutStopSec=20
+
+[Install]
+WantedBy=default.target

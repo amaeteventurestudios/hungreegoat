@@ -1,8 +1,17 @@
 # Deployment
-## Pi (control + broadcast)
+## Current production (Beelink / Docker)
+See `infra/beelink/README.md` for the full picture (Dockerfile, run scripts, systemd
+units) and the root `README.md`'s "Installing on a New Computer" section for the step-by-
+step path. In short: `apps/control` is bind-mounted into a container built from
+`infra/beelink/Dockerfile`; `infra/beelink/systemd/*.service` (portable, `systemctl --user`)
+drive the control app, Liquidsoap, the video stream, and the reverse tunnel as four
+independent units — restarting one never touches the others. Restart the engine after a
+`station.liq` change: `systemctl --user restart hungree-goat-liquidsoap@lofi`.
+
+## Pi (legacy / rollback target — not current production)
 `infra/pi/deploy.sh` rsyncs `apps/control`, `infra/pi/{bin,liquidsoap}` and `infra/systemd` to `aumanah@pi-node-01`
-and restarts the control service. Restart the engine after a `station.liq` change:
-`systemctl --user restart hungree-goat-liquidsoap@lofi`. First-time setup and daily operations: `infra/pi/RUNBOOK.md`.
+and restarts the control service (bare-metal venv, not Docker). Kept working and documented specifically so the
+original Pi deployment remains a real rollback option. First-time setup and daily operations: `infra/pi/RUNBOOK.md`.
 
 ## Public apps (Vercel)
 Until `api.hungreegoat.com` exists (gateway + DNS), the deployed site and player cannot reach the broadcast core and show their offline states; audio only works once the API is public.

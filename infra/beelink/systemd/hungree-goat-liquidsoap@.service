@@ -1,0 +1,21 @@
+[Unit]
+Description=HUNGREE Goat audio engine (Liquidsoap) — station %i [Beelink]
+After=hungree-goat-control.service
+Wants=hungree-goat-control.service
+StartLimitIntervalSec=600
+StartLimitBurst=8
+
+[Service]
+Type=simple
+ExecStartPre=%h/hungree-goat/bin/hgc-wait-media.sh
+ExecStartPre=%h/hungree-goat/bin/hgc-wait-docker.sh
+ExecStartPre=%h/hungree-goat/bin/hgc-wait-backend.sh
+ExecStart=%h/hungree-goat/bin/hgc-liquidsoap.sh %i
+ExecStopPost=-/usr/bin/docker rm -f hg-liq-%i
+Restart=always
+RestartSec=10
+TimeoutStopSec=25
+KillMode=mixed
+
+[Install]
+WantedBy=default.target

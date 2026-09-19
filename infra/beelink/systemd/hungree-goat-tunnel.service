@@ -1,0 +1,17 @@
+# User unit on the Beelink: keeps a reverse SSH tunnel to the public gateway so that
+# 127.0.0.1:18090 on the gateway reaches this box's control backend (127.0.0.1:8090).
+# Same key/identity the Pi used (~/.ssh/hg-tunnel), migrated over — already authorized
+# server-side, so no new human action needed here.
+[Unit]
+Description=HUNGREE Goat reverse tunnel to gateway (from Beelink)
+After=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/ssh -NT -o ServerAliveInterval=20 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=10 -i %h/.ssh/hg-tunnel -R 127.0.0.1:18090:127.0.0.1:8090 hgtunnel@2.29.28.125
+Restart=always
+RestartSec=15
+
+[Install]
+WantedBy=default.target
