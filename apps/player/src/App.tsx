@@ -8,6 +8,7 @@ import Library from './components/Library';
 import Credits from './components/Credits';
 import StartOverlay from './components/StartOverlay';
 import RotateHint from './components/RotateHint';
+import { Analytics } from '@vercel/analytics/react';
 function Shell() {
   const { s } = usePlayer();
   const skin = s.skins.find(x => x.id === s.skinId);
@@ -17,4 +18,4 @@ function Shell() {
     <PlayerBar /><StartOverlay />
   </div>);
 }
-export default function App() { return <PlayerProvider><Shell /></PlayerProvider>; }
+export default function App() { return <PlayerProvider><Shell /><Analytics /></PlayerProvider>; }
