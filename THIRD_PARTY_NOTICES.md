@@ -2,7 +2,7 @@
 
 This file lists every third-party component bundled in, vendored into, or built against
 this repository, and what each one requires. Original HUNGREE Goat code and documentation
-is `Copyright © 2023–2026 Amaete Umanah` (see `LICENSE`) — everything listed below is
+is `Copyright © 2023–2026 HUNGREE Goat Media` (see `LICENSE`) — everything listed below is
 someone else's work, used here under its own license.
 
 This is a documentation file, not a legal opinion — see the licensing-analysis note in
@@ -97,4 +97,4 @@ storage, and the visual re-skin), not the audio DSP itself.
 
 `apps/website`, `apps/control`, `packages/brand` (excluding fonts, above),
 `packages/ui`, `packages/shared`, `infra/`, and `docs/` are original HUNGREE Goat work —
-`Copyright © 2023–2026 Amaete Umanah`, covered by the root `LICENSE`, not by this file.
+`Copyright © 2023–2026 HUNGREE Goat Media`, covered by the root `LICENSE`, not by this file.

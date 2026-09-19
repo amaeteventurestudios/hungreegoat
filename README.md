@@ -9,7 +9,7 @@ recovery, and a browser-based DJ/mixing studio.
 
 You can run HUNGREE Goat on your own Linux computer or home server.
 
-HUNGREE Goat was created by **Amaete Umanah**.
+HUNGREE Goat is created and maintained by **HUNGREE Goat Media**.
 
 ---
 
@@ -396,7 +396,7 @@ something larger than a small fix, opening an issue first to discuss it is a goo
 
 ## License
 
-Original HUNGREE Goat code and documentation is **Copyright © 2023–2026 Amaete Umanah**,
+Original HUNGREE Goat code and documentation is **Copyright © 2023–2026 HUNGREE Goat Media**,
 **proprietary** — see `LICENSE` ("all rights reserved", no license granted to copy, modify,
 or distribute without written permission). This is not currently an open-source project as
 a whole, even though parts of it are separately licensed and not covered by that notice —

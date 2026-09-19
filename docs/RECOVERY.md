@@ -105,7 +105,7 @@ component `LICENSE`/`NOTICE` files, package manifests, vendored source headers) 
 `THIRD_PARTY_NOTICES.md` for the complete component-by-component breakdown. Summary:
 
 - Root `LICENSE` now correctly attributes original HUNGREE Goat code to its actual creator
-  (`Copyright © 2023–2026 Amaete Umanah`) and explicitly excludes the components below,
+  (`Copyright © 2023–2026 HUNGREE Goat Media`) and explicitly excludes the components below,
   rather than silently claiming "all rights reserved" over code it doesn't own.
 - **`apps/player`** is AGPL-3.0 (derivative of a third-party project, copyright Gilles
   Momeni). Re-checked whether AGPL's copyleft extends into the rest of the monorepo, more
