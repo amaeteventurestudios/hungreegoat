@@ -16,6 +16,25 @@ const ASSET = { logo:'assets/img/hungree-goat-logo-color.png', logoGold:'assets/
   defaultArt:'assets/img/default-track-art-400.webp', defaultArtBig:'assets/img/default-track-art.webp', loopPreview:'assets/media/loop-preview.mp4', loopFrame:'assets/media/loop-frame.jpg' };
 const mobile = () => window.innerWidth < 1024;
 
+/* ---------------- mobile drawer scroll lock ----------------
+   iOS Safari doesn't reliably honor overflow:hidden on <body> alone for a touch-driven
+   scroll/rubber-band gesture — the page behind an open overlay can still move. The actually
+   reliable technique is to pin <body> with position:fixed at its current scroll offset while
+   the drawer is open, then restore that exact offset on close (see render()'s call site below)
+   so closing the drawer never makes the page jump. Guarded by _navLocked so this only fires on
+   a real open/close transition, not on every ~5s poll re-render while state.navOpen is unchanged. */
+let _navScrollY = 0, _navLocked = false;
+function lockBodyScroll() {
+  _navScrollY = window.scrollY || document.documentElement.scrollTop || 0;
+  const b = document.body.style;
+  b.position = 'fixed'; b.top = `-${_navScrollY}px`; b.left = '0'; b.right = '0'; b.width = '100%';
+}
+function unlockBodyScroll() {
+  const b = document.body.style;
+  b.position = ''; b.top = ''; b.left = ''; b.right = ''; b.width = '';
+  window.scrollTo(0, _navScrollY);
+}
+
 /* ---------------- API ---------------- */
 async function api(path, opts={}) {
   const o = { headers:{}, credentials:'same-origin', ...opts };
@@ -226,7 +245,16 @@ async function render(){ const root=$('#root');
   if(!state.overview){ setHTML(root, '<div class="scene"></div><div class="login"><div class="panel" style="padding:30px">Connecting to HUNGREE Goat Control…</div></div>'); return; }
   const pg=HGC.pages[state.page]||HGC.pages.dashboard; let content='';
   try{ if(pg.load && !state.pageData[state.page]) state.pageData[state.page] = await pg.load(); content = pg.view(state.pageData[state.page]); }catch(e){ content=`<div class="panel" style="padding:20px"><b>Page error:</b> ${h(e.message)}</div>`; console.error(e); }
-  setHTML(root, '<div class="scene"></div>'+shell(content)); swapArt(); drawSparks(); document.body.classList.toggle('nav-open', state.navOpen); if(pg.after) pg.after(); tickClock(); }
+  setHTML(root, '<div class="scene"></div>'+shell(content)); swapArt(); drawSparks();
+  const wantNavLock = state.navOpen && mobile();   // desktop never locks — the drawer there is a sticky in-flow sidebar, not an overlay
+  if (wantNavLock && !_navLocked) { lockBodyScroll(); _navLocked = true; }
+  else if (!wantNavLock && _navLocked) { unlockBodyScroll(); _navLocked = false; }
+  document.body.classList.toggle('nav-open', state.navOpen); if(pg.after) pg.after(); tickClock();
+  // morph() can replace/remove the exact node a pinned or focused tooltip is anchored to
+  // (e.g. a periodic poll re-renders a pipeline-stage card with a new data-key) — the
+  // portal lives outside #root so it would otherwise survive as an orphaned, un-anchored
+  // bubble; reposition against the live element, or close if it's really gone.
+  if (ttOpenFor) { if (document.contains(ttOpenFor)) ttPosition(ttOpenFor); else ttHideNow(); } }
 async function refresh(force=false){ if(!state.user) return; try{ const [ov, al] = await Promise.all([api('/api/overview'), api('/api/alerts?state=all&limit=100')]); const s=ov.stations[state.station];
     const [sch, pls] = await Promise.all([api(`/api/stations/${state.station}/schedules`), api(`/api/stations/${state.station}/playlists`)]);
     s.today_schedule=sch.today; s.playlists=pls; s.jingles={jingles:(pls.find(p=>p.kind==='jingles')||{}).track_count||0, station_ids:(pls.find(p=>p.kind==='station_ids')||{}).track_count||0};

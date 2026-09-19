@@ -46,7 +46,13 @@ svg{flex:none}
 .scene::after{content:"";position:absolute;inset:0;opacity:.05;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='.6'/></svg>")}
 
 /* ---------- layout ---------- */
-.app{position:relative;z-index:1;display:grid;grid-template-columns:var(--sidebar-w) minmax(0,1fr);min-height:100vh;padding-bottom:var(--player-h)}
+/* No z-index here on purpose (see the mobile drawer fix below): position:relative alone
+   does NOT create a stacking context, but position:relative PLUS an explicit z-index does —
+   and that trapped the mobile drawer (a fixed-position descendant of .app) inside .app's own
+   stacking context, capped at z-index:1, which lost to .nav-scrim's z-index:8 sitting as a
+   *sibling* of .app at the real root level. The drawer was visible through the scrim but
+   every tap landed on the scrim instead, because the scrim was actually painted on top. */
+.app{position:relative;display:grid;grid-template-columns:var(--sidebar-w) minmax(0,1fr);min-height:100vh;padding-bottom:var(--player-h)}
 .sidebar{position:sticky;top:0;height:100vh;display:flex;flex-direction:column;padding:14px 12px;gap:8px;overflow:hidden;border-right:1px solid var(--line);
   background:linear-gradient(180deg,rgba(6,12,24,.55) 0%,rgba(6,12,24,.85) 45%,rgba(5,9,18,.96) 100%),var(--sidebar-img,none) center/cover no-repeat,var(--bg1)}
 .sidebar::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(5,9,18,.15),rgba(5,9,18,.0) 60%);pointer-events:none}
@@ -65,7 +71,7 @@ svg{flex:none}
 .sidebar .spacer{flex:1;min-height:10px}
 .sidebar .tagline{font:24px/1.05 var(--script);color:var(--gold3);text-shadow:0 2px 14px rgba(0,0,0,.8);padding:6px 8px;transform:rotate(-4deg)}
 .version{color:var(--muted2);font-size:10px;letter-spacing:.06em;text-align:center;padding:4px 0 0;text-shadow:0 1px 3px #000}
-.nav-scrim{position:fixed;inset:0;background:rgba(3,6,12,.65);z-index:8;backdrop-filter:blur(2px)}
+.nav-scrim{position:fixed;inset:0;background:rgba(3,6,12,.65);z-index:8;backdrop-filter:blur(2px);pointer-events:auto}
 
 .main{min-width:0;padding:0 18px 34px}
 .hero{position:relative;margin:0 -18px 14px;padding:16px 18px 14px;min-height:126px;background:linear-gradient(180deg,rgba(5,9,18,.35) 0%,rgba(5,9,18,.55) 55%,rgba(5,9,18,.96) 100%),var(--hero-img,none) center 40%/cover no-repeat,var(--bg2);border-bottom:1px solid var(--line)}
@@ -409,8 +415,24 @@ details.adv .panel{background:var(--panel2)}
 @media (max-width:1023px){
   :root{--sidebar-w:0px}
   .app{grid-template-columns:1fr}
-  .sidebar{position:fixed;left:0;top:0;bottom:0;width:min(300px,85vw);z-index:9;transform:translateX(-100%);transition:transform .22s;border-right:1px solid var(--line2)}
+  /* z-index:9 here now genuinely wins against .nav-scrim's z-index:8 (see the comment on
+     .app above) — both pointer-events left at their default `auto` on purpose: the drawer
+     must stay the top interactive layer, and the scrim below it must still catch outside taps. */
+  /* overflow-y:auto here overrides the desktop rule's overflow:hidden (desktop is untouched —
+     this only applies inside this mobile query) — without it, a swipe on the drawer had
+     nothing to scroll, so the gesture fell through to <body>/<html> instead, which is what
+     was actually moving. -webkit-overflow-scrolling/touch-action/overscroll-behavior are the
+     standard iOS-Safari trio for "this scrolls smoothly, only vertically, and doesn't let a
+     swipe past its own top/bottom edge rubber-band the page behind it." */
+  .sidebar{position:fixed;left:0;top:0;bottom:0;width:min(300px,85vw);z-index:9;transform:translateX(-100%);transition:transform .22s;border-right:1px solid var(--line2);pointer-events:auto;
+    overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-y;overscroll-behavior:contain}
   body.nav-open .sidebar{transform:none}.hamburger{display:grid}
+  /* Belt-and-braces alongside the JS lock in app.js (render(), calling lockBodyScroll() /
+     unlockBodyScroll()): iOS Safari doesn't reliably honor overflow:hidden on <body> alone for
+     touch-driven scrolling, which is why the real lock is done there via position:fixed +
+     saved scrollY. This rule just prevents any visible scrollbar/rubber-band flash on
+     non-iOS browsers in the meantime. */
+  body.nav-open{overflow:hidden}
   .player{left:0}
   .main{padding:0 14px 30px}.hero{margin:0 -14px 12px;padding:12px 14px 12px;min-height:0}
   .title{flex:1 1 0;min-width:0}.title h2{font-size:19px;white-space:normal;line-height:1.05}.title .mini{width:32px;height:32px}.operator .who{display:none}.operator{padding:4px}
@@ -423,7 +445,20 @@ details.adv .panel{background:var(--panel2)}
 @media (max-width:767px){
   .cards{grid-template-columns:repeat(2,minmax(0,1fr))}.g-mid,.g-bot{grid-template-columns:1fr}
   .now .body{grid-template-columns:1fr}.art{width:100%;max-width:260px;height:auto;aspect-ratio:1;margin:0 auto}.now .title{font-size:22px}
-  .topbar{gap:8px}.search{order:5;flex:1 1 100%;min-width:0}.station-tabs{order:4;flex:1 1 100%;justify-content:center}
+  /* Real centering, not a margin guess: a 3-column grid with an empty 42px column mirroring
+     the hamburger's own 42px width, so the middle (title) column is genuinely the horizontal
+     center of the row regardless of the hamburger's presence — not just "whatever's left over"
+     after a flex-grow box, which is what made the title read as left-weighted before. Explicit
+     grid-template-areas (rather than relying on flex-wrap's emergent line-breaking) also makes
+     which row each piece lands on deterministic instead of guessed. Search/station-tabs keep
+     their own existing internal behavior untouched — only how they're positioned as a whole
+     changes here. */
+  .topbar{display:grid;grid-template-columns:42px 1fr 42px;grid-template-areas:"ham title spacer" "tabs tabs tabs" "right right right";row-gap:8px;column-gap:8px;align-items:center}
+  .hamburger{grid-area:ham}
+  .title{grid-area:title;justify-content:center;text-align:center}
+  .station-tabs{grid-area:tabs;justify-self:center}
+  .topbar-right{grid-area:right;margin-left:0;justify-content:center}
+  .search{order:5;flex:1 1 100%;min-width:0}
   .station-card{grid-template-columns:1fr}.station-card .cover{width:100px;height:100px}
   .timeline{grid-template-columns:1fr}.timeline .hour{text-align:left;margin-top:8px}
   .player{padding:0 10px;gap:8px}.player input[type=range]{width:70px}.player .st{display:none}
