@@ -108,25 +108,43 @@ component `LICENSE`/`NOTICE` files, package manifests, vendored source headers) 
   (`Copyright © 2023–2026 Amaete Umanah`) and explicitly excludes the components below,
   rather than silently claiming "all rights reserved" over code it doesn't own.
 - **`apps/player`** is AGPL-3.0 (derivative of a third-party project, copyright Gilles
-  Momeni). Checked whether AGPL's copyleft extends into the rest of the monorepo: it does
-  not appear to. `apps/player` has zero source-level imports of any other package in this
-  repo (`packages/shared`, `packages/ui`, etc. — checked directly), talks to the backend
-  only over a plain HTTP/REST API (`fetch`, `/v1/*`), and builds/deploys as a fully separate
-  Vercel project. That's the "mere aggregation via a network interface" case, not a combined
-  or derivative work — under the FSF's own guidance on AGPL §13, aggregation like this does
-  not pull the rest of the monorepo under AGPL. This is a legal reading, not a certainty;
-  get your own legal review before relying on it, especially before any public release.
+  Momeni). Re-checked whether AGPL's copyleft extends into the rest of the monorepo, more
+  rigorously this pass — `apps/player` has: zero source-level imports of any other package
+  in this repo (`packages/shared`, `packages/ui`, etc.); zero relative imports reaching
+  outside its own directory at all (`grep` for `../../..`-style imports across
+  `apps/player/src`: no matches); its own independent, self-written API client
+  (`src/lib/api.ts`) rather than the `packages/shared/hg-api.js` that `apps/website` uses
+  (confirmed `hg-api.js` is referenced only by `apps/website`, never `apps/player`); its own
+  independent Vite build with no path aliases pointing outside itself
+  (`apps/player/vite.config.ts`); and deploys as a fully separate Vercel project. Its only
+  connection to the rest of HUNGREE Goat is a plain HTTP/REST call at runtime
+  (`fetch`, `/v1/*`) — that's "mere aggregation via a network interface," not a combined or
+  derivative work, under the FSF's own guidance on AGPL §13. This is a legal reading, not a
+  certainty; get your own legal review before relying on it, especially before any public
+  release.
 - **`apps/dj-studio`** bundles two upstream projects rather than reimplementing DSP:
   Aurdour (MIT, the DJ engine) and noisyloop/mastering (ISC, the mastering DSP, itself
   vendoring one MIT file from npm `fft.js`). All three require their own copyright/license
   notice to be preserved, not replaced with HUNGREE Goat's own — done correctly today (see
   `apps/dj-studio/LICENSE.aurdour`, `vendor/mastering-dsp/LICENSE.mastering`); HUNGREE
   Goat's own contribution there is credited separately in `apps/dj-studio/NOTICE.md`
-  without touching upstream's copyright line.
-- **Gap found**: the bundled fonts (Montserrat, Inter, Great Vibes — `packages/brand/fonts/`)
-  are SIL OFL 1.1, correctly *referenced* in `LICENSE`, but the actual OFL license text was
-  never committed alongside them — only the font binaries. Fix before public release (see
-  `THIRD_PARTY_NOTICES.md`).
+  without touching upstream's copyright line. The Python-side integration
+  (`hgc/dj_orchestrator.py`) drives this MIT/ISC code by launching a headless browser
+  against its static pages (Playwright), not by importing or copying its source into
+  `apps/control`'s own Python code — a process-level, not code-level, relationship.
+- **Fixed this pass**: the bundled fonts (Montserrat, Inter, Great Vibes —
+  `packages/brand/fonts/`) — confirmed SIL OFL 1.1 directly from each font file's own
+  embedded metadata (not the filename), with real upstream project URLs and copyright
+  years. Added the actual OFL 1.1 license text (`packages/brand/fonts/OFL-*.txt`, fetched
+  from each project's own repository) alongside them, and updated `THIRD_PARTY_NOTICES.md`.
+- **New finding, unresolved**: `apps/player/public/assets/ambience/*.mp3` (15 ambient sound
+  loops, part of the player's built-in ambient-mixer feature) are confirmed byte-for-byte
+  identical to files in the upstream `menoc61/lofi-music-website` repo (verified by MD5, not
+  assumed) — but that upstream repo never documents where *it* sourced this audio from, and
+  has an internal inconsistency of its own (a "License: MIT" README badge next to an
+  actual AGPL-3.0 `LICENSE` file). A code license bundling audio doesn't by itself establish
+  redistribution rights to that audio. See `THIRD_PARTY_NOTICES.md` for the full writeup and
+  recommendation — not resolved, not deleted, flagged for a decision before public release.
 - **Root license type is still undecided** — original HUNGREE Goat code stays proprietary
   for now; a plain-English comparison of the realistic open-source options (MIT, Apache-2.0,
   GPL-family, AGPL) was presented separately for a deliberate decision, not applied
@@ -136,13 +154,32 @@ component `LICENSE`/`NOTICE` files, package manifests, vendored source headers) 
   (`apps/dj-studio`'s vendored DSP), so compatibility is a smaller concern than it would be
   if AGPL code were compiled directly into the backend).
 
-Other things worth a look before a public release, not secrets but still worth generalizing
-or flagging:
-- `infra/pi/deploy.sh` and a few docs hardcode the operator's LAN IP for the Pi
-  (`192.168.6.235`) and the gateway's public IP — fine for private-repo internal docs, worth
-  reconsidering if this goes public (an internal LAN IP isn't very sensitive, but it's also
-  not useful to a stranger and reveals real infrastructure topology).
-- `infra/gateway/` and `docs/dns.md` reference real production hostnames
-  (`hungreegoat.com`, `control.hungreegoat.com`, etc.) — expected and fine to keep; a
-  template/example deployment might want these called out as "replace with your own domain"
-  more explicitly than they are today.
+A full internal-IP/hostname scan (every tracked file, not just the ones previously spotted)
+was run this pass. Classified findings, worst first:
+
+- **`docs/dns.md`, as a whole file, is the standout concern.** It reads as a private DNS/
+  gateway operations log (timestamped audits, registrar/nameserver troubleshooting) rather
+  than public documentation, and — more importantly — it names **other, unrelated
+  third-party services and products** that happen to share the same gateway host
+  (by name, in the file). That's not HUNGREE Goat's information to publish. Recommend this
+  file stay private, or be replaced with a short, genuinely generic "how DNS/the gateway
+  routing works" doc for any public release — not generalized in this pass; see the chat
+  report for the specifics before deciding.
+- The gateway's real public IP appears in several other places, split between two kinds:
+  operational config that must keep the real value to function
+  (`infra/beelink/systemd/hungree-goat-tunnel.service`,
+  `infra/gateway/tunnel/hungree-goat-tunnel.service`, `infra/gateway/install-hetzner.sh`) —
+  left untouched, per instruction not to alter operational configuration — versus prose in
+  `docs/deployment.md` that could reasonably be marked "this deployment's real value, replace
+  with your own gateway" without breaking anything.
+- `infra/pi/deploy.sh` and `infra/pi/RUNBOOK.md` hardcode the Pi's LAN IP
+  (`192.168.6.235`) — low sensitivity (a private LAN address, useless to an outsider), but
+  reveals real topology; same "prose vs. operational config" split as above.
+- Public hostnames (`hungreegoat.com`, `player.hungreegoat.com`, `api.hungreegoat.com`,
+  `control.hungreegoat.com`) and the DNS targets Vercel itself publishes for anyone to use
+  (e.g. `76.76.21.21`, `cname.vercel-dns.com`) are legitimately public and fine to keep as-is
+  — they're either HUNGREE Goat's own public product surface or a platform's own published
+  target, not something to genericize.
+
+No file was changed for any of the above in this pass — classification only, so specific
+replacements can be reviewed before they're made.

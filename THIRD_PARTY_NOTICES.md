@@ -32,18 +32,58 @@ own upstream license/notice — check the package itself if you need the full te
 
 ## Fonts
 
-| Font | Path | License |
-|---|---|---|
-| Montserrat (Regular/Medium/SemiBold/Bold/ExtraBold) | `packages/brand/fonts/` | SIL Open Font License 1.1 |
-| Inter (Variable) | `packages/brand/fonts/` | SIL Open Font License 1.1 |
-| Great Vibes | `packages/brand/fonts/` | SIL Open Font License 1.1 |
+Verified directly from each font file's own embedded metadata (the name table inside the
+TTF itself — the authoritative source, not the filename or an assumption), via
+`strings -e b` on each binary:
 
-**Gap found during this audit**: the root `LICENSE` already referenced "fonts: SIL OFL 1.1,"
-but the actual OFL 1.1 license text was not committed anywhere alongside these font files —
-only the font binaries themselves. The OFL requires the license text to accompany the font.
-Fix: add the standard OFL 1.1 license text (e.g. as `packages/brand/fonts/OFL.txt`) before
-any public release. Not done as part of this pass — flagging rather than guessing at exact
-placement/wording you'd want.
+| Font family | File(s) | Upstream project | Copyright (as embedded in the file) | License |
+|---|---|---|---|---|
+| Montserrat | `packages/brand/fonts/Montserrat-{Regular,Medium,SemiBold,Bold,ExtraBold}.ttf` | github.com/JulietaUla/Montserrat, designer Julieta Ulanovsky | Copyright 2011 The Montserrat Project Authors | SIL OFL 1.1 |
+| Inter | `packages/brand/fonts/Inter-Variable.ttf` | github.com/rsms/inter, designer Rasmus Andersson | Copyright 2016 The Inter Project Authors | SIL OFL 1.1 |
+| Great Vibes | `packages/brand/fonts/GreatVibes-Regular.ttf` | github.com/googlefonts/great-vibes, designer Robert E. Leuschke et al. | Copyright 2010 The Great Vibes Pro Project Authors | SIL OFL 1.1 |
+
+**Redistribution is permitted** under OFL 1.1 (that's the license's purpose — free use,
+modification, and embedding in products including commercial ones), subject to its
+conditions: the license text must accompany the fonts, copyright notices must be preserved,
+modified versions can't claim the original (unmodified) family name (the "Reserved Font
+Name" clause), and the fonts can't be sold by themselves standalone (bundling in a larger
+product, like this one, is fine).
+
+**Gap found and now fixed**: the root `LICENSE` already referenced "fonts: SIL OFL 1.1," but
+the actual license text wasn't committed anywhere. Added
+`packages/brand/fonts/OFL-{Montserrat,Inter,GreatVibes}.txt` — the standard OFL 1.1 text
+(fetched directly from each project's own upstream repository, not retyped from memory),
+each paired with that specific font's actual embedded copyright line above.
+
+## Bundled ambient audio (`apps/player/public/assets/ambience/*.mp3`)
+
+15 short ambient sound-effect loops (birds, campfire, city_traffic, fan, fireplace,
+forest_night, ocean, people_talk_inside, rain_city, rain_forest, river, snow,
+summer_storm, waves, wind) — part of the player's built-in ambient-sound-mixer feature,
+not HUNGREE Goat's radio music catalog (that lives outside Git — see the root README).
+
+**Technical provenance: confirmed, not assumed.** Fetched the same 15 filenames from
+`menoc61/lofi-music-website` (the original upstream, before the HUNGREE Goat fork) at
+`public/assets/musics/*.mp3` and compared: all 15 match by file size, and two spot-checked
+with MD5 (`birds.mp3`, `ocean.mp3`) are byte-for-byte identical. These files came from that
+repository, unmodified, just moved to a differently-named directory (`musics/` → `ambience/`).
+
+**Legal/rights provenance: unresolved, flagged rather than assumed.** The upstream repo's
+own `LICENSE` file is the full AGPL-3.0 text, but its `README.md` displays a "License: MIT"
+badge — an inconsistency in the upstream project itself, not something introduced here (we
+correctly followed the actual `LICENSE` file, the legally controlling artifact, when
+`apps/player/NOTICE.md` states AGPL-3.0). More importantly for these specific files: neither
+the upstream `README.md` nor any other file in that repository documents where the ambient
+audio itself was originally sourced from — no credit to a sound library (e.g. Freesound,
+Pixabay Audio, Zapsplat), no separate media license. Bundling audio in a code repository
+under a code license does not, by itself, establish that the repository owner held (or could
+grant) redistribution rights to that audio — and given the upstream project's own
+inconsistency about its code license, that assumption is weaker here than it might otherwise
+be. **Recommendation, not a decision made here**: before any public release, either (a)
+independently identify and document each loop's true original source and license, (b)
+replace them with independently-sourced, clearly-licensed (e.g. CC0) royalty-free ambient
+loops, or (c) remove the ambient-sound-mixer feature if it's not essential. Not deleted as
+part of this pass, per instruction.
 
 ## What HUNGREE Goat did NOT reimplement
 
