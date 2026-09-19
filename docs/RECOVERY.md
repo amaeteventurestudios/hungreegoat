@@ -145,14 +145,19 @@ component `LICENSE`/`NOTICE` files, package manifests, vendored source headers) 
   actual AGPL-3.0 `LICENSE` file). A code license bundling audio doesn't by itself establish
   redistribution rights to that audio. See `THIRD_PARTY_NOTICES.md` for the full writeup and
   recommendation — not resolved, not deleted, flagged for a decision before public release.
-- **Root license type is still undecided** — original HUNGREE Goat code stays proprietary
-  for now; a plain-English comparison of the realistic open-source options (MIT, Apache-2.0,
-  GPL-family, AGPL) was presented separately for a deliberate decision, not applied
-  automatically. Whatever is chosen only needs to be compatible with what it *depends on*
-  (this repo doesn't statically link AGPL/GPL code into original HUNGREE Goat code — the
-  vendored components above are either separately-deployed (`apps/player`) or MIT/ISC
-  (`apps/dj-studio`'s vendored DSP), so compatibility is a smaller concern than it would be
-  if AGPL code were compiled directly into the backend).
+- **Root license decided: AGPL-3.0.** Original HUNGREE Goat code (everything the root
+  `LICENSE` covers) is now released as HUNGREE Goat Community Edition under the GNU Affero
+  General Public License v3.0, with a separate commercial-licensing offer for organizations
+  that need proprietary terms (see the README's "Commercial Licensing" section). This is
+  compatible with what the repo actually depends on — it doesn't statically link AGPL/GPL
+  code into original HUNGREE Goat code; the vendored components above are either
+  separately-deployed (`apps/player`, itself already AGPL-3.0 — no conflict) or MIT/ISC
+  (`apps/dj-studio`'s vendored DSP, unaffected by the root license). Note: choosing AGPL-3.0
+  for the code raises the practical stakes of the ambient-audio provenance gap above —
+  releasing a component under a copyleft license invites more scrutiny of what's bundled
+  with it than a private "all rights reserved" repo did, so resolving that gap (or removing
+  the feature) before wide promotion of the Community Edition is more important now, not
+  just theoretically desirable.
 
 A full internal-IP/hostname scan (every tracked file, not just the ones previously spotted)
 was run this pass. Classified findings, worst first:

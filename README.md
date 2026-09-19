@@ -394,16 +394,52 @@ See `docs/development.md` for the full developer setup. In short:
 This project doesn't yet have a formal contribution guide beyond that — if you're planning
 something larger than a small fix, opening an issue first to discuss it is a good idea.
 
+## Community Edition
+
+HUNGREE Goat Community Edition is free and open source under the **GNU Affero General
+Public License v3.0 (AGPL-3.0)** — see the root [`LICENSE`](LICENSE) file for the full text.
+
+You can use, study, modify, and self-host the Community Edition under the terms of the
+AGPL-3.0. If you modify the AGPL-covered software and make that modified version available
+to users over a network, the AGPL's network-use clause (section 13) requires you to also make
+your modified source available to those users — this applies to the original HUNGREE Goat
+code covered by the root `LICENSE`; components under their own licenses (see [License](#license)
+below) follow their own terms instead.
+
+This is a plain-English summary, not a substitute for reading the license itself or getting
+your own legal advice.
+
+## Commercial Licensing
+
+Need to use HUNGREE Goat in a proprietary product, a white-label deployment, a closed-source
+integration, or another commercial arrangement that doesn't fit the Community Edition's
+AGPL-3.0 terms?
+
+Commercial licensing is available from HUNGREE Goat Media for the original HUNGREE Goat code,
+where HUNGREE Goat Media holds the right to offer alternative terms. This does **not** relicense
+or change the terms of any third-party component bundled in this repository — `apps/player`,
+`apps/dj-studio`, the bundled fonts, and everything else listed in
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) remain governed by their own licenses
+regardless of any commercial license for HUNGREE Goat's original code.
+
+Contact [info@hungreegoat.com](mailto:info@hungreegoat.com?subject=HUNGREE%20Goat%20Commercial%20Licensing)
+to discuss commercial licensing. See the [For Business](https://hungreegoat.com/business) page
+for the managed-hosting option as well.
+
 ## License
 
-Original HUNGREE Goat code and documentation is **Copyright © 2023–2026 HUNGREE Goat Media**,
-**proprietary** — see `LICENSE` ("all rights reserved", no license granted to copy, modify,
-or distribute without written permission). This is not currently an open-source project as
-a whole, even though parts of it are separately licensed and not covered by that notice —
+HUNGREE Goat Community Edition — the original HUNGREE Goat code and documentation in this
+repository (`apps/website`, `apps/control`, `packages/brand` excluding fonts, `packages/ui`,
+`packages/shared`, `infra/`, and `docs/`) — is **Copyright © 2023–2026 HUNGREE Goat Media**
+and licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)** — see the root
+[`LICENSE`](LICENSE) file for the full text. Need different terms? See
+[Commercial Licensing](#commercial-licensing) above.
+
+Several components are separately licensed and are **not** covered by the root `LICENSE` —
 see `THIRD_PARTY_NOTICES.md` for the full breakdown:
 
-- **`apps/player`** is distributed under **AGPL-3.0** (it's a derivative of a third-party
-  AGPL-3.0 project, copyright Gilles Momeni) — see `apps/player/LICENSE` and
+- **`apps/player`** is distributed under **AGPL-3.0** in its own right (it's a derivative of a
+  third-party AGPL-3.0 project, copyright Gilles Momeni) — see `apps/player/LICENSE` and
   `apps/player/NOTICE.md` for exactly what that requires (including that this repository's
   player source stay published).
 - **`apps/dj-studio`**'s DJ engine is built on **Aurdour** (MIT) and its mastering DSP on
@@ -412,8 +448,8 @@ see `THIRD_PARTY_NOTICES.md` for the full breakdown:
 - Third-party runtime components keep their own licenses regardless of the above:
   Liquidsoap (GPL-2.0), FFmpeg (LGPL/GPL depending on build), fonts (SIL OFL 1.1).
 
-The root `LICENSE`'s proprietary notice applies only to the code and documentation original
-to this repository — it does not and cannot override the separate licenses above.
+The root `LICENSE`'s AGPL-3.0 grant applies only to the code and documentation original to
+this repository — it does not and cannot override the separate licenses above.
 
 If you're evaluating this repository for a public/open-source release, read `docs/RECOVERY.md`'s
 open-source-readiness notes first — the root `LICENSE` and the AGPL-3.0 `apps/player`
