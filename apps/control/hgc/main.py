@@ -19,11 +19,11 @@ import urllib.request
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import auth, catalog, config, db, liq, metrics, overlay, scheduler, selector, services
+from . import auth, catalog, config, db, liq, metrics, overlay, scheduler, selector, services, youtube_oauth
 
 app = FastAPI(title="HUNGREE Goat Control", docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -1550,14 +1550,38 @@ def _youtube_health(sid: str, stream: dict, st: dict) -> dict:
         "ok" if sending_ok else ("off" if not yt_target else ("warn" if state_ in ("starting", "restarting") else "err")),
         "Publishing over RTMPS" if sending_ok else ("YouTube output is turned off" if not yt_target else "Not currently sending"),
         (f"{round(stream.get('bitrate_kbps') or 0)} kbps out" if sending_ok else (stream.get("last_error") or "—"))))
-    pipeline.append(stage("receive", "YouTube Receiving",
-        "unverified" if sending_ok else "off",
-        "Can't be confirmed — no YouTube API connection" if sending_ok else "Not sending, so nothing to receive",
-        "Needs YouTube API authorization (not connected)"))
-    pipeline.append(stage("live", "YouTube Live",
-        "unverified" if sending_ok else "off",
-        "Can't be confirmed here — check YouTube Studio" if sending_ok else "Not live",
-        "Needs YouTube API authorization (not connected)"))
+    # Real YouTube-side verification when an OAuth account is connected AND this station is
+    # bound to a discovered stream/broadcast (see youtube_oauth.py) — falls back to exactly
+    # today's honest "unverified" behavior otherwise. Never conflates "FFmpeg is sending" with
+    # "YouTube is live": these two stages only ever turn ok/err from real API data, never from
+    # local state alone.
+    yt_state = youtube_oauth.get_youtube_state(sid) if sending_ok else {"bound": False}
+    verified = sending_ok and yt_state.get("bound") and yt_state.get("connected") and not yt_state.get("error")
+    RECEIVE_STATUS = {"active": "ok", "ready": "warn", "noData": "warn", "inactive": "err", "error": "err"}
+    LIVE_STATUS = {"live": "ok", "testing": "warn", "ready": "warn", "created": "warn",
+                   "liveStarting": "warn", "complete": "off", "revoked": "err"}
+    if verified:
+        stream_status = yt_state.get("stream_status")
+        lifecycle_status = yt_state.get("lifecycle_status")
+        recv_status = RECEIVE_STATUS.get(stream_status, "unverified")
+        recv_detail = f"YouTube ingest status: {stream_status}" if stream_status else "Connected, but no ingest status yet"
+        recv_tech = f"Verified via YouTube Data API · stream {yt_state.get('stream_id', '')}"
+        live_status = LIVE_STATUS.get(lifecycle_status, "unverified") if lifecycle_status else "unverified"
+        live_detail = f"Broadcast lifecycle status: {lifecycle_status}" if lifecycle_status else "No broadcast bound to this stream yet"
+        live_tech = f"Verified via YouTube Data API · broadcast {yt_state.get('broadcast_id') or '—'}"
+    else:
+        not_connected = not yt_state.get("connected")
+        not_bound = sending_ok and not not_connected and not yt_state.get("bound")
+        recv_status = "unverified" if sending_ok else "off"
+        recv_detail = "Can't be confirmed — no YouTube API connection" if sending_ok else "Not sending, so nothing to receive"
+        recv_tech = ("Needs YouTube API authorization (not connected)" if not_connected
+                     else "Station not bound to a YouTube stream yet — use Re-bind" if not_bound
+                     else "Needs YouTube API authorization (not connected)")
+        live_status = "unverified" if sending_ok else "off"
+        live_detail = "Can't be confirmed here — check YouTube Studio" if sending_ok else "Not live"
+        live_tech = recv_tech
+    pipeline.append(stage("receive", "YouTube Receiving", recv_status, recv_detail, recv_tech))
+    pipeline.append(stage("live", "YouTube Live", live_status, live_detail, live_tech))
 
     if lib_empty:
         level, title, message = "offline", "No Media", "The station library is empty — there's nothing to stream yet."
@@ -1575,6 +1599,20 @@ def _youtube_health(sid: str, stream: dict, st: dict) -> dict:
         if degraded:
             level, title = "warning", "Stream Degraded"
             message = "Local output is active but quality looks degraded (slow encode and/or dropped frames)."
+        elif verified:
+            # Real YouTube-backed top status — only reachable once an OAuth account is connected
+            # AND this station is bound to a discovered stream/broadcast (see `verified` above).
+            # Never derived from local state alone, same rule as the receive/live pipeline stages.
+            if yt_state.get("lifecycle_status") == "live":
+                level, title = "healthy", "Verified Live — YouTube Live"
+                message = "YouTube confirms this broadcast is live and receiving the stream."
+            elif recv_status == "ok":
+                level, title = "healthy", "Verified — YouTube Receiving"
+                message = "YouTube confirms it is receiving the stream. Check YouTube Studio to go live."
+            else:
+                level, title = "warning", "Degraded — YouTube Not Receiving"
+                message = (f"YouTube is connected but isn't confirming ingest right now "
+                           f"(status: {yt_state.get('stream_status') or 'unknown'}) — check YouTube Studio.")
         else:
             level, title = "unverified", "Local Output Active — YouTube Not Confirmed"
             message = ("Main encoder is running and sending to YouTube, but HUNGREE Goat Control has no YouTube "
@@ -1644,6 +1682,9 @@ def youtube_get(sid: str, user: str = Depends(current_user)):
         "encoder": {"resolution": f"{config.VIDEO_W}x{config.VIDEO_H}", "fps": config.VIDEO_FPS,
                     "video_kbps": config.station(sid)["video_bitrate_k"], "audio_kbps": config.station(sid)["audio_bitrate_k"]},
         "health": health,
+        # Non-secret YouTube resource IDs only (see hgc/youtube_oauth.py) — never the stream key.
+        "youtube_binding": youtube_oauth.get_binding(sid),
+        "youtube_bind_error": youtube_oauth.get_bind_error(sid),
     }
 
 
@@ -1670,6 +1711,10 @@ def youtube_save(sid: str, body: YouTubeBody, user: str = Depends(current_user))
         services.action("stream", "restart", sid)
     else:
         _yt_write(sid, url, key if key else None)
+    if key is not None:
+        # A changed/cleared key invalidates any previous auto-bind failure reason — the next
+        # bind attempt (auto or manual Re-bind) starts clean rather than showing a stale error.
+        youtube_oauth.clear_bind_error(sid)
     if body.output_enabled is not None:
         db.set_setting(sid, "output_target", "youtube" if body.output_enabled else "none")
     if body.meta is not None:
@@ -1683,6 +1728,127 @@ def youtube_save(sid: str, body: YouTubeBody, user: str = Depends(current_user))
     if key:
         services.action("stream", "restart", sid)
     return youtube_get(sid, user)
+
+
+# ---------------------------------------------------------------------------
+# YouTube OAuth account connection (optional — see docs/youtube-oauth.md).
+# Stream-Key-Only mode above works fully without any of this. A failure anywhere in this
+# section (bad token, API error, missing client JSON) can never stop Liquidsoap/FFmpeg — it
+# only ever affects what this dashboard can *verify*, never what it actually streams.
+OAUTH_STATE_COOKIE = "hgc_yt_oauth_state"
+
+
+@app.get("/api/youtube/oauth/connect")
+def youtube_oauth_connect(reauthorize: bool = False, user: str = Depends(current_user)):
+    if not youtube_oauth.client_json_available():
+        raise HTTPException(409, "YouTube OAuth client JSON not found on the server — see docs/youtube-oauth.md")
+    try:
+        auth_url, state = youtube_oauth.authorization_url(reauthorize=reauthorize)
+    except Exception as e:
+        raise HTTPException(500, f"Could not start YouTube OAuth: {e}")
+    resp = RedirectResponse(auth_url, status_code=302)
+    resp.set_cookie(OAUTH_STATE_COOKIE, state, max_age=600, httponly=True, samesite="lax", secure=True)
+    return resp
+
+
+@app.get("/api/youtube/oauth/callback")
+def youtube_oauth_callback(request: Request, code: str | None = None, state: str | None = None,
+                            error: str | None = None, user: str = Depends(current_user)):
+    cookie_state = request.cookies.get(OAUTH_STATE_COOKIE)
+    if error:
+        db.log_event("warning", "system", f"YouTube OAuth declined or failed: {error}")
+        return RedirectResponse("/#/youtube", status_code=302)
+    if not state or not cookie_state or state != cookie_state:
+        raise HTTPException(400, "OAuth state mismatch — please try connecting again")
+    state_payload = youtube_oauth.parse_state(state)
+    code_verifier = state_payload.get("cv") if state_payload else None
+    if not code_verifier:
+        raise HTTPException(400, "OAuth state mismatch — please try connecting again")
+    if not code:
+        raise HTTPException(400, "missing authorization code")
+    try:
+        youtube_oauth.exchange_code(code, code_verifier)
+        identity = youtube_oauth.get_identity(force=True)
+    except Exception as e:
+        db.log_event("error", "system", f"YouTube OAuth callback failed: {e}")
+        raise HTTPException(500, "Could not complete the YouTube connection")
+    if identity.get("connected"):
+        youtube_oauth.reconcile_bindings_on_connect(identity.get("channel_id"))
+        db.log_event("info", "system", f"YouTube account connected: {identity.get('channel_title')}")
+        # Auto-bind any station that has a stream key saved but no binding yet, so the operator
+        # doesn't have to click "Bind station to YouTube stream" after every fresh connect.
+        # Deliberately skipped for a station that already has ANY binding (even a stale one) —
+        # re-matching a rotated key/changed broadcast/changed account stays a manual Re-bind
+        # action (see youtube_oauth.discover_and_bind's docstring and the UI's Re-bind button).
+        for sid in config.STATION_IDS:
+            if youtube_oauth.get_binding(sid) is not None:
+                continue
+            key = _yt_read(sid).get("YOUTUBE_STREAM_KEY", "")
+            if len(key) < 4:
+                continue
+            try:
+                youtube_oauth.discover_and_bind(sid, key)
+                db.log_event("info", "stream", "YouTube station auto-bound after account connect", sid)
+            except RuntimeError as e:
+                db.log_event("warning", "stream", f"YouTube auto-bind after connect did not complete: {e}", sid)
+    resp = RedirectResponse("/#/youtube", status_code=302)
+    resp.delete_cookie(OAUTH_STATE_COOKIE)
+    return resp
+
+
+@app.get("/api/youtube/oauth/status")
+def youtube_oauth_status(force: bool = False, user: str = Depends(current_user)):
+    if not youtube_oauth.client_json_available():
+        return {"connected": False, "client_configured": False}
+    identity = youtube_oauth.get_identity(force=force)
+    return {"client_configured": True, **identity}
+
+
+@app.post("/api/youtube/oauth/disconnect")
+def youtube_oauth_disconnect(user: str = Depends(current_user)):
+    youtube_oauth.disconnect()
+    youtube_oauth.invalidate_health_cache()
+    db.log_event("info", "system", "YouTube account disconnected")
+    return {"ok": True}
+
+
+@app.get("/api/stations/{sid}/youtube/broadcast")
+def youtube_broadcast_state(sid: str, force: bool = False, user: str = Depends(current_user)):
+    _sid(sid)
+    return youtube_oauth.get_youtube_state(sid, force=force)
+
+
+@app.post("/api/stations/{sid}/youtube/broadcast/rebind")
+def youtube_broadcast_rebind(sid: str, user: str = Depends(current_user)):
+    _sid(sid)
+    d = _yt_read(sid)
+    key = d.get("YOUTUBE_STREAM_KEY", "")
+    if len(key) < 4:
+        raise HTTPException(409, "No stream key saved for this station yet")
+    try:
+        binding = youtube_oauth.discover_and_bind(sid, key)
+    except RuntimeError as e:
+        raise HTTPException(409, str(e))
+    db.log_event("info", "stream", "YouTube broadcast re-bound to a discovered stream/broadcast", sid)
+    return binding
+
+
+class YouTubeTransitionBody(BaseModel):
+    status: str
+
+
+@app.post("/api/stations/{sid}/youtube/broadcast/{broadcast_id}/transition")
+def youtube_broadcast_transition(sid: str, broadcast_id: str, body: YouTubeTransitionBody, user: str = Depends(current_user)):
+    _sid(sid)
+    try:
+        youtube_oauth.transition_broadcast(sid, broadcast_id, body.status)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        db.log_event("error", "stream", f"YouTube broadcast transition to {body.status} failed: {e}", sid)
+        raise HTTPException(500, f"Transition failed: {e}")
+    db.log_event("warning", "stream", f"Operator transitioned YouTube broadcast to {body.status}", sid)
+    return {"ok": True}
 
 
 @app.post("/api/stations/{sid}/youtube/test")

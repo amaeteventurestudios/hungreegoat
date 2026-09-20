@@ -22,12 +22,23 @@ HG="$HOME/hungree-goat"
 IMAGE="hungree-goat/hgc:latest"
 NAME="hgc-control"
 docker rm -f "$NAME" >/dev/null 2>&1 || true
+# YouTube OAuth client JSON (optional feature — see docs/youtube-oauth.md): a single-file,
+# read-only mount at a container-native path, deliberately not mirroring the host's home
+# directory, so the image stays portable for other self-hosters. Only mounted if the file
+# actually exists, so hosts that never set up YouTube OAuth aren't affected at all. The
+# refresh token itself needs no new mount — it lives in $HG/secrets, already mounted above.
+YT_CLIENT_JSON_HOST="$HOME/.config/hungree-goat/youtube-oauth-client.json"
+YT_MOUNT_ARGS=()
+if [ -f "$YT_CLIENT_JSON_HOST" ]; then
+  YT_MOUNT_ARGS=(-v "$YT_CLIENT_JSON_HOST:/run/secrets/hungree-goat/youtube-oauth-client.json:ro")
+fi
 exec docker run --rm --name "$NAME" --network host --pid host --user 1000:1000 \
   --memory 768m --memory-reservation 256m \
   --log-driver json-file --log-opt max-size=5m --log-opt max-file=3 \
   -v "$HG:$HG" \
   -v /media/hungree-goat:/media/hungree-goat \
   -v /run/user/1000:/run/user/1000 \
+  "${YT_MOUNT_ARGS[@]}" \
   -e HOME=/tmp -e HGC_HOME="$HG" -e HGC_MEDIA=/media/hungree-goat \
   -e XDG_RUNTIME_DIR=/run/user/1000 -e DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus \
   -w "$HG/app" \

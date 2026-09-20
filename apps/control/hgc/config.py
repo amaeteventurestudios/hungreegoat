@@ -18,6 +18,12 @@ DATA_DIR = HOME / "data"
 RUN_DIR = HOME / "run"
 LOG_DIR = HOME / "logs"
 SECRETS_DIR = HOME / "secrets"
+# YouTube OAuth (optional — see docs/youtube-oauth.md). The client JSON is bind-mounted
+# read-only at a container-native path (not the host's home directory, so the image stays
+# portable for other self-hosters); the refresh token lives alongside the app's other secrets
+# in SECRETS_DIR, which is already bind-mounted read-write — no extra mount needed for it.
+YOUTUBE_CLIENT_JSON = Path(os.environ.get("HGC_YOUTUBE_CLIENT_JSON", "/run/secrets/hungree-goat/youtube-oauth-client.json"))
+YOUTUBE_TOKEN_PATH = SECRETS_DIR / "youtube-oauth-token.json"
 LIQ_DIR = HOME / "liquidsoap"
 BIN_DIR = HOME / "bin"
 

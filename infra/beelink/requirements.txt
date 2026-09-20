@@ -5,3 +5,7 @@ mutagen>=1.47
 psutil>=5.9
 itsdangerous>=2.2
 python-multipart>=0.0.9
+# YouTube OAuth account connection (optional feature — see docs/youtube-oauth.md)
+google-api-python-client>=2.100
+google-auth-oauthlib>=1.2
+google-auth>=2.30

@@ -8,6 +8,15 @@ drive the control app, Liquidsoap, the video stream, and the reverse tunnel as f
 independent units — restarting one never touches the others. Restart the engine after a
 `station.liq` change: `systemctl --user restart hungree-goat-liquidsoap@lofi`.
 
+Static frontend (`apps/control/static/*`) and Python (`apps/control/hgc/*.py`) are both
+bind-mounted and picked up live — static assets on the next request, Python on the next
+`systemctl --user restart hungree-goat-control` (it's loaded once into the long-running
+process). **The one exception** is a `requirements.txt` change (currently only needed for the
+optional YouTube OAuth feature, `docs/youtube-oauth.md`) — that requires rebuilding the image
+first: `docker build -f infra/beelink/Dockerfile -t hungree-goat/hgc:latest infra/beelink/`,
+*then* restarting `hungree-goat-control`. Rebuilding the image never touches the already-running
+video-stream container, which keeps using its already-loaded image until it's itself restarted.
+
 ## Pi (legacy / rollback target — not current production)
 `infra/pi/deploy.sh` rsyncs `apps/control`, `infra/pi/{bin,liquidsoap}` and `infra/systemd` to `aumanah@pi-node-01`
 and restarts the control service (bare-metal venv, not Docker). Kept working and documented specifically so the

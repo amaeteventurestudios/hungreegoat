@@ -35,9 +35,10 @@ itself automatically (see [How it works](#how-hungree-goat-works)).
 - Public web player (`apps/player`) — a standalone site anyone can listen to
 - Browser-based Control dashboard (`apps/control`) — the operator's private cockpit
 - YouTube Live broadcasting, with an honest health dashboard that separates "is my local
-  encoder working" from "is YouTube actually receiving it" (see below — there's no
-  YouTube API integration yet, so the second half is always shown as unverified rather
-  than guessed)
+  encoder working" from "is YouTube actually receiving it." The second half is shown as
+  unverified by default — but connecting a YouTube account via OAuth (entirely optional,
+  see [YouTube streaming](#youtube-streaming) below) replaces that with real, API-verified
+  ingest and broadcast-lifecycle status, plus a gated Go Live action.
 - Playlists and music library management (upload, tag, organize, schedule)
 - Looping/animated "broadcast visuals" behind the YouTube video feed
 - Automatic monitoring and recovery for the audio and video processes
@@ -46,9 +47,9 @@ itself automatically (see [How it works](#how-hungree-goat-works)).
 - A public, read-only API (`/v1/*`) for the website/player to use
 - A browser-based DJ/mixing studio (`apps/dj-studio`) for live or recorded mixes
 
-Not yet built: authoritative YouTube-side verification (no YouTube Data API/OAuth
-integration exists today), and a single scripted installer (see
-[Quick start](#quick-start) below for exactly what that means in practice).
+Not yet built: a single scripted installer (see [Quick start](#quick-start) below for
+exactly what that means in practice). Authoritative YouTube-side verification exists as an
+optional OAuth connection — see [YouTube streaming](#youtube-streaming) below.
 
 ## Screenshots
 
@@ -64,10 +65,11 @@ alerts, and station controls from one browser-based dashboard.
 ![HUNGREE Goat YouTube Streaming and Health Dashboard](docs/images/youtube-dashboard.webp)
 
 Monitor the local streaming pipeline, stream quality, YouTube output, bitrate, realtime
-performance, recovery status, warnings, and recent incidents. Note the honest "Local Output
-Active — YouTube Not Confirmed" status in the screenshot above: this app can see and control
-its own local encoder, but has no YouTube API connection yet to confirm YouTube itself is
-receiving the stream or airing it live — see [YouTube streaming](#youtube-streaming) below.
+performance, recovery status, warnings, and recent incidents. The screenshot above shows the
+default, honest "Local Output Active — YouTube Not Confirmed" status with no YouTube account
+connected: this app can always see and control its own local encoder, but confirming YouTube
+itself is receiving the stream or airing it live requires connecting a YouTube account (an
+optional, separate step) — see [YouTube streaming](#youtube-streaming) below.
 
 _Still needed: the public player, Broadcast Visuals, and Workout DJ. Add them here the same
 way — real screenshots, checked for anything account-specific before committing._
@@ -211,16 +213,28 @@ never by hand-editing a file with a real key in it. **Real stream keys must neve
 committed to this repository** (see `infra/pi/youtube.env.example` for what the file
 actually looks like, with a placeholder).
 
-**Important distinction, honestly stated**: HUNGREE Goat has no YouTube Data API/OAuth
-integration yet. It can tell you, with certainty, whether its own local encoder is running
-and actively *sending* data toward YouTube's server. It cannot currently confirm that
-YouTube is *receiving* that data, or that your broadcast is actually *live* to viewers —
-those are only knowable from YouTube Studio itself today. The YouTube Setup dashboard is
-built to say so plainly ("Unverified") rather than assume sending implies success.
+**Two modes, both fully supported:**
+
+- **Stream-Key-Only** (the default, described above): HUNGREE Goat can tell you, with
+  certainty, whether its own local encoder is running and actively *sending* data toward
+  YouTube's server. It cannot confirm that YouTube is *receiving* that data, or that your
+  broadcast is actually *live* to viewers — those are only knowable from YouTube Studio
+  itself in this mode. The YouTube Setup dashboard says so plainly ("Unverified") rather
+  than assume sending implies success. No Google account, no extra setup — this is what you
+  get out of the box.
+- **Connected Account** (optional): connect a YouTube account via OAuth and the same
+  dashboard replaces "Unverified" with real, API-verified ingest status (is YouTube actually
+  receiving this station's stream) and broadcast lifecycle status (created/ready/testing/
+  live/complete), plus a gated "Go Live" action that transitions the real broadcast. Full
+  setup walkthrough — Google Cloud project, OAuth consent screen, credentials, and
+  server-side setup — is in **[docs/youtube-oauth.md](docs/youtube-oauth.md)**. It's entirely
+  optional and additive: nothing in Stream-Key-Only mode changes or is required to change,
+  and losing the OAuth connection (or never setting it up) never affects local streaming.
 
 To reconnect a stream that's stopped sending, use the "Reconnect to YouTube" action on that
 page — it restarts the video/YouTube streaming process only (your music keeps playing; the
-audio engine is a separate process and isn't touched).
+audio engine is a separate process and isn't touched). This is a local-encoder action and
+works identically in both modes above.
 
 ## Start / stop / restart
 

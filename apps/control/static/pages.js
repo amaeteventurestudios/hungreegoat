@@ -512,15 +512,19 @@ pages.outputs = { live:true, async load(){ return api(`${P()}/outputs`); }, view
 
 /* ======================= YOUTUBE SETUP ======================= */
 pages.youtube = { live:true,
-  async load(){ const [yr, evr] = await Promise.allSettled([api(`${P()}/youtube`), api(`/api/events?station=${S()}&limit=80`)]);
-    // allSettled, not all: an events hiccup (or an older backend missing a field) must not blank
-    // the whole page — each half degrades to a safe empty value independently instead.
-    return { y: (yr.status==='fulfilled' && yr.value) ? yr.value : {}, ev: (evr.status==='fulfilled' && Array.isArray(evr.value)) ? evr.value : [] }; },
+  async load(){ const [yr, evr, oauthr, bcr] = await Promise.allSettled([api(`${P()}/youtube`), api(`/api/events?station=${S()}&limit=80`), api('/api/youtube/oauth/status'), api(`${P()}/youtube/broadcast`)]);
+    // allSettled, not all: an events/OAuth hiccup (or an older backend missing a field) must
+    // never blank the whole page — each half degrades to a safe empty value independently.
+    // OAuth/broadcast state failing to load is treated exactly like "not connected"/"not
+    // bound" — never a page-breaking error, since this is an optional feature.
+    return { y: (yr.status==='fulfilled' && yr.value) ? yr.value : {}, ev: (evr.status==='fulfilled' && Array.isArray(evr.value)) ? evr.value : [],
+      oauth: (oauthr.status==='fulfilled' && oauthr.value) ? oauthr.value : {connected:false, client_configured:false},
+      broadcast: (bcr.status==='fulfilled' && bcr.value) ? bcr.value : {bound:false} }; },
   after(){ const b=(HGC.hist.yt||{})[S()]||{bitrate:[],speed:[]};
     HGC.drawLineChart(document.querySelector('canvas[data-ytchart="bitrate"]'), b.bitrate, {color:'#2ecc8a', fill:true, fmtY:v=>(v/1000).toFixed(1)+'M'});
     HGC.drawLineChart(document.querySelector('canvas[data-ytchart="speed"]'), b.speed, {color:'#ff5a6a', target:1.0, min:1.0, fmtY:v=>v.toFixed(1)+'×'}); },
-  view({y, ev}) {
-  y = y || {}; ev = Array.isArray(ev) ? ev : [];
+  view({y, ev, oauth, broadcast}) {
+  y = y || {}; ev = Array.isArray(ev) ? ev : []; oauth = oauth || {connected:false, client_configured:false}; broadcast = broadcast || {bound:false};
   const s=st(); const m=y.meta||{}; const show=state._showKey;
   // Defensive by design: this page must render something usable even when talking to an
   // older backend (no `health` key yet — e.g. right after a frontend-only deploy, before the
@@ -564,14 +568,75 @@ pages.youtube = { live:true,
       <div class="m"><div class="k">Auto-Recovery</div><div class="v">${AR.armed?(AR.in_progress?'Recovering…':'Armed'):'Disabled'}</div></div>
       <div class="m"><div class="k">Watchdog</div><div class="v">${AR.watchdog_timeout_sec}s</div></div>
     </div></div></div>`;
-  // Deliberately NOT a solid, urgent-looking call-to-action button: this is disabled because
-  // the feature doesn't exist yet, not because something is broken, and it must read that way.
-  const apiCardHtml = `<div class="panel" data-key="yt-api"><div class="panel-b" style="gap:9px;justify-content:center">
-    <div style="display:flex;align-items:center;gap:8px"><span class="ic amber">${I.alert}</span><b style="font:800 13.5px var(--display)">YouTube Account Integration</b><span class="right">${help("This connection lets HUNGREE Goat verify whether YouTube is actually receiving the stream and whether the broadcast is live.")}</span></div>
-    <span class="pill off" style="align-self:flex-start">Not configured yet</span>
-    <p class="small muted" style="margin:0">Connecting your YouTube account would let HUNGREE Goat Control verify whether YouTube is actually receiving your stream and whether the broadcast is live — instead of only inferring it from the local encoder, which is all this page can see today.</p>
-    <button class="btn ghost wide" type="button" data-act="yt-connect" disabled title="Coming soon — this page is ready for it, but the YouTube OAuth connection hasn't been implemented yet.">${I.link} Connect YouTube Account <span class="pill off" style="margin-left:6px">Coming soon</span></button>
-  </div></div>`;
+  // Real OAuth state, one of: not set up on this server / not connected / connected /
+  // degraded (token exists but the API call is failing — e.g. a revoked refresh token).
+  // Local streaming is never gated on any of this — see docs/youtube-oauth.md.
+  const oauthHelp = "This connection lets HUNGREE Goat verify whether YouTube is actually receiving the stream and whether the broadcast is live.";
+  let apiCardHtml;
+  if (!oauth.client_configured) {
+    apiCardHtml = `<div class="panel" data-key="yt-api"><div class="panel-b" style="gap:9px;justify-content:center">
+      <div style="display:flex;align-items:center;gap:8px"><span class="ic amber">${I.alert}</span><b style="font:800 13.5px var(--display)">YouTube Account Integration</b><span class="right">${help(oauthHelp)}</span></div>
+      <span class="pill off" style="align-self:flex-start">Not set up on this server</span>
+      <p class="small muted" style="margin:0">Connecting a YouTube account lets HUNGREE Goat Control verify whether YouTube is actually receiving your stream and whether the broadcast is live — instead of only inferring it from the local encoder. This server doesn't have an OAuth client configured yet.</p>
+      <a class="btn ghost wide" href="https://github.com/amaeteventurestudios/hungreegoat/blob/main/docs/youtube-oauth.md" target="_blank" rel="noopener">${I.link} Setup instructions <span class="pill off" style="margin-left:6px">docs/youtube-oauth.md</span></a>
+    </div></div>`;
+  } else if (!oauth.connected) {
+    apiCardHtml = `<div class="panel" data-key="yt-api"><div class="panel-b" style="gap:9px;justify-content:center">
+      <div style="display:flex;align-items:center;gap:8px"><span class="ic amber">${I.alert}</span><b style="font:800 13.5px var(--display)">YouTube Account Integration</b><span class="right">${help(oauthHelp)}</span></div>
+      <span class="pill off" style="align-self:flex-start">Not connected</span>
+      <p class="small muted" style="margin:0">Connecting your YouTube account lets HUNGREE Goat Control verify whether YouTube is actually receiving your stream and whether the broadcast is live.</p>
+      <a class="btn gold wide" href="/api/youtube/oauth/connect">${I.link} Connect YouTube Account</a>
+    </div></div>`;
+  } else {
+    const degraded = !!oauth.degraded;
+    const verifiedAgo = oauth.last_verified ? Math.max(0, Math.round(Date.now()/1000 - oauth.last_verified)) : null;
+    apiCardHtml = `<div class="panel" data-key="yt-api"><div class="panel-b" style="gap:9px;justify-content:center">
+      <div style="display:flex;align-items:center;gap:8px"><span class="ic ${degraded?'amber':'green'}">${degraded?I.alert:I.check}</span><b style="font:800 13.5px var(--display)">YouTube Account Integration</b><span class="right">${help(oauthHelp)}</span></div>
+      <span class="pill ${degraded?'amber':'green'}" style="align-self:flex-start">${degraded?'Connected — degraded':'Connected'}</span>
+      <dl class="kv"><dt>Channel</dt><dd>${h(oauth.channel_title||'—')}</dd>${verifiedAgo!=null?`<dt>Last verified</dt><dd>${verifiedAgo}s ago</dd>`:''}${degraded?`<dt>Issue</dt><dd class="small" style="color:var(--red)">${h(oauth.error||'Reconnection may be needed')}</dd>`:''}</dl>
+      <div class="row-actions">
+        <button class="btn sm" type="button" data-act="yt-oauth-refresh">${I.restart} Refresh</button>
+        ${degraded?`<a class="btn sm amber" href="/api/youtube/oauth/connect?reauthorize=1">${I.link} Reconnect</a>`:''}
+        <button class="btn sm ghost red" type="button" data-act="yt-oauth-disconnect">Disconnect</button>
+      </div>
+    </div></div>`;
+  }
+
+  // Broadcast binding + gated Go Live — only shown once an account is actually connected.
+  // Never invoked automatically: every transition requires an explicit operator click plus
+  // confirmDlg(), same pattern already used for USB repair (see app.js).
+  let goLiveHtml = '';
+  if (oauth.connected) {
+    const bound = !!broadcast.bound && !broadcast.stale;
+    if (!bound) {
+      const bindErr = y.youtube_bind_error && y.youtube_bind_error.reason;
+      const reason = broadcast.stale ? 'The previous binding no longer matches the connected account (a different channel was connected) — re-bind to continue.'
+        : (!y.configured ? 'Save a YouTube stream key for this station first (Stream URLs & Key, above), then bind it here.'
+        : (bindErr || "This station hasn't been matched to a specific YouTube stream/broadcast yet."));
+      goLiveHtml = `<div class="panel" data-key="yt-golive"><div class="panel-h"><h3>${ic(I.yt,'red')}Broadcast Lifecycle</h3><span class="right">${help("Shows the real YouTube broadcast bound to this station's stream key, and lets you move it through YouTube's own broadcast lifecycle.")}</span></div><div class="panel-b">
+        <p class="small muted" style="margin:0 0 8px">${h(reason)}</p>
+        <button class="btn sm" type="button" data-act="yt-rebind" ${y.configured?'':'disabled'}>${I.restart} ${broadcast.stale?'Re-bind':'Bind station to YouTube stream'}</button>
+      </div></div>`;
+    } else if (!broadcast.broadcast_id) {
+      // Bound to a discovered liveStream, but no liveBroadcast is bound to it on YouTube's
+      // side — nothing to transition yet. Distinct from "not bound" above: the stream match
+      // itself is real and verified (ingest status still shown), there's just no broadcast.
+      goLiveHtml = `<div class="panel" data-key="yt-golive"><div class="panel-h"><h3>${ic(I.yt,'amber')}Broadcast Lifecycle</h3><span class="right">${help("Shows the real YouTube broadcast bound to this station's stream key, and lets you move it through YouTube's own broadcast lifecycle.")}</span></div><div class="panel-b">
+        <dl class="kv"><dt>Ingest status</dt><dd>${h(broadcast.stream_status||'—')}</dd></dl>
+        <p class="small muted" style="margin:8px 0 0">This stream is verified, but isn't bound to any YouTube broadcast — create one in YouTube Studio and bound to this stream key, then Re-bind here.</p>
+        <button class="btn sm ghost" type="button" data-act="yt-rebind" style="margin-top:8px">${I.restart} Re-bind</button>
+      </div></div>`;
+    } else {
+      const lifecycle = broadcast.lifecycle_status;
+      const TRANSITIONS = [['testing','Start Testing'],['live','Go Live'],['complete','End Broadcast']];
+      goLiveHtml = `<div class="panel" data-key="yt-golive"><div class="panel-h"><h3>${ic(I.yt,lifecycle==='live'?'green':'red')}Broadcast Lifecycle</h3><span class="right">${lifecycle?pill(lifecycle==='live'?'green':'amber',lifecycle):''}${help("Shows the real YouTube broadcast bound to this station's stream key, and lets you move it through YouTube's own broadcast lifecycle. Go Live and End Broadcast affect your real, public YouTube channel immediately.")}</span></div><div class="panel-b">
+        <dl class="kv"><dt>Ingest status</dt><dd>${h(broadcast.stream_status||'—')}</dd><dt>Lifecycle status</dt><dd>${h(lifecycle||'—')}</dd><dt>Broadcast ID</dt><dd class="mono small">${h(broadcast.broadcast_id||'—')}</dd></dl>
+        <div class="row-actions" style="margin-top:8px">${TRANSITIONS.map(([v,l])=>`<button class="btn sm ${v==='live'?'recover':v==='complete'?'ghost red':''}" type="button" data-act="yt-golive" data-status="${v}" ${lifecycle===v?'disabled':''}>${l}</button>`).join('')}
+        <button class="btn sm ghost" type="button" data-act="yt-rebind">${I.restart} Re-bind</button></div>
+        <div class="small muted" style="margin-top:8px">These buttons call the real YouTube Live Streaming API — Go Live and End Broadcast take effect on your actual channel immediately, and each requires a confirmation click.</div>
+      </div></div>`;
+    }
+  }
 
   const pipeHtml = `<div class="panel"><div class="panel-h"><h3>${ic(I.stream,'blue')}Pipeline Health</h3><span class="right">${help("The chain that turns your music into a live YouTube broadcast, stage by stage — from the local station right through to whether YouTube is actually airing it.")}</span></div><div class="panel-b">
     ${pipeline.length?`<div class="pipe-row">${pipeline.map(stageCard).join('')}</div>`:empty(I.info,'Waiting for stream health data','Stage-by-stage status isn\'t available from the Control service yet — this usually clears up on its own shortly after an update.')}
@@ -626,7 +691,7 @@ pages.youtube = { live:true,
     stopped: `<div class="note" style="margin-top:10px">Start the engine first — see Advanced Settings → Danger Zone.</div>`,
   }[connState] || '';
   const reconnectHtml = `<div class="panel yt-conn ${connState}" data-key="yt-reconnect"><div class="panel-h"><h3>${ic(I.link,{sending:'green',success:'green',disconnected:'red',failed:'red',reconnecting:'amber',recovering:'amber',stopped:''}[connState])}YouTube Connection</h3><span class="right"><span class="yt-conn-badge ${connState}">${CONN_LABEL[connState]}</span>${help("This shows whether HUNGREE Goat is sending the stream toward YouTube and lets you restart that connection if it stops working.")}</span></div><div class="panel-b">
-    <dl class="kv"><dt>Engine</dt><dd>${running?'<span class="green">Running</span>':'<span class="red">Stopped</span>'}</dd><dt>Music</dt><dd>${s.liquidsoap.alive?'<span class="green">Playing</span>':'<span class="muted2">Not Playing</span>'}</dd><dt>Background Visuals</dt><dd><span class="${bgLbl[1]}">${bgLbl[0]}</span></dd><dt>Stream Output</dt><dd><span class="${outputLabel[1]}">${outputLabel[0]}</span></dd><dt>YouTube Verification</dt><dd><span class="muted2">Unavailable</span></dd></dl>
+    <dl class="kv"><dt>Engine</dt><dd>${running?'<span class="green">Running</span>':'<span class="red">Stopped</span>'}</dd><dt>Music</dt><dd>${s.liquidsoap.alive?'<span class="green">Playing</span>':'<span class="muted2">Not Playing</span>'}</dd><dt>Background Visuals</dt><dd><span class="${bgLbl[1]}">${bgLbl[0]}</span></dd><dt>Stream Output</dt><dd><span class="${outputLabel[1]}">${outputLabel[0]}</span></dd><dt>YouTube Verification</dt><dd>${broadcast.bound&&!broadcast.stale?'<span class="green">Verified</span>':'<span class="muted2">Unavailable</span>'}</dd></dl>
     ${stateNote}
     <button class="btn ${btnCls} wide" type="button" style="margin-top:10px" data-act="yt-reconnect" title="This restarts the video streaming connection. Your music keeps playing." ${btnDisabled?'disabled':''}>${btnBusy?`<span class="spin">${I.restart}</span>`:I.restart} ${btnLabel}</button>
     <div class="small muted" style="margin-top:8px">Restarts the video/YouTube streaming process only — Liquidsoap and your music are not affected. Same action as "Restart engine" in Advanced Settings → Danger Zone.${(y.restarts||0)>0?` Restarted ${y.restarts} time${y.restarts===1?'':'s'} this run.`:''}</div>
@@ -735,8 +800,8 @@ pages.youtube = { live:true,
           <div class="small muted" style="margin-top:8px">Fixed in the stream supervisor and systemd — not yet operator-configurable from here.</div>`)}
       </div>
       <div class="two">
-        ${advCard(I.yt,'red','YouTube Connection',"This connection lets HUNGREE Goat verify whether YouTube is actually receiving the stream and whether the broadcast is live.",
-          `<dl class="kv"><dt>Account Authorization</dt><dd><span class="pill off">Not configured</span></dd><dt>YouTube Verification</dt><dd><span class="pill off">Unavailable</span></dd><dt>Channel <span class="muted2">(reference only)</span></dt><dd>${h(m.channel||'—')}</dd></dl>
+        ${advCard(I.yt,oauth.connected?'green':'red','YouTube Connection',"This connection lets HUNGREE Goat verify whether YouTube is actually receiving the stream and whether the broadcast is live.",
+          `<dl class="kv"><dt>Account Authorization</dt><dd>${oauth.connected?pill(oauth.degraded?'amber':'green',oauth.degraded?'degraded':'connected'):pill('off','not connected')}</dd><dt>YouTube Verification</dt><dd>${broadcast.bound&&!broadcast.stale?pill('green','bound'):pill('off','unavailable')}</dd><dt>Channel${(oauth.connected&&oauth.channel_title)?'':' <span class="muted2">(reference only)</span>'}</dt><dd>${h((oauth.connected&&oauth.channel_title)?oauth.channel_title:(m.channel||'—'))}</dd></dl>
           <div class="small muted" style="margin-top:8px">See the YouTube Account Integration card near the top of this page.</div>`)}
         ${advCard(I.cpu,'','Diagnostics',"This contains technical troubleshooting information. You normally will not need this unless something goes wrong.",
           `<dl class="kv"><dt>Main FFmpeg PID</dt><dd>${y.pid||'—'}</dd><dt>Background helper PID</dt><dd>${DG.bg_pid||'—'}</dd><dt>Dropped frames</dt><dd>${y.drop_frames||0}</dd><dt>Duplicate frames</dt><dd>${y.dup_frames||0}</dd><dt>Restart counters</dt><dd>${y.restarts||0} video (this run) · ${DG.bg_restarts||0} background</dd><dt>Status file</dt><dd class="mono small">${h(DG.status_file||'—')}</dd><dt>FFmpeg log</dt><dd class="mono small">${h(DG.ffmpeg_log||'—')}</dd></dl>
@@ -753,7 +818,7 @@ pages.youtube = { live:true,
     <span class="right"><a class="btn sm ghost" href="https://studio.youtube.com" target="_blank" rel="noopener">${I.link} Open in YouTube Studio</a></span></div>
     <div class="grid yt-hero">${heroHtml}${apiCardHtml}</div>
     <div class="grid g-yt">
-      <div style="display:flex;flex-direction:column;gap:var(--gap)">${reconnectHtml}${pipeHtml}${metricsHtml}${chartsHtml}${incidentHtml}</div>
+      <div style="display:flex;flex-direction:column;gap:var(--gap)">${reconnectHtml}${goLiveHtml}${pipeHtml}${metricsHtml}${chartsHtml}${incidentHtml}</div>
       <div style="display:flex;flex-direction:column;gap:var(--gap)">${notifHtml}${autorecHtml}${metaHtml}${destHtml}</div>
     </div>
     ${advHtml}`;
@@ -764,7 +829,16 @@ Object.assign(ACTIONS, {
   'adv-toggle': ()=>{ state._advOpen=!state._advOpen; render(); },
   'yt-raw-toggle': ()=>{ state._ytRaw=!state._ytRaw; render(); },
   'yt-viewlog': ()=>{ state._logSrc='ffmpeg'; state._logAll=false; location.hash='#/logs'; },
-  'yt-connect': ()=>toast("YouTube account connection isn't built yet.",'err'),
+  // Connect/Reconnect are real <a href> navigations (see apiCardHtml) — a data-act fetch would
+  // follow Google's redirect internally instead of actually navigating the browser there.
+  'yt-oauth-refresh': async()=>{ await act(()=>api('/api/youtube/oauth/status?force=1'), null, {noRefresh:true}); delete state.pageData.youtube; render(); },
+  'yt-oauth-disconnect': async()=>{ if(await confirmDlg('Disconnect the YouTube account? Local streaming is not affected — this only removes HUNGREE Goat\'s ability to verify YouTube-side status.','Disconnect',true)){ const r=await act(()=>post('/api/youtube/oauth/disconnect')); if(r){ delete state.pageData.youtube; render(); } } },
+  'yt-rebind': async()=>{ const r=await act(()=>post(`${P()}/youtube/broadcast/rebind`),'Station bound to a discovered YouTube stream/broadcast'); if(r){ delete state.pageData.youtube; render(); } },
+  'yt-golive': async(el)=>{ const status=el.dataset.status; const bc=(state.pageData.youtube&&state.pageData.youtube.broadcast)||{};
+    const LABEL={testing:'start testing',live:'go LIVE on your real YouTube channel',complete:'end the broadcast'};
+    if(!(await confirmDlg(`Are you sure you want to ${LABEL[status]||status}? This calls the real YouTube Live Streaming API immediately.`, status==='live'?'Go Live':'Confirm', status!=='testing'))) return;
+    const r=await act(()=>post(`${P()}/youtube/broadcast/${bc.broadcast_id}/transition`,{status}), `Broadcast transitioned to ${status}`);
+    if(r){ delete state.pageData.youtube; render(); } },
   // Same backend action as Danger Zone's "Restart engine" (see the comment above
   // reconnectHtml) — deliberately not a separate, lighter-weight endpoint that doesn't exist.
   // GUARDED_ACTIONS already blocks a second click while a request is in flight; this extra
