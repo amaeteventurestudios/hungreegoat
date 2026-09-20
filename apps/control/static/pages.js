@@ -1252,11 +1252,157 @@ pages.alerts = { live:true, async load(){ return api('/api/alerts?state=all&limi
 Object.assign(ACTIONS, { 'alert-page': (el)=>{ state.alertPage=el.dataset.v; render(); } });
 
 /* ======================= LOGS ======================= */
-pages.logs = { live:true, async load(){ const src=state._logSrc||'events'; if(src==='events'){ const sev=state._logSev||''; return {src, ev: await api(`/api/events?limit=300${sev?'&severity='+sev:''}${state._logAll?'':'&station='+S()}`)}; } return {src, lines:(await api(`/api/logs/${src}?station=${S()}&lines=400`)).lines}; },
-  view(d){ const src=d.src; const body = src==='events' ? `<div class="events" style="max-height:70vh">${d.ev.map(e=>`<div class="ev" data-key="lv-${e.id}"><span class="led ${{info:'blue',warning:'warn',error:'err',critical:'err'}[e.severity]}"></span><span class="t" style="width:auto">${fmtDate(e.ts)}</span><span class="m" style="white-space:normal">${pill({info:'off',warning:'amber',error:'red',critical:'red'}[e.severity],e.severity)} <span class="muted2 small">${h(e.category)}</span> ${h(e.message)}${e.station?`<small>${h(e.station)}</small>`:''}</span></div>`).join('')||empty(I.logs,'No events','')}</div>` : `<div class="logbox">${h(d.lines.join('\n'))||'(empty)'}</div>`;
-    return `<div class="page-h"><h2>Logs</h2><div class="right"><span class="seg">${[['events','Events'],['liquidsoap','Audio engine'],['ffmpeg','Video'],['stream','Stream service'],['control','Control'],['kernel','Kernel / USB']].map(([v,l])=>`<button class="${src===v?'active':''}" data-act="logsrc" data-v="${v}">${l}</button>`).join('')}</span>${src==='events'?`<select class="sel" data-change="log-sev" style="height:34px"><option value="">All severities</option>${['info','warning','error','critical'].map(x=>`<option ${state._logSev===x?'selected':''}>${x}</option>`).join('')}</select><label class="small muted" style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-change="log-all" ${state._logAll?'checked':''}> all stations</label>`:''}<button class="btn sm" data-act="log-refresh">${I.restart}</button></div></div><div class="panel"><div class="panel-b">${body}</div></div>`; } };
-Object.assign(ACTIONS, { 'logsrc': (el)=>{ state._logSrc=el.dataset.v; delete state.pageData.logs; render(); }, 'log-refresh': ()=>{ delete state.pageData.logs; render(); } });
-Object.assign(CHANGES, { 'log-sev': (el)=>{ state._logSev=el.value; delete state.pageData.logs; render(); }, 'log-all': (el)=>{ state._logAll=el.checked; delete state.pageData.logs; render(); } });
+const LOG_SOURCES = [['events','Events'],['liquidsoap','Audio engine'],['ffmpeg','Video'],['stream','Stream service'],['control','Control'],['kernel','Kernel / USB']];
+const LOG_RANGES = [['15m','Last 15 minutes'],['1h','Last hour'],['24h','Last 24 hours'],['7d','Last 7 days'],['all','All time']];
+const LOG_LEVELS = ['info','warning','error','critical'];
+const LOG_LEVEL_RE = { info:/\binfo\b/i, warning:/\bwarn(ing)?\b/i, error:/\berror\b/i, critical:/\b(crit(ical)?|fatal|panic)\b/i };
+const logLabel = src => (LOG_SOURCES.find(([v])=>v===src)||[src,src])[1];
+const logRangeMs = r => ({'15m':15*60e3,'1h':60*60e3,'24h':24*60*60e3,'7d':7*24*60*60e3}[r]);
+// Matches journalctl `-o short-iso` (control/stream) and `dmesg --time-format iso` (kernel)
+// leading timestamps, plus ffmpeg's bracket/"===" wrapped `time.strftime(...)` header lines.
+// A line that doesn't match at all is time-range-agnostic (kept regardless of the selected
+// range) — liquidsoap's own log lines use `YYYY/MM/DD` (slashes), never matched here.
+function logLineTs(line) {
+  const m = /^(?:\[|===\s*)?(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})([.,]\d+)?\s*([+-]\d{2}:?\d{2}|Z)?/.exec(line);
+  if (!m) return null;
+  const frac = m[3] ? '.' + m[3].slice(1) : '';
+  let off = m[4] || '';
+  if (off && off !== 'Z' && !off.includes(':')) off = off.slice(0,3) + ':' + off.slice(3);
+  // No offset in the line (e.g. ffmpeg's `time.strftime` header, which is naive local time,
+  // not UTC) — leave it off entirely rather than assuming 'Z'/UTC, so the date-only string
+  // parses as local time in whatever timezone the viewer's own browser is in. Defaulting to
+  // UTC here would silently misfilter by a full timezone offset on a server that isn't UTC.
+  const t = Date.parse(`${m[1]}T${m[2]}${frac}${off}`);
+  return isNaN(t) ? null : t;
+}
+function logFiltered(d) {
+  const q = (state._logQuery||'').trim().toLowerCase(), sev = state._logSev||'';
+  const ms = logRangeMs(state._logRange||'24h'), cutoff = ms ? Date.now()-ms : null;
+  if (d.src === 'events') return d.ev.filter(e => {
+    if (sev && e.severity !== sev) return false;
+    if (cutoff && e.ts*1000 < cutoff) return false;
+    if (q && !`${e.category} ${e.message} ${e.station||''}`.toLowerCase().includes(q)) return false;
+    return true;
+  });
+  return (d.lines||[]).filter(line => {
+    if (sev && !LOG_LEVEL_RE[sev].test(line)) return false;
+    if (cutoff) { const t = logLineTs(line); if (t != null && t < cutoff) return false; }
+    if (q && !line.toLowerCase().includes(q)) return false;
+    return true;
+  });
+}
+const logRowsToText = (src, rows) => src === 'events'
+  ? rows.map(e => `${new Date(e.ts*1000).toISOString()} [${e.severity}] ${e.category}: ${e.message}${e.station?' ('+e.station+')':''}`).join('\n')
+  : rows.join('\n');
+function logMeta() {
+  const f = [`range=${state._logRange||'24h'}`];
+  if (state._logSev) f.push(`level=${state._logSev}`);
+  if (state._logQuery) f.push(`search=${JSON.stringify(state._logQuery)}`);
+  return { station: S(), generated: new Date().toISOString(), filters: f.join(', ') };
+}
+const logStamp = () => new Date().toISOString().replace(/[-:]/g,'').split('.')[0];
+function downloadText(filename, content, mime) {
+  const url = URL.createObjectURL(new Blob([content], {type: mime}));
+  const a = document.createElement('a'); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+function logMarkdownOne(src, rows, meta) {
+  return `# HUNGREE Goat Diagnostic Log — ${logLabel(src)}\n\n- Station: ${meta.station}\n- Generated: ${meta.generated}\n- Filters: ${meta.filters}\n- Lines: ${rows.length}\n\n` +
+    '```\n' + (logRowsToText(src, rows) || '(no lines match current filters)') + '\n```\n';
+}
+function logJsonOne(src, rows, meta) {
+  return JSON.stringify({ source: src, label: logLabel(src), ...meta, count: rows.length, [src==='events'?'events':'lines']: rows }, null, 2);
+}
+async function logFetchAll() {
+  const sev = state._logSev||''; const out = {};
+  await Promise.all(LOG_SOURCES.map(async ([src]) => {
+    out[src] = src === 'events'
+      ? { src, ev: await api(`/api/events?limit=600${sev?'&severity='+sev:''}${state._logAll?'':'&station='+S()}`) }
+      : { src, lines: (await api(`/api/logs/${src}?station=${S()}&lines=800`)).lines };
+  }));
+  return out;
+}
+async function logBundle(format) {
+  toast('Building diagnostic bundle…');
+  let all; try { all = await logFetchAll(); } catch(e) { toast('Could not build bundle: '+e.message, 'err'); return; }
+  const meta = logMeta(), stamp = logStamp();
+  if (format === 'md') {
+    let out = `# HUNGREE Goat Diagnostic Bundle\n\n- Station: ${meta.station}\n- Generated: ${meta.generated}\n- Filters: ${meta.filters}\n\n`;
+    for (const [src] of LOG_SOURCES) { const rows = logFiltered(all[src]); out += `## ${logLabel(src)}\n\n` + '```\n' + (logRowsToText(src, rows) || '(no lines match current filters)') + '\n```\n\n'; }
+    downloadText(`hungreegoat-diagnostic-bundle-${S()}-${stamp}.md`, out, 'text/markdown');
+  } else {
+    const obj = { ...meta, sources: {} };
+    for (const [src] of LOG_SOURCES) { const rows = logFiltered(all[src]); obj.sources[src] = { label: logLabel(src), count: rows.length, [src==='events'?'events':'lines']: rows }; }
+    downloadText(`hungreegoat-diagnostic-bundle-${S()}-${stamp}.json`, JSON.stringify(obj, null, 2), 'application/json');
+  }
+  toast('Diagnostic bundle downloaded', 'ok');
+}
+// Body-level fixed-position portal (click-toggle sibling of the hover-driven .tt-portal in
+// app.js) — a popover nested inside .panel gets clipped/mispositioned by backdrop-filter's
+// containing-block behavior, the same root cause already fixed once for tooltips.
+let logMenuEl = null, logMenuOpenFor = null;
+function logMenuEnsure() { if (!logMenuEl) { logMenuEl = document.createElement('div'); logMenuEl.className = 'log-menu'; document.body.appendChild(logMenuEl); } return logMenuEl; }
+function logMenuClose() { if (logMenuEl) logMenuEl.classList.remove('show'); logMenuOpenFor = null; }
+function logMenuOpen(trigger) {
+  const el = logMenuEnsure();
+  el.innerHTML = [['log-export-txt','Download as .txt'],['log-export-md','Download as Markdown (.md)'],['log-export-json','Download as JSON (.json)']]
+    .map(([a,l])=>`<button type="button" data-act="${a}">${l}</button>`).join('') + '<div class="log-menu-sep"></div>' +
+    [['log-export-bundle-md','Diagnostic bundle (.md, all sources)'],['log-export-bundle-json','Diagnostic bundle (.json, all sources)']]
+    .map(([a,l])=>`<button type="button" data-act="${a}">${l}</button>`).join('');
+  el.style.visibility = 'hidden'; el.classList.add('show');
+  const r = trigger.getBoundingClientRect(), w = el.offsetWidth, hgt = el.offsetHeight;
+  el.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + 'px';
+  el.style.top = ((r.bottom + 6 + hgt <= window.innerHeight) ? r.bottom + 6 : Math.max(8, r.top - hgt - 6)) + 'px';
+  el.style.visibility = ''; logMenuOpenFor = trigger;
+}
+document.addEventListener('click', e => {
+  if (!logMenuOpenFor) return;
+  if (e.target.closest('.log-menu') || logMenuOpenFor.contains(e.target)) return;
+  logMenuClose();
+}, true);
+window.addEventListener('hashchange', logMenuClose);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') logMenuClose(); });
+
+pages.logs = { live:true, async load(){ const src=state._logSrc||'events'; if(src==='events'){ const sev=state._logSev||''; return {src, ev: await api(`/api/events?limit=600${sev?'&severity='+sev:''}${state._logAll?'':'&station='+S()}`)}; } return {src, lines:(await api(`/api/logs/${src}?station=${S()}&lines=800`)).lines}; },
+  view(d){ const src=d.src, rows=logFiltered(d), range=state._logRange||'24h', total=src==='events'?d.ev.length:(d.lines||[]).length;
+    const body = src==='events'
+      ? `<div class="events" style="max-height:70vh">${rows.map(e=>`<div class="ev" data-key="lv-${e.id}"><span class="led ${{info:'blue',warning:'warn',error:'err',critical:'err'}[e.severity]}"></span><span class="t" style="width:auto">${fmtDate(e.ts)}</span><span class="m" style="white-space:normal">${pill({info:'off',warning:'amber',error:'red',critical:'red'}[e.severity],e.severity)} <span class="muted2 small">${h(e.category)}</span> ${h(e.message)}${e.station?`<small>${h(e.station)}</small>`:''}</span></div>`).join('')||empty(I.logs, total?'No matching events':'No events', total?'Try widening the time range, level, or search.':'Track changes and system events appear here.')}</div>`
+      : `<div class="logbox">${rows.length?h(rows.join('\n')):(total?'No lines match the current search / time range / level filters.':'(empty)')}</div>`;
+    const toolbar = `<div class="logs-toolbar">
+      <div class="row">
+        <div class="search">${I.search}<input placeholder="Search logs…" value="${h(state._logQuery||'')}" data-input="log-search"></div>
+        <select class="sel" data-change="log-range">${LOG_RANGES.map(([v,l])=>`<option value="${v}" ${range===v?'selected':''}>${l}</option>`).join('')}</select>
+        <select class="sel" data-change="log-sev"><option value="">All levels</option>${LOG_LEVELS.map(x=>`<option value="${x}" ${state._logSev===x?'selected':''}>${x[0].toUpperCase()+x.slice(1)}</option>`).join('')}</select>
+        ${src==='events'?`<label class="small muted" style="display:flex;gap:6px;align-items:center"><input type="checkbox" data-change="log-all" ${state._logAll?'checked':''}> all stations</label>`:''}
+      </div>
+      <div class="row"><span class="seg">${LOG_SOURCES.map(([v,l])=>`<button class="${src===v?'active':''}" data-act="logsrc" data-v="${v}">${l}</button>`).join('')}</span></div>
+      <div class="row actions">
+        <button class="btn sm" data-act="log-copy">${I.copy} Copy Current</button>
+        <button class="btn sm" data-act="log-export-toggle">Export Logs ▾</button>
+        <button class="btn sm" data-act="log-refresh">${I.restart} Refresh</button>
+      </div>
+      ${range!=='all'&&(src==='liquidsoap'||src==='ffmpeg')?`<div class="log-hint muted small">Time filter is best-effort on this log source — lines without a recognizable timestamp are always shown.</div>`:''}
+    </div>`;
+    return `<div class="page-h"><h2>Logs</h2><span class="right muted small">${rows.length} of ${total} shown</span></div><div class="panel"><div class="panel-b">${toolbar}${body}</div></div>`; } };
+Object.assign(ACTIONS, {
+  'logsrc': (el)=>{ state._logSrc=el.dataset.v; logMenuClose(); delete state.pageData.logs; render(); },
+  'log-refresh': ()=>{ logMenuClose(); delete state.pageData.logs; render(); },
+  'log-copy': async()=>{ const d=state.pageData.logs; if(!d) return; const rows=logFiltered(d); const text=logRowsToText(d.src, rows)||'(no lines match current filters)';
+    try { await navigator.clipboard.writeText(text); toast(`Copied ${rows.length} line${rows.length===1?'':'s'} from ${logLabel(d.src)}`, 'ok'); }
+    catch(e) { toast('Clipboard blocked by the browser — use Export instead', 'err'); } },
+  'log-export-toggle': (el)=>{ if (logMenuOpenFor===el) logMenuClose(); else logMenuOpen(el); },
+  'log-export-txt': ()=>{ logMenuClose(); const d=state.pageData.logs; if(!d) return; const rows=logFiltered(d); downloadText(`hungreegoat-${d.src}-${S()}-${logStamp()}.txt`, logRowsToText(d.src, rows)||'(no lines match current filters)', 'text/plain'); },
+  'log-export-md': ()=>{ logMenuClose(); const d=state.pageData.logs; if(!d) return; const rows=logFiltered(d); downloadText(`hungreegoat-${d.src}-${S()}-${logStamp()}.md`, logMarkdownOne(d.src, rows, logMeta()), 'text/markdown'); },
+  'log-export-json': ()=>{ logMenuClose(); const d=state.pageData.logs; if(!d) return; const rows=logFiltered(d); downloadText(`hungreegoat-${d.src}-${S()}-${logStamp()}.json`, logJsonOne(d.src, rows, logMeta()), 'application/json'); },
+  'log-export-bundle-md': ()=>{ logMenuClose(); return logBundle('md'); },
+  'log-export-bundle-json': ()=>{ logMenuClose(); return logBundle('json'); },
+});
+Object.assign(CHANGES, {
+  'log-sev': (el)=>{ state._logSev=el.value; delete state.pageData.logs; render(); },
+  'log-all': (el)=>{ state._logAll=el.checked; delete state.pageData.logs; render(); },
+  'log-range': (el)=>{ state._logRange=el.value; render(); },
+  'log-search': (el)=>{ state._logQuery=el.value; render(); },
+});
 
 /* ======================= SETTINGS ======================= */
 pages.settings = { view(){ const s=st(); const ov=state.overview; const sys=ov.system; const set=s.settings; return `<div class="page-h"><h2>Settings</h2></div>

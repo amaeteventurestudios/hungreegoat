@@ -467,3 +467,20 @@ details.adv .panel{background:var(--panel2)}
 }
 @media (max-width:430px){.eqbars{display:none}.cards{grid-template-columns:1fr 1fr}.card{min-height:88px}.card .v{font-size:16px}.week{grid-template-columns:1fr}.qa{grid-template-columns:1fr 1fr}.actions .btn{flex:1 1 45%}.modal{padding:12px}.form{grid-template-columns:1fr}.page-h h2{font-size:19px}.btn{padding:0 12px}}
 @media (max-width:370px){.cards{grid-template-columns:1fr}.qa{grid-template-columns:1fr}.metrics{grid-template-columns:1fr}}
+
+/* ======================= Logs diagnostics console ======================= */
+.logs-toolbar{display:flex;flex-direction:column;gap:10px;margin-bottom:12px}
+.logs-toolbar .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.logs-toolbar .row.actions{justify-content:flex-end}
+.logs-toolbar .sel{height:40px}
+.log-hint{margin-top:-2px}
+/* Body-level fixed-position portal for the Export Logs menu — a popover nested inside
+   .panel would get clipped/misclipped because every .panel uses backdrop-filter, which makes
+   Chromium/WebKit treat it as a containing block for position:fixed descendants too (same
+   root cause already fixed once for the .tt-portal tooltip system in app.js). */
+.log-menu{position:fixed;left:0;top:0;min-width:230px;background:#0d1a2b;border:1px solid var(--line2);border-radius:12px;padding:6px;box-shadow:var(--shadow);opacity:0;visibility:hidden;transform:translateY(-4px);transition:opacity .12s,transform .12s;z-index:200;display:flex;flex-direction:column}
+.log-menu.show{opacity:1;visibility:visible;transform:translateY(0)}
+.log-menu button{display:block;width:100%;text-align:left;padding:9px 10px;border-radius:8px;border:0;background:none;color:var(--text);font:600 12.5px var(--sans);cursor:pointer}
+.log-menu button:hover{background:rgba(127,176,255,.14)}
+.log-menu-sep{height:1px;background:var(--line2);margin:5px 2px}
+@media (max-width:767px){.logs-toolbar .search{flex:1 1 100%}.logs-toolbar .sel{flex:1 1 140px}}
