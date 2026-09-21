@@ -412,7 +412,18 @@ button.mediaAction{font-family:inherit}
    just the indicator, per "do not animate the whole banner". */
 .pill-live-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:currentColor;margin-right:5px;vertical-align:middle;animation:pill-breathe 2.6s ease-in-out infinite}
 @keyframes pill-breathe{0%,100%{opacity:1}50%{opacity:.4}}
-@media (prefers-reduced-motion: reduce){.chart-dot::after,.chart-dot-fresh,.chart-shimmer.live,.pill-live-dot{animation:none!important}}
+
+/* Small dots continuously traveling the exact plotted line (see chartLiveParticles() in
+   app.js) — "tiny packets of light," purely decorative, never a data marker. Driven entirely
+   by offset-path/offset-distance so the browser compositor animates it, not JS. Negative
+   animation-delay values start each one already partway along the path so they read as a
+   staggered stream rather than a clump released together. */
+.chart-particle{position:absolute;top:0;left:0;width:4px;height:4px;margin:-2px 0 0 -2px;border-radius:50%;pointer-events:none;z-index:1;display:none;offset-rotate:0deg;animation:chart-particle-move 4.2s linear infinite}
+.chart-particle.p1{animation-delay:-.2s}
+.chart-particle.p2{animation-delay:-1.5s}
+.chart-particle.p3{animation-delay:-2.8s}
+@keyframes chart-particle-move{0%{offset-distance:0%;opacity:0}10%{opacity:.4}90%{opacity:.4}100%{offset-distance:100%;opacity:0}}
+@media (prefers-reduced-motion: reduce){.chart-dot::after,.chart-dot-fresh,.chart-shimmer.live,.pill-live-dot,.chart-particle{animation:none!important;display:none!important}}
 .chart-legend{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted)}
 .chart-legend i{width:13px;height:2px;display:inline-block;border-radius:1px}
 details.adv{border:1px solid var(--line);border-radius:var(--r);background:var(--panel);box-shadow:var(--shadow);overflow:hidden}

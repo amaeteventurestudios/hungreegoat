@@ -530,7 +530,9 @@ pages.youtube = { live:true,
     const bPt = HGC.drawLineChart(bCanvas, b.bitrate, {color:'#2ecc8a', fill:true, fmtY:v=>(v/1000).toFixed(1)+'M'});
     const sPt = HGC.drawLineChart(sCanvas, b.speed, {color:'#ff5a6a', target:1.0, min:1.0, fmtY:v=>v.toFixed(1)+'×'});
     HGC.chartLiveDot(bCanvas&&bCanvas.closest('.mini-chart'), bPt, '#2ecc8a', running);
-    HGC.chartLiveDot(sCanvas&&sCanvas.closest('.mini-chart'), sPt, '#ff5a6a', running); },
+    HGC.chartLiveDot(sCanvas&&sCanvas.closest('.mini-chart'), sPt, '#ff5a6a', running);
+    HGC.chartLiveParticles(bCanvas&&bCanvas.closest('.mini-chart'), bPt, '#2ecc8a', running);
+    HGC.chartLiveParticles(sCanvas&&sCanvas.closest('.mini-chart'), sPt, '#ff5a6a', running); },
   view({y, ev, oauth, broadcast}) {
   y = y || {}; ev = Array.isArray(ev) ? ev : []; oauth = oauth || {connected:false, client_configured:false}; broadcast = broadcast || {bound:false};
   const s=st(); const m=y.meta||{}; const show=state._showKey;
@@ -998,6 +1000,9 @@ pages.monitoring = { live:true,
     HGC.chartLiveDot(fpsCanvas&&fpsCanvas.closest('.mini-chart'), fpsPt, '#4f8cff', live);
     HGC.chartLiveDot(spdCanvas&&spdCanvas.closest('.mini-chart'), spdPt, '#ff5a6a', live);
     HGC.chartLiveDot(brCanvas&&brCanvas.closest('.mini-chart'), brPt, '#2ecc8a', live);
+    HGC.chartLiveParticles(fpsCanvas&&fpsCanvas.closest('.mini-chart'), fpsPt, '#4f8cff', live);
+    HGC.chartLiveParticles(spdCanvas&&spdCanvas.closest('.mini-chart'), spdPt, '#ff5a6a', live);
+    HGC.chartLiveParticles(brCanvas&&brCanvas.closest('.mini-chart'), brPt, '#2ecc8a', live);
   },
   view({ov, rules, tel, alerts}) {
   const tab = state._monTab||'overview';

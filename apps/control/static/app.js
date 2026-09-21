@@ -312,7 +312,14 @@ function drawLineChart(canvas, series, opts={}) {
   ctx.strokeStyle=opts.color||'#4f8cff'; ctx.lineWidth=2; ctx.lineJoin='round'; ctx.stroke();
   let lastPt = null;
   for (let i=pts.length-1; i>=0; i--) { if (pts[i][1]!=null) { lastPt = {x: pts[i][0], y: pts[i][1]}; break; } }
-  return lastPt;
+  if (!lastPt) return null;
+  // Same coordinates as the stroked line above, expressed as an SVG path string — used only so
+  // CSS `offset-path` can move the traveling-particle overlay along the EXACT real geometry
+  // (rises/dips included), never a separate/approximated shape. Multiple "M..L.." subpaths if
+  // the series has null gaps, matching how the canvas stroke itself breaks there.
+  let d = '', open = false;
+  pts.forEach(([x,y]) => { if (y==null) { open = false; return; } d += (open?'L':'M') + x.toFixed(1) + ',' + y.toFixed(1) + ' '; open = true; });
+  return { x: lastPt.x, y: lastPt.y, d: d.trim() };
 }
 // Positions the subtle "live" dot + shimmer overlay for a chart (see app.css) from the exact
 // pixel returned by drawLineChart() — never touches the canvas, the series, or any value.
@@ -334,6 +341,32 @@ function chartLiveDot(container, lastPt, color, live) {
   // metric that's genuinely flat still just received a fresh sample, which is exactly the
   // reassurance this is for. Reflow-forced restart so the CSS animation actually replays.
   dot.classList.remove('chart-dot-fresh'); void dot.offsetWidth; dot.classList.add('chart-dot-fresh');
+}
+const CHART_PARTICLE_COUNT = 3;
+// Small dots continuously traveling the EXACT plotted line (its real rises/dips), independent
+// of the anchored latest-sample dot above. Pure decoration — driven entirely by CSS
+// offset-path/offset-distance keyframes (see app.css), so there is no per-frame JS animation
+// loop: this function only (re)sets each particle's path/color once per render tick and lets
+// the browser's own compositor animate it from there.
+function chartLiveParticles(container, ptInfo, color, live) {
+  if (!container) return;
+  let particles = container.querySelectorAll(':scope > .chart-particle');
+  if (particles.length < CHART_PARTICLE_COUNT) {
+    for (let i = particles.length; i < CHART_PARTICLE_COUNT; i++) {
+      const p = document.createElement('span');
+      p.className = `chart-particle p${i+1}`;
+      container.appendChild(p);
+    }
+    particles = container.querySelectorAll(':scope > .chart-particle');
+  }
+  const show = !!live && !!ptInfo && !!ptInfo.d;
+  particles.forEach(p => {
+    p.style.display = show ? 'block' : 'none';
+    if (!show) return;
+    p.style.offsetPath = `path('${ptInfo.d}')`;
+    p.style.background = color || '#4f8cff';
+    p.style.boxShadow = `0 0 5px ${color || '#4f8cff'}`;
+  });
 }
 let meterLevel=0, meterTarget=0;
 function animateMeter(){ meterLevel += (meterTarget-meterLevel)*0.25; const t=performance.now()/1000;
@@ -428,5 +461,5 @@ Object.assign(FORMS, {
   setInterval(pollMeter, 2500); setInterval(tickClock, 1000); animateMeter();
   setInterval(async()=>{ try{ const v=await api('/api/version'); if(window.HGC_V && v.assets!==window.HGC_V){ toast('HUNGREE Goat Control was updated — reloading','ok'); setTimeout(()=>location.reload(), 1500); } }catch{} }, 60000);
 })();
-return { state, api, post, put, patch, del, act, toast, confirmDlg, render, refresh, h, I, fmtDur, fmtLong, fmtBytes, fmtTime, fmtDate, st, artUrl, ASSET, ACTIONS, FORMS, CHANGES, previewTrack, listenStart, mobile, help, hist, drawLineChart, chartLiveDot, pages:{} };
+return { state, api, post, put, patch, del, act, toast, confirmDlg, render, refresh, h, I, fmtDur, fmtLong, fmtBytes, fmtTime, fmtDate, st, artUrl, ASSET, ACTIONS, FORMS, CHANGES, previewTrack, listenStart, mobile, help, hist, drawLineChart, chartLiveDot, chartLiveParticles, pages:{} };
 })();
