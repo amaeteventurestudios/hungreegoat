@@ -23,7 +23,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import config, overlay
+from . import config, db, overlay
 
 W, H = config.OVERLAY_W, config.OVERLAY_H
 FRAME_BYTES = W * H * 3 // 2 + W * H  # yuva420p: Y + U/4 + V/4 + A
@@ -703,6 +703,10 @@ class Streamer:
                     reason = stall_detector.check(self.progress, time.time())
                     if reason:
                         self._log("supervisor", f"stall detected: {reason}, restarting ffmpeg")
+                        # Automated-recovery attempts belong in Incident History (see
+                        # docs/monitoring-alerts.md), not only the ffmpeg log file — this is
+                        # exactly the kind of "encoder restart storm" signal a monitor needs.
+                        db.log_event("critical", "stream", f"FFmpeg stall detected ({reason}) — automatically restarting", self.sid)
                         stalled = True
                     if stalled:
                         if not self._kill():

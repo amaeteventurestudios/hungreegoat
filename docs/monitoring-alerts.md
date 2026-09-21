@@ -55,13 +55,13 @@ This is evidence for a human to correlate, not an automated root-cause claim —
 
 Both monitors post to the same private ntfy.sh topic (free, no account, no signup — a
 sufficiently random topic name is the only access control). The topic is stored at
-`~/.hgc-ntfy-topic` on each monitoring host (mode 600) and `/home/aumanah/.config/hungree-goat/ntfy-topic.txt`
+`~/.hgc-ntfy-topic` on each monitoring host (mode 600) and `~/hungree-goat/secrets/ntfy-topic.txt`
 on the Beelink (mode 600) — treat it like a low-sensitivity credential (see `docs/security.md`):
 anyone who learns it can post to (and read) the same channel, though they can't affect the
 broadcast itself.
 
 **To receive alerts**: install the free ntfy app (iOS/Android) or use ntfy.sh's web push, and
-subscribe to the topic in `/home/aumanah/.config/hungree-goat/ntfy-topic.txt`.
+subscribe to the topic in `~/hungree-goat/secrets/ntfy-topic.txt`.
 
 Each monitor tracks its own state (`~/.hgc-monitor-state-external` / `~/.hgc-monitor-state-local`)
 to:
@@ -73,6 +73,29 @@ to:
 Cron: both run every 2 minutes (`*/2 * * * *`), installed via `crontab -l | ... | crontab -`
 so nothing pre-existing on either host was overwritten.
 
+## Server-side telemetry (`telemetry` table, `apps/control/hgc/db.py`)
+
+The same 15s watchdog tick that raises/resolves the alerts above also writes one row per
+station to a `telemetry` table: `fps`, `speed`, `bitrate_kbps`, `drop_frames`, `encoder_state`,
+`liquidsoap_alive`, `bg_ok`, `overall_level`. Pruned to 7 days on an hourly timer from the same
+loop — no separate cron, no separate service. `GET /api/monitoring/telemetry?station=lofi&range=1h`
+(ranges: `30m|1h|6h|24h|7d`) returns the series downsampled to ~360 points for the longer
+ranges, plus `freshness` (`live` if the last sample is <45s old, else `stale`, or `no_data`),
+`sample_count`, `last_sample_age_sec`, and current/min/avg/max per metric — this is what
+Monitoring & Alerts → Overview renders (see the README's Monitoring & Alerts section for the
+LIVE/STALE/NO-DATA display rules). Monitoring failing here can't affect the broadcast: it's a
+try/except'd step inside the existing watchdog loop, same as everything else in it.
+
+## Monitoring & Alerts UI (Control)
+
+A real section in Control (`apps/control/static/pages.js`, `pages.monitoring`) — Overview,
+Monitors, Notifications, Alert Rules, Incident History, Settings — backed entirely by the
+APIs above and the existing `/api/alerts`. Incident History and the Alerts tab intentionally
+reuse the existing events/alerts system rather than a second, parallel incident tracker (see
+"Alerting: HGC's own internal push" above). Test/simulation controls (`/api/monitoring/test`)
+never touch Liquidsoap, FFmpeg, or the real YouTube broadcast — simulations write a clearly
+`[TEST]`-labeled event and, for down/recovery, a labeled test push.
+
 ## Known gaps (deliberately not built yet)
 
 - **Email escalation (5 min unresolved)** and **SMS escalation (10 min unresolved)**: no SMTP
@@ -82,9 +105,6 @@ so nothing pre-existing on either host was overwritten.
   (e.g. Twilio) would let this be added without changing the architecture — the state-file/
   cooldown logic above already has the right shape for that ladder, it's just missing a second
   and third `notify_email()`/`notify_sms()` call gated on `now - first_bad_at` thresholds.
-- **Server-side telemetry persistence** (fps/bitrate/speed/ingest/lifecycle history over
-  30m/1h/6h/24h/7d) and the corresponding LIVE/STALE/NO-DATA telemetry UI: not yet built. The
-  current dashboard graphs remain browser-tab-only. This is the next planned phase.
 - **Uptime Kuma integration on the Pi**: not done. The existing instance's admin login isn't
   available to this automation, and resetting it unprompted would lock out the operator's own
   access to their existing personal dashboard. Either provide that login, or add the four
@@ -97,5 +117,13 @@ so nothing pre-existing on either host was overwritten.
   Uptime Kuma instance) without adding any load or risk to the shared multi-tenant gateway that
   hosts unrelated Umanah Systems Group client services (EspoCRM, Documenso, client data rooms).
   This is a real recurring-cost decision, not made unilaterally — flagged for the operator.
-- **Monitoring & Alerts UI** (Overview/Monitors/Notifications/Alerts/Alert Rules/Incident
-  History/Settings inside Control): not started — the above is ops-side infrastructure only.
+- **Operator-editable alert-rule thresholds**: the Alert Rules tab is currently read-only —
+  thresholds live in code next to the checks they describe (`streamer.py`'s `StallDetector`,
+  `main.py`'s watchdog) specifically so they can't drift out of sync with what's actually
+  evaluated. Making them editable would need those checks to read from `db.get_setting()`
+  instead of a constant — a reasonable follow-up, not done here.
+- **Automated cross-host incident correlation**: the external and local monitors each alert
+  independently with labeled messages a human can correlate (see the table above); there's no
+  shared incident record between them yet (that would need one monitor to report to the other,
+  or both to report to a third point — deliberately not built to keep each monitor's failure
+  domain fully independent of the others).

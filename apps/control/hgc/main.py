@@ -109,6 +109,60 @@ def _sync_default_artwork() -> None:
         db.log_event("warning", "media", f"Could not sync default artwork: {e}")
 
 
+NTFY_TOPIC_FILE = config.SECRETS_DIR / "ntfy-topic.txt"
+_ntfy_topic_cache: dict[str, Any] = {"v": None, "at": 0.0}
+_HGC_ALERT_STATE: dict[str, dict] = {}   # sid -> {"bad": bool, "first_bad_at": float | None}
+
+
+def _ntfy_topic() -> str | None:
+    """Cached 60s — this is a local file read, not worth hitting every 15s tick."""
+    now = time.time()
+    if now - _ntfy_topic_cache["at"] > 60:
+        try:
+            _ntfy_topic_cache["v"] = NTFY_TOPIC_FILE.read_text().strip() or None
+        except OSError:
+            _ntfy_topic_cache["v"] = None
+        _ntfy_topic_cache["at"] = now
+    return _ntfy_topic_cache["v"]
+
+
+def ntfy_send(title: str, body: str, priority: str = "default") -> bool:
+    """Best-effort push via ntfy.sh — see docs/monitoring-alerts.md. Never raises: a
+    notification failure must never affect the broadcast or the caller's own request."""
+    topic = _ntfy_topic()
+    if not topic:
+        return False
+    try:
+        req = urllib.request.Request(f"https://ntfy.sh/{topic}", data=body.encode(), method="POST",
+                                      headers={"Title": title, "Priority": priority, "Tags": "hungree-goat"})
+        urllib.request.urlopen(req, timeout=10).read()
+        return True
+    except Exception as e:
+        db.log_event("warning", "system", f"ntfy push failed: {e}")
+        return False
+
+
+def _notify_hgc_alert_state(sid: str, health: dict, yt_state: dict | None) -> None:
+    """HGC's own internal push, labeled [HGC-Internal] to distinguish it from the two
+    independent external/local monitors (see docs/monitoring-alerts.md) — this one can see
+    finer-grained internal state (e.g. exactly which pipeline stage failed) but, unlike them,
+    goes silent if Beelink itself loses power/network. Complementary, not a replacement."""
+    level = health["overall"]["level"]
+    bad = level in ("warning", "critical")
+    prev = _HGC_ALERT_STATE.get(sid, {"bad": False, "first_bad_at": None})
+    if bad and not prev["bad"]:
+        ntfy_send(f"HUNGREE Goat {level.upper()} [HGC-Internal]",
+                   f"{sid}: {health['overall']['title']} — {health['overall']['message']}",
+                   "urgent" if level == "critical" else "default")
+        _HGC_ALERT_STATE[sid] = {"bad": True, "first_bad_at": time.time()}
+    elif not bad and prev["bad"]:
+        dur = time.time() - (prev["first_bad_at"] or time.time())
+        extra = f" YouTube: {yt_state.get('lifecycle_status') or 'unknown'}." if yt_state else ""
+        ntfy_send(f"HUNGREE Goat RECOVERED [HGC-Internal]",
+                   f"{sid}: healthy again. Outage duration: {int(dur // 60)}m {int(dur % 60)}s.{extra}", "high")
+        _HGC_ALERT_STATE[sid] = {"bad": False, "first_bad_at": None}
+
+
 def _watchdog() -> None:
     """Background: push runtime switches to Liquidsoap when it (re)starts, log schedule
     switches and USB problems. Runs every 15s."""
@@ -118,6 +172,7 @@ def _watchdog() -> None:
     synced: dict[str, bool] = {}
     stall: dict[str, list] = {}   # sid -> [last_elapsed, unchanged_since]
     silent_since: dict[str, float] = {}
+    last_telemetry_prune = 0.0
     while True:
         try:
             u = metrics.usb()
@@ -189,6 +244,40 @@ def _watchdog() -> None:
                     synced[sid] = True
                 elif not alive:
                     synced[sid] = False
+                # Telemetry + YouTube-specific alerting (see docs/monitoring-alerts.md). Kept
+                # in its own try/except: a failure here must never take down the USB/schedule/
+                # stall handling above, and must certainly never touch Liquidsoap/FFmpeg.
+                try:
+                    stream_ = _stream_status(sid)
+                    st_ = db.get_settings(sid)
+                    health = _youtube_health(sid, stream_, st_)
+                    db.log_telemetry(sid, {
+                        "fps": stream_.get("fps"), "speed": health.get("speed"),
+                        "bitrate_kbps": stream_.get("bitrate_kbps"), "drop_frames": stream_.get("drop_frames"),
+                        "encoder_state": stream_.get("state"), "liquidsoap_alive": int(alive),
+                        "bg_ok": int(next((p["status"] == "ok" for p in health["pipeline"] if p["key"] == "bg"), False)),
+                        "youtube_stream_status": None, "youtube_lifecycle_status": None,
+                        "overall_level": health["overall"]["level"],
+                    })
+                    recv = next((p for p in health["pipeline"] if p["key"] == "receive"), None)
+                    live_stage = next((p for p in health["pipeline"] if p["key"] == "live"), None)
+                    yt_state = youtube_oauth.get_youtube_state(sid)
+                    verified_now = bool(yt_state.get("bound") and yt_state.get("connected") and not yt_state.get("error"))
+                    if verified_now:
+                        if recv and recv["status"] == "err":
+                            db.log_event("critical", "youtube_ingest", "YouTube is not receiving the stream (ingest inactive)", sid)
+                        else:
+                            db.resolve_alerts("youtube_ingest", sid)
+                        if yt_state.get("lifecycle_status") in ("complete", "revoked"):
+                            db.log_event("warning", "youtube_lifecycle", "YouTube broadcast has ended and cannot resume on its own — bind a replacement broadcast", sid)
+                        else:
+                            db.resolve_alerts("youtube_lifecycle", sid)
+                    _notify_hgc_alert_state(sid, health, yt_state if verified_now else None)
+                except Exception as e:
+                    db.log_event("warning", "system", f"telemetry/youtube-alert watchdog step failed: {e}", sid)
+            if time.time() - last_telemetry_prune > 3600:
+                last_telemetry_prune = time.time()
+                db.prune_telemetry()
         except Exception as e:
             db.log_event("warning", "system", f"watchdog: {e}")
         time.sleep(15)
@@ -1893,6 +1982,131 @@ def youtube_test(sid: str, user: str = Depends(current_user)):
                 "note": "Endpoint reachable. The stream key is only verified when the output publishes."}
     except Exception as e:
         return {"ok": False, "host": host, "port": port, "error": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# Monitoring & Alerts (see docs/monitoring-alerts.md) — telemetry history, the semantic
+# health this page shares with /v1/health/broadcast, and safe test/simulation actions.
+# Real incidents reuse the existing events/alerts tables (db.log_event/resolve_alerts) —
+# see youtube_ingest/youtube_lifecycle categories raised from the watchdog — rather than a
+# second, parallel incident system.
+TELEMETRY_RANGES = {"30m": 1800, "1h": 3600, "6h": 21600, "24h": 86400, "7d": 604800}
+
+
+def _telemetry_series(sid: str, range_key: str) -> dict:
+    seconds = TELEMETRY_RANGES.get(range_key, 3600)
+    rows = db.query_telemetry(sid, time.time() - seconds)
+    # Downsample for the longer ranges — a browser chart doesn't need one point per 15s over
+    # 7 days, and this keeps the response small without a separate rollup table.
+    target_points = 360
+    if len(rows) > target_points:
+        step = len(rows) / target_points
+        rows = [rows[int(i * step)] for i in range(target_points)]
+    now = time.time()
+    last_ts = rows[-1]["ts"] if rows else None
+    age = (now - last_ts) if last_ts else None
+    freshness = "no_data" if age is None else ("live" if age < 45 else "stale")
+
+    def stats(key):
+        vals = [r[key] for r in rows if r[key] is not None]
+        if not vals:
+            return {"current": None, "min": None, "avg": None, "max": None}
+        return {"current": vals[-1], "min": min(vals), "avg": round(sum(vals) / len(vals), 3), "max": max(vals)}
+
+    return {
+        "station": sid, "range": range_key, "sample_count": len(rows), "freshness": freshness,
+        "last_sample_age_sec": round(age, 1) if age is not None else None,
+        "points": [{"ts": r["ts"], "fps": r["fps"], "speed": r["speed"], "bitrate_kbps": r["bitrate_kbps"],
+                    "overall_level": r["overall_level"]} for r in rows],
+        "fps": stats("fps"), "speed": stats("speed"), "bitrate_kbps": stats("bitrate_kbps"),
+    }
+
+
+@app.get("/api/monitoring/telemetry")
+def monitoring_telemetry(station: str = "lofi", range: str = "1h", user: str = Depends(current_user)):
+    _sid(station)
+    if range not in TELEMETRY_RANGES:
+        raise HTTPException(400, f"range must be one of {list(TELEMETRY_RANGES)}")
+    return _telemetry_series(station, range)
+
+
+@app.get("/api/monitoring/overview")
+def monitoring_overview(station: str = "lofi", user: str = Depends(current_user)):
+    _sid(station)
+    stream = _stream_status(station)
+    st = db.get_settings(station)
+    health = _youtube_health(station, stream, st)
+    yt_state = youtube_oauth.get_youtube_state(station)
+    open_incidents = db.q("SELECT id,severity,category,title,message,updated_at,count FROM alerts "
+                           "WHERE state IN ('open','acknowledged') AND category IN "
+                           "('stream','silence','usb','youtube_ingest','youtube_lifecycle') "
+                           "ORDER BY updated_at DESC LIMIT 20")
+    return {
+        "station": station,
+        "monitoring_active": True,   # this endpoint answering IS the local-monitoring-active signal
+        "external_monitor": {"configured": True, "label": "hetzner-usg (external)",
+                              "note": "HGC cannot observe this monitor's own last-check time from here — use Send Test Push to verify the channel end-to-end."},
+        "local_monitor": {"configured": True, "label": "pi-node-01 (LAN-local)",
+                           "note": "Same limitation as above — verified via the same test push."},
+        "alerting_armed": _ntfy_topic() is not None,
+        "broadcast_health": health["overall"],
+        "youtube": {"lifecycle_status": yt_state.get("lifecycle_status"), "stream_status": yt_state.get("stream_status"),
+                    "bound": yt_state.get("bound"), "connected": yt_state.get("connected")},
+        "encoder": {"fps": stream.get("fps"), "speed": health.get("speed"), "bitrate_kbps": stream.get("bitrate_kbps"),
+                    "drop_frames": stream.get("drop_frames"), "state": stream.get("state"),
+                    "uptime_sec": stream.get("uptime_sec"), "restarts": stream.get("restarts")},
+        "liquidsoap_alive": liq.alive(station),
+        "open_incidents": [dict(r) for r in open_incidents],
+        "open_incident_count": len(open_incidents),
+    }
+
+
+ALERT_RULES = [
+    {"key": "youtube_ingest", "condition": "YouTube liveStream ingest inactive while connected+bound", "severity": "critical"},
+    {"key": "youtube_lifecycle", "condition": "YouTube broadcast lifecycle is complete/revoked", "severity": "warning"},
+    {"key": "stream_stall_heartbeat", "condition": "No FFmpeg -progress heartbeat for 30s", "severity": "critical"},
+    {"key": "stream_stall_first", "condition": "No first FFmpeg -progress line 20s after start", "severity": "critical"},
+    {"key": "stream_stall_forward", "condition": "FFmpeg heartbeat live but frame/out_time frozen 30s", "severity": "critical"},
+    {"key": "liquidsoap_stall", "condition": "Audio position frozen 90s while a track is on air", "severity": "critical"},
+    {"key": "silence", "condition": "Output silent (RMS < 0.0005) for 90s while a track is on air", "severity": "critical"},
+    {"key": "usb", "condition": "Media drive unmounted, read-only, or filesystem in shutdown state", "severity": "critical"},
+    {"key": "speed_degraded", "condition": "Realtime speed < 0.85x", "severity": "warning"},
+    {"key": "drop_frames", "condition": "Dropped frames > 50 this run", "severity": "warning"},
+]
+
+
+@app.get("/api/monitoring/rules")
+def monitoring_rules(user: str = Depends(current_user)):
+    """Fixed defaults for this release — see docs/monitoring-alerts.md for why these aren't
+    yet operator-editable (thresholds live in code next to the checks they describe, so they
+    can never drift out of sync with what's actually being evaluated)."""
+    return {"rules": ALERT_RULES}
+
+
+class MonitoringTestBody(BaseModel):
+    kind: str   # push | simulate_down | simulate_warning | simulate_recovery
+
+
+@app.post("/api/monitoring/test")
+def monitoring_test(body: MonitoringTestBody, station: str = "lofi", user: str = Depends(current_user)):
+    _sid(station)
+    if body.kind == "push":
+        ok = ntfy_send("HUNGREE Goat TEST [Control]", f"Test push from {station} — if you see this, alerting is working.", "default")
+        if not ok:
+            raise HTTPException(409, "No ntfy topic configured — see docs/monitoring-alerts.md")
+        return {"ok": True}
+    if body.kind == "simulate_down":
+        db.log_event("critical", "test", f"[TEST] Simulated outage on {station} — no real service was affected", station)
+        ntfy_send("HUNGREE Goat TEST OUTAGE [Control]", f"[TEST] Simulated outage on {station} — not a real incident.", "default")
+        return {"ok": True}
+    if body.kind == "simulate_warning":
+        db.log_event("warning", "test", f"[TEST] Simulated warning on {station} — no real service was affected", station)
+        return {"ok": True}
+    if body.kind == "simulate_recovery":
+        n = db.resolve_alerts("test", station)
+        ntfy_send("HUNGREE Goat TEST RECOVERED [Control]", f"[TEST] Simulated recovery on {station}.", "default")
+        return {"ok": True, "resolved": n}
+    raise HTTPException(400, "kind must be one of: push, simulate_down, simulate_warning, simulate_recovery")
 
 
 @app.get("/api/version")

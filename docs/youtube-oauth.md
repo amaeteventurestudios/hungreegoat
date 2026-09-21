@@ -99,10 +99,12 @@ additional mount is needed for it.
    and "Connected."
 4. Each station needs to be **bound** to a specific YouTube stream/broadcast before its
    pipeline health shows real (not unverified) data. If a stream key is already saved for
-   that station, a **Broadcast Lifecycle** card appears with a **Bind station to YouTube
-   stream** button — click it once. This is the only time the app reads your stream key's
-   actual value; from then on it only uses the non-secret YouTube stream/broadcast IDs it
-   discovered.
+   that station, HGC **auto-binds it right after a successful connect** — no click needed in
+   the common case. If auto-discovery can't find a match (no stream found, multiple streams
+   found, an API error, or a quota issue), the Broadcast Lifecycle card shows the exact reason
+   and a **Bind station to YouTube stream** button to retry manually. This is the only time
+   the app reads your stream key's actual value; from then on it only uses the non-secret
+   YouTube stream/broadcast IDs it discovered.
 
 You won't be asked to re-approve on every reconnect — HUNGREE Goat requests offline access up
 front and reuses the refresh token it's given. You'll only see Google's consent screen again
@@ -127,7 +129,45 @@ and then connect again.
 - **Go Live / Start Testing / End Broadcast**: calls the real YouTube Live Streaming API
   transition for the bound broadcast. Every one of these requires an explicit confirmation
   click in the dialog that appears — there is no automatic or scheduled transition anywhere
-  in this feature.
+  in this feature. The backend is the sole authority on which of these is currently legal
+  (see below) — the buttons only ever reflect what it's confirmed, never a generic
+  "not-the-current-state" guess.
+
+## Lifecycle behavior
+
+YouTube enforces a real state machine: `created → ready → testing → live → complete`, and
+**`complete` is terminal** — a completed broadcast can never be transitioned back to
+testing/live, no matter what. HUNGREE Goat's backend computes the actual legal next steps
+(`youtube_oauth.legal_transitions()`) from the broadcast's live API state every time, and the
+transition endpoint rejects (`409`) anything not in that list — the dashboard's buttons are a
+display of that computed list, never an independent guess. If a station's bound broadcast
+reaches `complete`, HUNGREE Goat shows exactly that ("This YouTube broadcast has ended and
+cannot be restarted") and expects you to bind a replacement broadcast — it will never try to
+revive one automatically.
+
+Three `contentDetails` settings matter, especially for an unattended 24/7 station:
+
+- **`enableAutoStop`** — YouTube auto-*ends* the broadcast once ingest drops for a while if
+  this is on. For 24/7 streaming this is a real risk: a temporary encoder stall (see the
+  forward-progress watchdog in the root README) can turn into a *permanently completed*
+  broadcast purely because YouTube's own auto-stop fired. New broadcasts default this to
+  **off**.
+- **`enableAutoStart`** — if on, YouTube's own automatic mechanism, not the API caller, owns
+  the ready→live transition, **and this setting cannot be changed after the broadcast is
+  bound to a stream** (confirmed directly: the API returns
+  `enableAutoStartModificationNotAllowed` on an attempted update). New broadcasts default
+  this to **off** so HUNGREE Goat can drive the transition deterministically once ingest is
+  confirmed, instead of waiting on an opaque, undocumented auto-start timer.
+- **`monitorStream.enableMonitorStream`** — determines the legal path: `true` requires
+  `ready → testing → live`; `false` allows `ready → live` directly once `streamStatus` is
+  `active`. New broadcasts default this to **off** for the same determinism reason.
+
+**How HGC verifies ingest/live state**: `liveStreams().list(part="status")` for
+`status.streamStatus` (is data actually arriving) and `status.healthStatus.status`, and
+`liveBroadcasts().list(part="status,snippet,contentDetails")` for `status.lifeCycleStatus`,
+`status.privacyStatus`, and `snippet.actualStartTime` (only set once genuinely live — never
+fabricated locally). These are the same fields the YouTube Setup page and
+`GET /v1/health/broadcast` both render from.
 
 ## Troubleshooting
 

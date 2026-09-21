@@ -15,8 +15,12 @@ a documented rollback target, not actively serving traffic. Both share the same
   1280×300 overlay band (artwork, title, artist, branding) piped in at 30 fps; audio stream-copied; RTMPS to YouTube.
   A background-visuals helper process (BgFeeder) feeds the looping video behind that overlay.
 - **HUNGREE Goat Control** (FastAPI, port 8090, LAN-only) — catalog (SQLite), scheduler, queue, alerts, uploads,
-  YouTube setup (local-encoder health only — no YouTube Data API integration exists yet, so YouTube-side receipt/live
-  status is always reported as unverified, never inferred), operator SPA (`static/`), and the public read-only router (`/v1/*`).
+  YouTube setup (local-encoder health always available; an optional OAuth connection — see `docs/youtube-oauth.md` —
+  adds real YouTube Data/Live Streaming API verification of ingest and broadcast lifecycle, with a
+  backend-authoritative legal-transition state machine; without it, YouTube-side status is honestly reported as
+  unverified, never inferred), a background watchdog that persists telemetry and raises/resolves alerts on real
+  encoder/YouTube state (`docs/monitoring-alerts.md`), operator SPA (`static/`), and the public read-only router
+  (`/v1/*`, including the semantic `GET /v1/health/broadcast` used by external monitoring).
 
 ## Public surfaces
 Static, framework-free pages built by `packages/shared/build.mjs`, which copies brand assets, injects the API base and

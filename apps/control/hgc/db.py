@@ -162,6 +162,22 @@ CREATE TABLE IF NOT EXISTS mix_tracks (
   transition_in_sec REAL, transition_duration_sec REAL,
   PRIMARY KEY(mix_id, position)
 );
+
+-- Server-side telemetry history (Monitoring & Alerts) --------------------------------------
+-- One row per station per watchdog tick (~15s). Deliberately flat/simple — a browser closing
+-- for hours and reopening needs to see what happened, not a full metrics stack. Pruned to 7
+-- days by prune_telemetry() from the same watchdog loop that writes it.
+CREATE TABLE IF NOT EXISTS telemetry (
+  id INTEGER PRIMARY KEY,
+  ts REAL NOT NULL,
+  station TEXT NOT NULL,
+  fps REAL, speed REAL, bitrate_kbps REAL, drop_frames INTEGER,
+  encoder_state TEXT,           -- running | starting | restarting | waiting | stopped
+  liquidsoap_alive INTEGER, bg_ok INTEGER,
+  youtube_stream_status TEXT, youtube_lifecycle_status TEXT,
+  overall_level TEXT            -- healthy | warning | critical | offline | unverified
+);
+CREATE INDEX IF NOT EXISTS idx_telemetry_station_ts ON telemetry(station, ts);
 """
 
 
@@ -306,6 +322,7 @@ def log_event(severity: str, category: str, message: str, station: str | None = 
 ALERT_TITLES = {
     "usb": "Media drive", "silence": "Silence guard", "fallback": "Fallback", "stream": "Stream",
     "media": "Media", "auth": "Authentication", "system": "System", "schedule": "Schedule", "queue": "Queue", "api": "API",
+    "youtube_ingest": "YouTube Ingest", "youtube_lifecycle": "YouTube Broadcast",
 }
 
 
@@ -331,3 +348,23 @@ def resolve_alerts(category: str, station: str | None = None, note: str | None =
         if station:
             q_ += " AND station=?"; params.append(station)
         return c.execute(q_, params).rowcount
+
+
+def log_telemetry(station: str, sample: dict) -> None:
+    with tx() as c:
+        c.execute("INSERT INTO telemetry(ts,station,fps,speed,bitrate_kbps,drop_frames,encoder_state,"
+                  "liquidsoap_alive,bg_ok,youtube_stream_status,youtube_lifecycle_status,overall_level) "
+                  "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                  (time.time(), station, sample.get("fps"), sample.get("speed"), sample.get("bitrate_kbps"),
+                   sample.get("drop_frames"), sample.get("encoder_state"), sample.get("liquidsoap_alive"),
+                   sample.get("bg_ok"), sample.get("youtube_stream_status"), sample.get("youtube_lifecycle_status"),
+                   sample.get("overall_level")))
+
+
+def prune_telemetry(retain_days: float = 7.0) -> int:
+    with tx() as c:
+        return c.execute("DELETE FROM telemetry WHERE ts < ?", (time.time() - retain_days * 86400,)).rowcount
+
+
+def query_telemetry(station: str, since_ts: float) -> list[sqlite3.Row]:
+    return q("SELECT * FROM telemetry WHERE station=? AND ts>=? ORDER BY ts ASC", (station, since_ts))
