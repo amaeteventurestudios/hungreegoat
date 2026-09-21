@@ -1609,12 +1609,18 @@ def _youtube_health(sid: str, stream: dict, st: dict) -> dict:
             elif recv_status == "ok":
                 level, title = "healthy", "Verified — YouTube Receiving"
                 message = "YouTube confirms it is receiving the stream. Check YouTube Studio to go live."
+            elif yt_state.get("lifecycle_status") in ("complete", "revoked"):
+                # Distinct from generic "not receiving": the bound broadcast itself has ended
+                # and cannot resume on its own — a different operator action is needed (bind a
+                # replacement broadcast), not just "wait for ingest to recover".
+                level, title = "warning", "YouTube Broadcast Ended"
+                message = "Local encoder is healthy, but the bound YouTube broadcast has ended and cannot restart on its own. See Broadcast Lifecycle below."
             else:
                 level, title = "warning", "Degraded — YouTube Not Receiving"
                 message = (f"YouTube is connected but isn't confirming ingest right now "
                            f"(status: {yt_state.get('stream_status') or 'unknown'}) — check YouTube Studio.")
         else:
-            level, title = "unverified", "Local Output Active — YouTube Not Confirmed"
+            level, title = "unverified", "Local Output Active — YouTube Verification Unavailable"
             message = ("Main encoder is running and sending to YouTube, but HUNGREE Goat Control has no YouTube "
                        "API connection to confirm YouTube is actually receiving it or airing it live. Check YouTube Studio.")
 
@@ -1840,6 +1846,17 @@ class YouTubeTransitionBody(BaseModel):
 @app.post("/api/stations/{sid}/youtube/broadcast/{broadcast_id}/transition")
 def youtube_broadcast_transition(sid: str, broadcast_id: str, body: YouTubeTransitionBody, user: str = Depends(current_user)):
     _sid(sid)
+    if body.status not in ("testing", "live", "complete"):
+        raise HTTPException(400, "invalid transition status")
+    # Backend-authoritative legality check (see youtube_oauth.legal_transitions) — this is what
+    # actually prevents the UI-safety bug found in the 2026-09-20/21 outage (a `complete`
+    # broadcast still showing enabled Start Testing / Go Live buttons): the frontend's buttons
+    # are a display hint only, this is the real gate. Forced fresh (not cached) so a mutation
+    # is never allowed against a stale lifecycle read.
+    state = youtube_oauth.get_youtube_state(sid, force=True)
+    if body.status not in (state.get("legal_transitions") or []):
+        raise HTTPException(409, f"'{body.status}' is not a legal transition from the current "
+                                  f"lifecycle ({state.get('lifecycle_status') or 'unknown'})")
     try:
         youtube_oauth.transition_broadcast(sid, broadcast_id, body.status)
     except ValueError as e:

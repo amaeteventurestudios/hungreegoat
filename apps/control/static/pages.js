@@ -564,7 +564,8 @@ pages.youtube = { live:true,
   const heroHtml = `<div class="panel yt-status ${OV.level}" data-key="yt-hero"><span class="ic badge-lvl ${ICN[{healthy:'green',warning:'amber',critical:'red',offline:'slate',unverified:'cyan'}[OV.level]]||''}">${LVL_ICON[OV.level]||I.info}</span>
     <div class="body"><span class="lvl-tag ${OV.level}">${h(LVL_LABEL[OV.level]||OV.level)}</span><h2>${h(OV.title)}</h2><p>${h(OV.message)}</p>
     <div class="yt-mini">
-      <div class="m"><div class="k">Uptime</div><div class="v">${running?fmtLong(y.uptime_sec):'—'}</div></div>
+      <div class="m"><div class="k">Local Encoder Uptime</div><div class="v">${running?fmtLong(y.uptime_sec):'—'}</div></div>
+      <div class="m"><div class="k">YouTube Live Duration</div><div class="v">${broadcast.lifecycle_status==='live'&&broadcast.actual_start_time?fmtLong(Math.max(0,Math.round((Date.now()-new Date(broadcast.actual_start_time).getTime())/1000))):'Unavailable'}</div></div>
       <div class="m"><div class="k">Auto-Recovery</div><div class="v">${AR.armed?(AR.in_progress?'Recovering…':'Armed'):'Disabled'}</div></div>
       <div class="m"><div class="k">Watchdog</div><div class="v">${AR.watchdog_timeout_sec}s</div></div>
     </div></div></div>`;
@@ -626,14 +627,26 @@ pages.youtube = { live:true,
         <p class="small muted" style="margin:8px 0 0">This stream is verified, but isn't bound to any YouTube broadcast — create one in YouTube Studio and bound to this stream key, then Re-bind here.</p>
         <button class="btn sm ghost" type="button" data-act="yt-rebind" style="margin-top:8px">${I.restart} Re-bind</button>
       </div></div>`;
+    } else if (broadcast.lifecycle_status === 'complete' || broadcast.lifecycle_status === 'revoked') {
+      // Terminal state — YouTube will reject every transition from here (this is exactly the
+      // 2026-09-20/21 incident: the old code showed this lifecycle while still enabling Start
+      // Testing/Go Live, both of which the API correctly rejected as invalidTransition). No
+      // transition button is ever shown for a terminal lifecycle, full stop.
+      goLiveHtml = `<div class="panel" data-key="yt-golive"><div class="panel-h"><h3>${ic(I.yt,'red')}Broadcast Lifecycle</h3><span class="right">${pill('off',broadcast.lifecycle_status)}${help("Shows the real YouTube broadcast bound to this station's stream key, and lets you move it through YouTube's own broadcast lifecycle.")}</span></div><div class="panel-b">
+        <dl class="kv"><dt>Ingest status</dt><dd>${h(broadcast.stream_status||'—')}</dd><dt>Lifecycle status</dt><dd>${h(broadcast.lifecycle_status)}</dd><dt>Broadcast ID</dt><dd class="mono small">${h(broadcast.broadcast_id||'—')}</dd></dl>
+        <p class="small muted" style="margin:8px 0 0"><b>This YouTube broadcast has ended and cannot be restarted.</b> Create a new broadcast in YouTube Studio bound to this station's persistent stream, then Re-bind here — HUNGREE Goat never creates a broadcast on your channel automatically.</p>
+        <button class="btn sm ghost" type="button" data-act="yt-rebind" style="margin-top:8px">${I.restart} Re-bind</button>
+      </div></div>`;
     } else {
       const lifecycle = broadcast.lifecycle_status;
+      const legal = broadcast.legal_transitions || [];
       const TRANSITIONS = [['testing','Start Testing'],['live','Go Live'],['complete','End Broadcast']];
       goLiveHtml = `<div class="panel" data-key="yt-golive"><div class="panel-h"><h3>${ic(I.yt,lifecycle==='live'?'green':'red')}Broadcast Lifecycle</h3><span class="right">${lifecycle?pill(lifecycle==='live'?'green':'amber',lifecycle):''}${help("Shows the real YouTube broadcast bound to this station's stream key, and lets you move it through YouTube's own broadcast lifecycle. Go Live and End Broadcast affect your real, public YouTube channel immediately.")}</span></div><div class="panel-b">
         <dl class="kv"><dt>Ingest status</dt><dd>${h(broadcast.stream_status||'—')}</dd><dt>Lifecycle status</dt><dd>${h(lifecycle||'—')}</dd><dt>Broadcast ID</dt><dd class="mono small">${h(broadcast.broadcast_id||'—')}</dd></dl>
-        <div class="row-actions" style="margin-top:8px">${TRANSITIONS.map(([v,l])=>`<button class="btn sm ${v==='live'?'recover':v==='complete'?'ghost red':''}" type="button" data-act="yt-golive" data-status="${v}" ${lifecycle===v?'disabled':''}>${l}</button>`).join('')}
+        <div class="row-actions" style="margin-top:8px">${TRANSITIONS.map(([v,l])=>`<button class="btn sm ${v==='live'?'recover':v==='complete'?'ghost red':''}" type="button" data-act="yt-golive" data-status="${v}" ${legal.includes(v)?'':'disabled'}>${l}</button>`).join('')}
         <button class="btn sm ghost" type="button" data-act="yt-rebind">${I.restart} Re-bind</button></div>
-        <div class="small muted" style="margin-top:8px">These buttons call the real YouTube Live Streaming API — Go Live and End Broadcast take effect on your actual channel immediately, and each requires a confirmation click.</div>
+        <div class="small muted" style="margin-top:8px">These buttons call the real YouTube Live Streaming API — Go Live and End Broadcast take effect on your actual channel immediately, and each requires a confirmation click. Only the transitions the backend confirms are legal from the current lifecycle are enabled — not just "not the current state."</div>
+        ${!legal.length && lifecycle!=='live' ? `<p class="small muted" style="margin-top:8px">${lifecycle==='ready'||lifecycle==='created' ? 'Waiting for YouTube ingest to show active before any transition can be offered.' : ''}</p>` : ''}
       </div></div>`;
     }
   }
@@ -673,7 +686,20 @@ pages.youtube = { live:true,
   else if (sendBad) connState = 'disconnected';
   else if (sendOk) connState = 'sending';
   else connState = 'stopped';
-  const CONN_LABEL = {sending:'SENDING',disconnected:'DISCONNECTED',reconnecting:'RECONNECTING',recovering:'RECOVERING',success:'OUTPUT RESTARTED',failed:'RECONNECT FAILED',stopped:'STOPPED'};
+  // Real YouTube-backed semantic badge — never the vague "SENDING" when real API state is
+  // available (see Part 7 of the 2026-09-20/21 incident follow-up): local delivery being fine
+  // (connState sending/success) says nothing about whether YouTube is actually receiving or
+  // airing it, which is exactly the contradiction this used to show ("YouTube Verification:
+  // Verified" next to "YouTube confirmation unavailable" in the same panel).
+  const ytVerified = !!broadcast.bound && !broadcast.stale && !!broadcast.connected && !broadcast.error;
+  const ytSemanticLabel = () => {
+    if (!ytVerified) return 'UNVERIFIED';
+    if (broadcast.lifecycle_status === 'live') return 'LIVE';
+    if (broadcast.lifecycle_status === 'complete' || broadcast.lifecycle_status === 'revoked') return 'COMPLETE';
+    if (broadcast.stream_status === 'active') return 'RECEIVING';
+    return 'DEGRADED';
+  };
+  const CONN_LABEL = {sending:ytSemanticLabel(),disconnected:'DISCONNECTED',reconnecting:'RECONNECTING',recovering:'RECOVERING',success:ytSemanticLabel(),failed:'RECONNECT FAILED',stopped:'STOPPED'};
   const outputLabel = (connState==='reconnecting'||connState==='recovering') ? ['Restarting','amber'] : (connState==='sending'||connState==='success') ? ['Sending','green'] : (connState==='disconnected'||connState==='failed') ? ['Not Sending','red'] : ['Not Sending','muted2'];
   const bgLbl = !healthAvailable ? ['Unavailable','muted2'] : bgStage ? (bgStage.status==='ok'?['Running','green']:(running?['Stopped','red']:['Unavailable','muted2'])) : ['Unavailable','muted2'];
   const elapsedS = state._reconnecting ? Math.max(0,Math.round((Date.now()-state._reconnecting.since)/1000)) : state._reconnectPending ? Math.max(0,Math.round((Date.now()-state._reconnectPending.since)/1000)) : 0;
@@ -681,17 +707,28 @@ pages.youtube = { live:true,
   const btnDisabled = btnBusy || connState==='recovering' || !running;
   const btnCls = (connState==='disconnected'||connState==='failed') ? 'recover' : btnBusy||connState==='recovering' ? 'amber' : '';
   const btnLabel = btnBusy ? `Reconnecting…${elapsedS?` (${elapsedS}s)`:''}` : connState==='recovering' ? 'Auto-Recovery in Progress…' : connState==='failed' ? 'Try Again' : 'Reconnect to YouTube';
+  // Real-state copy for the local-delivery-is-fine cases — never the old fixed "YouTube
+  // confirmation unavailable" line once a real YouTube API connection actually confirms
+  // (or contradicts) it. This was the exact contradiction flagged after the outage: this panel
+  // said "confirmation unavailable" in the same render as Advanced Settings saying "Verified."
+  const ytSendingNote = () => {
+    if (!ytVerified) return `Sending locally — <b>YouTube confirmation unavailable.</b>`;
+    if (broadcast.lifecycle_status === 'live') return `<b>${I.check} Local encoder is healthy. YouTube is receiving the stream and confirms the broadcast is live.</b>`;
+    if (broadcast.lifecycle_status === 'complete' || broadcast.lifecycle_status === 'revoked') return `<b>${I.alert} Local encoder is running, but the bound YouTube broadcast has ended</b> — it cannot resume on its own. See Broadcast Lifecycle below.`;
+    if (broadcast.stream_status === 'active') return `Local encoder is healthy. YouTube confirms it is receiving the stream (not live yet — see Broadcast Lifecycle below).`;
+    return `<b>${I.alert} Local encoder is running, but YouTube is not currently confirming ingest.</b>`;
+  };
   const stateNote = {
-    sending: `<div class="note" style="margin-top:10px">Sending locally — <b>YouTube confirmation unavailable.</b></div>`,
+    sending: `<div class="note${ytVerified&&broadcast.lifecycle_status!=='live'&&broadcast.stream_status!=='active'?' warn':''}" style="margin-top:10px">${ytSendingNote()}</div>`,
     disconnected: `<div class="note red" style="margin-top:10px"><b>${I.alert} YouTube is not receiving the stream right now.</b><br>Your music can keep playing while HUNGREE Goat restarts the video/YouTube streaming process.</div>`,
     reconnecting: `<div class="note warn" style="margin-top:10px"><b><span class="spin" style="display:inline-flex">${I.restart}</span> ${state._reconnectPending?'Waiting for the stream to come back up…':'Restarting the video/YouTube streaming process…'}</b></div>`,
     recovering: `<div class="note warn" style="margin-top:10px"><b><span class="spin" style="display:inline-flex">${I.restart}</span> Auto-recovery is already restarting the stream…</b><br>Manual reconnect is disabled for a moment so we don't start a second, overlapping restart.</div>`,
-    success: `<div class="note green" style="margin-top:10px"><b>${I.check} Local streaming output restarted successfully.</b><br><b>YouTube confirmation unavailable</b> — this means the local restart worked, not that YouTube has verified the broadcast.</div>`,
+    success: `<div class="note green" style="margin-top:10px"><b>${I.check} Local streaming output restarted successfully.</b><br>${ytSendingNote()}</div>`,
     failed: `<div class="note red" style="margin-top:10px"><b>${I.alert} Could not restart the YouTube streaming output.</b><br>${h((state._reconnectResult&&state._reconnectResult.error)||'')}</div>`,
     stopped: `<div class="note" style="margin-top:10px">Start the engine first — see Advanced Settings → Danger Zone.</div>`,
   }[connState] || '';
   const reconnectHtml = `<div class="panel yt-conn ${connState}" data-key="yt-reconnect"><div class="panel-h"><h3>${ic(I.link,{sending:'green',success:'green',disconnected:'red',failed:'red',reconnecting:'amber',recovering:'amber',stopped:''}[connState])}YouTube Connection</h3><span class="right"><span class="yt-conn-badge ${connState}">${CONN_LABEL[connState]}</span>${help("This shows whether HUNGREE Goat is sending the stream toward YouTube and lets you restart that connection if it stops working.")}</span></div><div class="panel-b">
-    <dl class="kv"><dt>Engine</dt><dd>${running?'<span class="green">Running</span>':'<span class="red">Stopped</span>'}</dd><dt>Music</dt><dd>${s.liquidsoap.alive?'<span class="green">Playing</span>':'<span class="muted2">Not Playing</span>'}</dd><dt>Background Visuals</dt><dd><span class="${bgLbl[1]}">${bgLbl[0]}</span></dd><dt>Stream Output</dt><dd><span class="${outputLabel[1]}">${outputLabel[0]}</span></dd><dt>YouTube Verification</dt><dd>${broadcast.bound&&!broadcast.stale?'<span class="green">Verified</span>':'<span class="muted2">Unavailable</span>'}</dd></dl>
+    <dl class="kv"><dt>Engine</dt><dd>${running?'<span class="green">Running</span>':'<span class="red">Stopped</span>'}</dd><dt>Music</dt><dd>${s.liquidsoap.alive?'<span class="green">Playing</span>':'<span class="muted2">Not Playing</span>'}</dd><dt>Background Visuals</dt><dd><span class="${bgLbl[1]}">${bgLbl[0]}</span></dd><dt>Stream Output</dt><dd><span class="${outputLabel[1]}">${outputLabel[0]}</span></dd><dt>YouTube Verification</dt><dd>${ytVerified?'<span class="green">Verified</span>':'<span class="muted2">Unavailable</span>'}</dd></dl>
     ${stateNote}
     <button class="btn ${btnCls} wide" type="button" style="margin-top:10px" data-act="yt-reconnect" title="This restarts the video streaming connection. Your music keeps playing." ${btnDisabled?'disabled':''}>${btnBusy?`<span class="spin">${I.restart}</span>`:I.restart} ${btnLabel}</button>
     <div class="small muted" style="margin-top:8px">Restarts the video/YouTube streaming process only — Liquidsoap and your music are not affected. Same action as "Restart engine" in Advanced Settings → Danger Zone.${(y.restarts||0)>0?` Restarted ${y.restarts} time${y.restarts===1?'':'s'} this run.`:''}</div>
@@ -801,7 +838,7 @@ pages.youtube = { live:true,
       </div>
       <div class="two">
         ${advCard(I.yt,oauth.connected?'green':'red','YouTube Connection',"This connection lets HUNGREE Goat verify whether YouTube is actually receiving the stream and whether the broadcast is live.",
-          `<dl class="kv"><dt>Account Authorization</dt><dd>${oauth.connected?pill(oauth.degraded?'amber':'green',oauth.degraded?'degraded':'connected'):pill('off','not connected')}</dd><dt>YouTube Verification</dt><dd>${broadcast.bound&&!broadcast.stale?pill('green','bound'):pill('off','unavailable')}</dd><dt>Channel${(oauth.connected&&oauth.channel_title)?'':' <span class="muted2">(reference only)</span>'}</dt><dd>${h((oauth.connected&&oauth.channel_title)?oauth.channel_title:(m.channel||'—'))}</dd></dl>
+          `<dl class="kv"><dt>Account Authorization</dt><dd>${oauth.connected?pill(oauth.degraded?'amber':'green',oauth.degraded?'degraded':'connected'):pill('off','not connected')}</dd><dt>YouTube Verification</dt><dd>${ytVerified?pill('green','bound'):pill('off','unavailable')}</dd><dt>Channel${(oauth.connected&&oauth.channel_title)?'':' <span class="muted2">(reference only)</span>'}</dt><dd>${h((oauth.connected&&oauth.channel_title)?oauth.channel_title:(m.channel||'—'))}</dd></dl>
           <div class="small muted" style="margin-top:8px">See the YouTube Account Integration card near the top of this page.</div>`)}
         ${advCard(I.cpu,'','Diagnostics',"This contains technical troubleshooting information. You normally will not need this unless something goes wrong.",
           `<dl class="kv"><dt>Main FFmpeg PID</dt><dd>${y.pid||'—'}</dd><dt>Background helper PID</dt><dd>${DG.bg_pid||'—'}</dd><dt>Dropped frames</dt><dd>${y.drop_frames||0}</dd><dt>Duplicate frames</dt><dd>${y.dup_frames||0}</dd><dt>Restart counters</dt><dd>${y.restarts||0} video (this run) · ${DG.bg_restarts||0} background</dd><dt>Status file</dt><dd class="mono small">${h(DG.status_file||'—')}</dd><dt>FFmpeg log</dt><dd class="mono small">${h(DG.ffmpeg_log||'—')}</dd></dl>

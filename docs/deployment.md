@@ -38,3 +38,11 @@ The original gateway (65.21.7.133) is confirmed unreachable and has been replace
 3. On the gateway as root: `infra/gateway/install-hetzner.sh` (creates `hgtunnel`, installs the two vhosts, certbot).
 4. Verify: `curl https://api.hungreegoat.com/v1/live`; open `https://control.hungreegoat.com` → login page.
 - Deployments are accepted only for commits authored by the Vercel-linked GitHub account (`amaeteventurestudios`); the repo's local git config is set to its no-reply address.
+- **Read-only admin access** (`hermes-ro`, no sudo beyond `docker ps`/`docker compose ls`) is
+  meant to be reached as `ssh hetzner-usg` — the local `~/.ssh/config.d/` alias on the Beelink
+  had drifted after this migration (still pointing at the retired 65.21.7.133) and was
+  corrected 2026-09-21. If `ssh hetzner-usg` ever times out again, check that alias against
+  `hcloud server list` before assuming the host itself is down.
+- **Semantic broadcast health**: `https://api.hungreegoat.com/v1/health/broadcast?station=<sid>`
+  (see `docs/monitoring-alerts.md`) — proxied the same way as the rest of `/v1/*`, no gateway
+  changes needed for it.

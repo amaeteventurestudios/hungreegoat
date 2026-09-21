@@ -16,3 +16,10 @@
   included in the Logs export/diagnostics feature. A lost/expired/revoked token degrades this
   feature only — it never stops or restarts Liquidsoap/FFmpeg.
 - **Media** never enters Git (`*.wav`, `music/`, `media/`).
+- **Monitoring** (see `docs/monitoring-alerts.md`): the ntfy.sh push topic
+  (`~/.config/hungree-goat/ntfy-topic.txt` on the Beelink; `~/.hgc-ntfy-topic` on the two
+  monitoring hosts, all 0600) is low-sensitivity but not public — anyone who learns it can post
+  to and read that notification channel, though it grants no control over the broadcast itself.
+  The external monitor cron job runs as the pre-existing restricted `hermes-ro` account on the
+  shared Hetzner gateway (no sudo beyond `docker ps`/`docker compose ls`) and only ever makes
+  outbound HTTPS requests — it was not granted any new permission to add this.

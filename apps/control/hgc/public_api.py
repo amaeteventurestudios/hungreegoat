@@ -138,6 +138,51 @@ def live():
     return Response(content=__import__("json").dumps({"stations": d, "server_time": dt.datetime.now(dt.timezone.utc).isoformat()}), media_type="application/json", headers=PUBLIC_HEADERS)
 
 
+# Semantic health for external monitoring (see docs/monitoring-alerts.md) — deliberately an
+# exception to this module's "no metrics" rule above: a monitor needs enough real signal to
+# tell "the API answered 200" apart from "the broadcast is actually healthy" (exactly the gap
+# that let the 2026-09-20/21 stall go undetected). Reuses the same _youtube_health() the
+# dashboard itself renders from, so this can never drift into a second, inconsistent notion of
+# "healthy" — no paths, PIDs, hosts or secrets are included, only the fields a monitor needs.
+_HEALTH_LEVEL_MAP = {"healthy": "healthy", "warning": "degraded", "critical": "critical",
+                     "offline": "offline", "unverified": "unverified"}
+
+
+def _broadcast_health(sid: str) -> dict:
+    from . import main as m
+    stream = m._stream_status(sid)
+    st = db.get_settings(sid)
+    h = m._youtube_health(sid, stream, st)
+    ls = liq.status(sid)
+    pipeline = {p["key"]: p["status"] for p in h["pipeline"]}
+    return {
+        "status": _HEALTH_LEVEL_MAP.get(h["overall"]["level"], h["overall"]["level"]),
+        "station": sid,
+        "liquidsoap": "running" if "uptime" in ls else "stopped",
+        "ffmpeg": "running" if stream.get("state") == "running" and not stream.get("stale") else stream.get("state") or "stopped",
+        "fps": stream.get("fps"),
+        "speed": h.get("speed"),
+        "bitrate_kbps": stream.get("bitrate_kbps"),
+        "drop_frames": stream.get("drop_frames"),
+        "background_visuals": pipeline.get("bg"),
+        "youtube_ingest": pipeline.get("receive"),
+        "youtube_broadcast": pipeline.get("live"),
+        "detail": h["overall"]["title"],
+        "server_time": dt.datetime.now(dt.timezone.utc).isoformat(),
+    }
+
+
+@router.get("/health/broadcast")
+def health_broadcast(station: str = "lofi"):
+    if station not in config.STATIONS:
+        raise HTTPException(404)
+    data = _cached(f"health-{station}", 3, lambda: _broadcast_health(station))
+    # A monitor must be able to tell "unhealthy" apart from "the health check itself failed" —
+    # HTTP 200 always, with status in the body, matches how Uptime-Kuma-style keyword/JSON
+    # query checks are normally configured (alert on body content, not transport status).
+    return Response(content=__import__("json").dumps(data), media_type="application/json", headers=PUBLIC_HEADERS)
+
+
 @router.get("/artwork/{art}.jpg")
 def artwork(art: str):
     hdr = {"Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=86400"}

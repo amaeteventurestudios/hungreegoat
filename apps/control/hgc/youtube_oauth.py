@@ -289,6 +289,33 @@ def discover_and_bind(sid: str, stream_key: str) -> dict:
     return binding
 
 
+def legal_transitions(lifecycle_status: str | None, stream_status: str | None, monitor_enabled: bool) -> list[str]:
+    """Backend-authoritative legal-transition set for the broadcast lifecycle buttons — the
+    frontend must render buttons from exactly this list, never from a generic "disable only the
+    current state" check (that's the bug that let a `complete` broadcast still show enabled
+    Start Testing / Go Live buttons during the 2026-09-20/21 outage).
+
+    This is deliberately *necessary, not sufficient*: YouTube's real API has additional,
+    undocumented timing constraints beyond what's captured here (e.g. a `ready` broadcast with
+    active ingest and monitorStream enabled was still rejected with `invalidTransition` shortly
+    after binding during recovery from that outage) — so a button being enabled here is not a
+    guarantee the API call will succeed, only that it isn't *known-illegal*. The transition
+    endpoint's own error handling (see main.py's youtube_broadcast_transition) is what surfaces
+    a real rejection safely; this function's job is only to stop offering transitions that are
+    unconditionally wrong for the current lifecycle, like Go Live on a completed broadcast."""
+    if lifecycle_status in (None, "complete", "revoked"):
+        return []
+    if lifecycle_status == "live":
+        return ["complete"]
+    if lifecycle_status == "testing":
+        return ["complete"] + (["live"] if stream_status == "active" else [])
+    if lifecycle_status in ("ready", "created"):
+        if stream_status != "active":
+            return []
+        return ["testing"] if monitor_enabled else ["live"]
+    return []
+
+
 def get_youtube_state(sid: str, force: bool = False) -> dict:
     """Never raises — callers treat any problem here exactly like the no-OAuth case
     (fall back to 'unverified'), so a YouTube API hiccup can't make the dashboard itself look
@@ -313,13 +340,31 @@ def get_youtube_state(sid: str, force: bool = False) -> dict:
         stream_items = stream_resp.get("items") or []
         stream_status = stream_items[0]["status"]["streamStatus"] if stream_items else None
         lifecycle_status = None
+        title = privacy_status = actual_start_time = latency_preference = None
+        monitor_enabled = False
+        enable_auto_start = enable_auto_stop = None
         if binding.get("broadcast_id"):
-            b_resp = yt.liveBroadcasts().list(part="status", id=binding["broadcast_id"]).execute()
+            b_resp = yt.liveBroadcasts().list(part="status,snippet,contentDetails", id=binding["broadcast_id"]).execute()
             b_items = b_resp.get("items") or []
-            lifecycle_status = b_items[0]["status"]["lifeCycleStatus"] if b_items else None
+            if b_items:
+                b = b_items[0]
+                lifecycle_status = b["status"]["lifeCycleStatus"]
+                privacy_status = b["status"].get("privacyStatus")
+                snip = b.get("snippet", {})
+                title = snip.get("title")
+                actual_start_time = snip.get("actualStartTime")   # only set once really live; see main.py's duration calc
+                cd = b.get("contentDetails", {})
+                monitor_enabled = bool(cd.get("monitorStream", {}).get("enableMonitorStream"))
+                latency_preference = cd.get("latencyPreference")
+                enable_auto_start = cd.get("enableAutoStart")
+                enable_auto_stop = cd.get("enableAutoStop")
         data = {"bound": True, "connected": True, "stream_status": stream_status,
                 "lifecycle_status": lifecycle_status, "broadcast_id": binding.get("broadcast_id"),
-                "stream_id": binding.get("stream_id"), "last_verified": now}
+                "stream_id": binding.get("stream_id"), "last_verified": now,
+                "title": title, "privacy_status": privacy_status, "actual_start_time": actual_start_time,
+                "latency_preference": latency_preference, "monitor_stream_enabled": monitor_enabled,
+                "enable_auto_start": enable_auto_start, "enable_auto_stop": enable_auto_stop,
+                "legal_transitions": legal_transitions(lifecycle_status, stream_status, monitor_enabled)}
     except Exception as e:
         data = {"bound": True, "connected": True, "error": str(e)}
     _health_cache[sid] = {"data": data, "at": now}

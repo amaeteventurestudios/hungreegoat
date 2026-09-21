@@ -340,6 +340,52 @@ def read_env_file(p: Path) -> dict:
     return out
 
 
+class StallDetector:
+    """Pure, unit-testable stall logic for Streamer.run()'s supervisor loop — this class only
+    decides whether the numbers it's fed indicate a stall; process control (killing ffmpeg,
+    restarting, backoff) stays in Streamer itself. Three independent checks, none of which may
+    let one signal mask another:
+
+    (a) a progress heartbeat that *was* arriving and went stale (`ts` recency)
+    (b) no heartbeat ever arrived at all after starting (a still-None `ts`, distinct from (a) —
+        see the comment history: a process that hangs before its first `-progress` line was
+        invisible to a check that only covered (a), since a still-None ts made it False)
+    (c) — found during the 2026-09-20/21 YouTube outage — the heartbeat keeps ticking on
+        schedule (fresh `ts` every ~2s) but the block's own `frame`/`out_time_us` stop
+        advancing: a live-locked encode loop producing no real output, invisible to (a)
+        specifically *because* ts never goes stale. Tracked on its own independent clock
+        (`fwd_at`) so a live heartbeat can never hide it."""
+
+    HEARTBEAT_TIMEOUT = 30
+    FIRST_PROGRESS_TIMEOUT = 20
+    FORWARD_PROGRESS_TIMEOUT = 30
+
+    def __init__(self, start: float):
+        self.start = start
+        self.got_first_progress = False
+        self.fwd_key: tuple | None = None
+        self.fwd_at = start
+
+    def check(self, progress: dict, now: float) -> str | None:
+        """Feed it the current `self.progress` dict and the current time; returns a
+        human-readable stall reason, or None if nothing looks stalled."""
+        ts = progress.get("ts")
+        if ts:
+            self.got_first_progress = True
+        new_fwd_key = (progress.get("frame"), progress.get("out_time_us"))
+        if new_fwd_key != self.fwd_key and new_fwd_key != (None, None):
+            self.fwd_key = new_fwd_key
+            self.fwd_at = now
+        if ts and now - ts > self.HEARTBEAT_TIMEOUT:
+            return f"no progress update for {now - ts:.0f}s"
+        if not self.got_first_progress and now - self.start > self.FIRST_PROGRESS_TIMEOUT:
+            return f"no progress line at all {now - self.start:.0f}s after start"
+        if self.got_first_progress and now - self.fwd_at > self.FORWARD_PROGRESS_TIMEOUT:
+            return (f"progress heartbeat is live but frame/out_time hasn't advanced for "
+                    f"{now - self.fwd_at:.0f}s (encode live-locked)")
+        return None
+
+
 class Streamer:
     def __init__(self, sid: str):
         self.sid = sid
@@ -649,30 +695,14 @@ class Streamer:
                 t_feed.start(); t_prog.start(); t_bg.start()
                 start = time.time()
                 stalled = False
-                got_first_progress = False
+                stall_detector = StallDetector(start)
                 while self.proc.poll() is None and not self.stop_flag:
                     self._beat()
                     time.sleep(2)
                     self.write_status()
-                    ts = self.progress.get("ts")
-                    if ts:
-                        got_first_progress = True
-                    # Stall detection has two distinct cases, not one: (a) it *was*
-                    # producing progress and stopped (ts is stale), and (b) it never
-                    # produced a first progress line at all (ts is still None). The
-                    # original check only covered (a) — `if ts and ...` — so a process
-                    # that started but hung before ever emitting one `-progress` line
-                    # (stuck negotiating an input, e.g.) was invisible to this loop
-                    # forever: not dead (poll() stays None), not "stalled" by the old
-                    # check either, since a still-None ts made the condition False. This
-                    # is the most likely explanation for the prior 10-hour incident: the
-                    # process itself never actually exited, so nothing downstream of that
-                    # (the exit-code branch, the backoff, the next restart) ever ran.
-                    if ts and time.time() - ts > 30:
-                        self._log("supervisor", f"stall detected: no progress update for {time.time()-ts:.0f}s, restarting ffmpeg")
-                        stalled = True
-                    elif not got_first_progress and time.time() - start > 20:
-                        self._log("supervisor", f"stall detected: no progress line at all {time.time()-start:.0f}s after start, restarting ffmpeg")
+                    reason = stall_detector.check(self.progress, time.time())
+                    if reason:
+                        self._log("supervisor", f"stall detected: {reason}, restarting ffmpeg")
                         stalled = True
                     if stalled:
                         if not self._kill():
