@@ -350,20 +350,31 @@ summary.
   three forms, Liquidsoap/silence/media-drive checks, speed/drop-frame degradation) —
   reusing the existing events/alerts system (deduplication, persistence, resolve-on-recovery)
   rather than a second, parallel incident tracker.
-- **Safe test controls**: Send Test Push, Simulate Stream Down/Warning/Recovery — clearly
-  labeled `[TEST]`, never touch Liquidsoap/FFmpeg/the real YouTube broadcast.
+- **Safe test controls**: Send Test Push, Send Test Email, Simulate Stream Down/Warning/
+  Recovery — clearly labeled `[TEST]`, never touch Liquidsoap/FFmpeg/the real YouTube
+  broadcast.
+- **Cross-perspective correlation**: the local (Pi) monitor checks both Beelink-over-LAN and
+  the public endpoint in the same run and classifies them together (e.g. "Public/external
+  connectivity degraded" vs "HUNGREE Goat broadcast host unreachable") instead of leaving
+  correlation entirely to a human comparing two separate alerts.
 
 **Requires configuration:**
-- **Email escalation** — `Provider configuration required`. No SMTP credentials exist yet;
-  the escalation architecture (immediate push → 5 min unresolved → 10 min unresolved) is
-  ready for it.
-- **SMS escalation** — `Provider configuration required`, same architecture.
+- **Email escalation (Resend)** — activates automatically once a Resend API key is placed at
+  `~/hungree-goat/secrets/resend-api-key.txt`; until then shown honestly as
+  `Resend API key required`. Sender `alerts@hungreegoat.com`, destination
+  `info@hungreegoat.com`. The 5-minute-unresolved escalation tier is fully wired, not just
+  displayed.
+- **SMS escalation** — `Provider configuration required` (e.g. Twilio/Telnyx). Destination
+  (`+1 840-999-2755`) is already known; the provider is the only missing piece, and it's
+  optional — nothing else waits on it.
 
-**Optional:**
-- A dedicated small monitoring VPS (rather than the existing shared Hetzner account) — not
-  required, the current setup works and costs nothing extra.
+**Not a blocker:**
+- A dedicated monitoring VPS was considered and explicitly not pursued — the existing
+  zero-new-cost Hetzner setup is the permanent external monitor.
 - Integrating with the Pi's pre-existing Uptime Kuma instance (used for unrelated personal
-  services) — pending its admin login; documented monitors to add manually in the meantime.
+  services): needs its admin login (Kuma v1.x has no REST API) — see
+  `docs/monitoring-alerts.md` for exactly what's needed and the 4 checks to add manually in
+  the meantime. The Pi's own cron monitor works independently of this either way.
 
 ## Start / stop / restart
 

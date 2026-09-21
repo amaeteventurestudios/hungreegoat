@@ -15,6 +15,7 @@ from typing import Any
 import hashlib
 import shutil
 import subprocess
+import urllib.error
 import urllib.request
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile, WebSocket, WebSocketDisconnect
@@ -142,25 +143,98 @@ def ntfy_send(title: str, body: str, priority: str = "default") -> bool:
         return False
 
 
-def _notify_hgc_alert_state(sid: str, health: dict, yt_state: dict | None) -> None:
+RESEND_KEY_FILE = config.SECRETS_DIR / "resend-api-key.txt"
+EMAIL_FROM = "alerts@hungreegoat.com"
+EMAIL_TO = "info@hungreegoat.com"
+_resend_key_cache: dict[str, Any] = {"v": None, "at": 0.0}
+
+
+def _resend_key() -> str | None:
+    """Cached 60s, same pattern as _ntfy_topic(). No key file present is the expected,
+    honest default state — see docs/monitoring-alerts.md: 'Resend API key required' until
+    one is provided, nothing here fabricates a configured state."""
+    now = time.time()
+    if now - _resend_key_cache["at"] > 60:
+        try:
+            _resend_key_cache["v"] = RESEND_KEY_FILE.read_text().strip() or None
+        except OSError:
+            _resend_key_cache["v"] = None
+        _resend_key_cache["at"] = now
+    return _resend_key_cache["v"]
+
+
+def email_status() -> dict:
+    return {"configured": _resend_key() is not None, "provider": "resend", "from": EMAIL_FROM, "to": EMAIL_TO}
+
+
+def email_send(subject: str, body: str) -> tuple[bool, str | None]:
+    """Best-effort email via the Resend API — never raises, mirrors ntfy_send()'s contract.
+    Returns (ok, error). Activates automatically the moment RESEND_KEY_FILE exists; until
+    then this is a no-op that reports the precise missing credential, never a silent fake
+    success (see docs/monitoring-alerts.md)."""
+    key = _resend_key()
+    if not key:
+        return False, "Resend API key required (~/hungree-goat/secrets/resend-api-key.txt)"
+    try:
+        payload = json.dumps({"from": EMAIL_FROM, "to": [EMAIL_TO], "subject": subject, "text": body}).encode()
+        req = urllib.request.Request("https://api.resend.com/emails", data=payload, method="POST",
+                                      headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
+        urllib.request.urlopen(req, timeout=10).read()
+        return True, None
+    except urllib.error.HTTPError as e:
+        # Never surface the key; do surface Resend's own reason (e.g. an unverified sender
+        # domain) since that's exactly the "domain not yet verified" case docs/monitoring-alerts.md
+        # asks to report precisely rather than a generic failure.
+        detail = e.read().decode(errors="replace")[:300]
+        db.log_event("warning", "system", f"Resend email send failed: HTTP {e.code} {detail}")
+        return False, f"Resend rejected the request (HTTP {e.code}) — check sender domain verification"
+    except Exception as e:
+        db.log_event("warning", "system", f"Resend email send failed: {e}")
+        return False, str(e)
+
+
+EMAIL_ESCALATION_SEC = 300   # 5 min unresolved, per the documented escalation policy
+
+
+def _notify_hgc_alert_state(sid: str, health: dict, yt_state: dict | None, stream_: dict) -> None:
     """HGC's own internal push, labeled [HGC-Internal] to distinguish it from the two
     independent external/local monitors (see docs/monitoring-alerts.md) — this one can see
     finer-grained internal state (e.g. exactly which pipeline stage failed) but, unlike them,
-    goes silent if Beelink itself loses power/network. Complementary, not a replacement."""
+    goes silent if Beelink itself loses power/network. Complementary, not a replacement.
+
+    Implements the documented escalation ladder's first two tiers: immediate push, then email
+    (via Resend, if configured) once an incident has been unresolved for
+    EMAIL_ESCALATION_SEC. SMS (tier 3) has no provider configured — see docs/monitoring-alerts.md
+    — so it is deliberately not called here; nothing fakes a send that didn't happen."""
     level = health["overall"]["level"]
     bad = level in ("warning", "critical")
-    prev = _HGC_ALERT_STATE.get(sid, {"bad": False, "first_bad_at": None})
+    prev = _HGC_ALERT_STATE.get(sid, {"bad": False, "first_bad_at": None, "emailed": False})
     if bad and not prev["bad"]:
         ntfy_send(f"HUNGREE Goat {level.upper()} [HGC-Internal]",
                    f"{sid}: {health['overall']['title']} — {health['overall']['message']}",
                    "urgent" if level == "critical" else "default")
-        _HGC_ALERT_STATE[sid] = {"bad": True, "first_bad_at": time.time()}
+        _HGC_ALERT_STATE[sid] = {"bad": True, "first_bad_at": time.time(), "emailed": False}
+    elif bad and prev["bad"]:
+        if not prev.get("emailed") and time.time() - prev["first_bad_at"] >= EMAIL_ESCALATION_SEC:
+            ok, _ = email_send(f"HUNGREE Goat {level.upper()} — unresolved 5+ min",
+                                f"{sid}: {health['overall']['title']} — {health['overall']['message']}\n"
+                                f"Unresolved since {time.strftime('%H:%M:%S', time.localtime(prev['first_bad_at']))}.")
+            prev["emailed"] = ok   # only mark sent if it actually succeeded — a missing Resend key retries next tick, never silently gives up
+            _HGC_ALERT_STATE[sid] = prev
     elif not bad and prev["bad"]:
         dur = time.time() - (prev["first_bad_at"] or time.time())
-        extra = f" YouTube: {yt_state.get('lifecycle_status') or 'unknown'}." if yt_state else ""
-        ntfy_send(f"HUNGREE Goat RECOVERED [HGC-Internal]",
-                   f"{sid}: healthy again. Outage duration: {int(dur // 60)}m {int(dur % 60)}s.{extra}", "high")
-        _HGC_ALERT_STATE[sid] = {"bad": False, "first_bad_at": None}
+        fps = stream_.get("fps")
+        speed = health.get("speed")
+        headline = "YouTube broadcast is live again." if yt_state and yt_state.get("lifecycle_status") == "live" else f"{sid} is healthy again."
+        lines = [headline, f"Outage duration: {int(dur // 60)}m {int(dur % 60)}s"]
+        if fps is not None:
+            lines.append(f"FPS: {fps:.1f}")
+        if speed is not None:
+            lines.append(f"Realtime speed: {speed:.2f}x")
+        if yt_state:
+            lines.append(f"YouTube: {(yt_state.get('lifecycle_status') or 'unknown').capitalize()}")
+        ntfy_send("HUNGREE Goat RECOVERED [HGC-Internal]", "\n".join(lines), "high")
+        _HGC_ALERT_STATE[sid] = {"bad": False, "first_bad_at": None, "emailed": False}
 
 
 def _watchdog() -> None:
@@ -272,7 +346,7 @@ def _watchdog() -> None:
                             db.log_event("warning", "youtube_lifecycle", "YouTube broadcast has ended and cannot resume on its own — bind a replacement broadcast", sid)
                         else:
                             db.resolve_alerts("youtube_lifecycle", sid)
-                    _notify_hgc_alert_state(sid, health, yt_state if verified_now else None)
+                    _notify_hgc_alert_state(sid, health, yt_state if verified_now else None, stream_)
                 except Exception as e:
                     db.log_event("warning", "system", f"telemetry/youtube-alert watchdog step failed: {e}", sid)
             if time.time() - last_telemetry_prune > 3600:
@@ -2049,6 +2123,7 @@ def monitoring_overview(station: str = "lofi", user: str = Depends(current_user)
         "local_monitor": {"configured": True, "label": "pi-node-01 (LAN-local)",
                            "note": "Same limitation as above — verified via the same test push."},
         "alerting_armed": _ntfy_topic() is not None,
+        "email": email_status(),
         "broadcast_health": health["overall"],
         "youtube": {"lifecycle_status": yt_state.get("lifecycle_status"), "stream_status": yt_state.get("stream_status"),
                     "bound": yt_state.get("bound"), "connected": yt_state.get("connected")},
@@ -2095,6 +2170,11 @@ def monitoring_test(body: MonitoringTestBody, station: str = "lofi", user: str =
         if not ok:
             raise HTTPException(409, "No ntfy topic configured — see docs/monitoring-alerts.md")
         return {"ok": True}
+    if body.kind == "email":
+        ok, err = email_send("HUNGREE Goat TEST", f"Test email from {station} — if you see this, Resend alerting is working.")
+        if not ok:
+            raise HTTPException(409, err or "Email send failed — see docs/monitoring-alerts.md")
+        return {"ok": True}
     if body.kind == "simulate_down":
         db.log_event("critical", "test", f"[TEST] Simulated outage on {station} — no real service was affected", station)
         ntfy_send("HUNGREE Goat TEST OUTAGE [Control]", f"[TEST] Simulated outage on {station} — not a real incident.", "default")
@@ -2106,7 +2186,7 @@ def monitoring_test(body: MonitoringTestBody, station: str = "lofi", user: str =
         n = db.resolve_alerts("test", station)
         ntfy_send("HUNGREE Goat TEST RECOVERED [Control]", f"[TEST] Simulated recovery on {station}.", "default")
         return {"ok": True, "resolved": n}
-    raise HTTPException(400, "kind must be one of: push, simulate_down, simulate_warning, simulate_recovery")
+    raise HTTPException(400, "kind must be one of: push, email, simulate_down, simulate_warning, simulate_recovery")
 
 
 @app.get("/api/version")

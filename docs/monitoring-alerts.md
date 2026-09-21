@@ -37,19 +37,27 @@ broadcast itself relies on:
    services (FreshRSS, Linkding, n8n, Syncthing, ChangeDetection) and integrating with it would
    require its admin login, which isn't available to this automation.
 
-### Reading the two monitors together (incident correlation)
+### Automated cross-perspective correlation
 
-Neither monitor "decides" a root cause by itself — each only ever reports what it actually
-observed. A human reading both alert labels can correlate:
+The Pi has its own internet connection, independent of Beelink's LAN — so `hgc-monitor-local.sh`
+checks BOTH perspectives in the same run (LAN-direct to Beelink, and the same public health
+endpoint the external monitor checks) and classifies them together, rather than requiring a
+human to compare two separate alerts:
 
-| External (Hetzner) | Local (Pi→Beelink LAN) | Likely area |
+| LAN → Beelink | Public endpoint | Local monitor's classification |
 |---|---|---|
-| OUTAGE | healthy | Gateway / tunnel / ISP egress — Beelink itself is fine |
-| OUTAGE | also OUTAGE | Beelink / LAN / home power |
-| healthy | OUTAGE | Local network issue that hasn't reached the public path yet — investigate before it does |
+| healthy | healthy | no alert |
+| healthy | fails | **"Public/external connectivity degraded"** — tunnel, gateway, DNS, or ISP egress; Beelink itself is fine |
+| fails | fails | **"HUNGREE Goat broadcast host unreachable"** — evidence points at Beelink/LAN/router/power, not claimed with certainty |
+| fails | healthy | **"Local network anomaly"** — unusual; may be the Pi's own network interface rather than Beelink |
 
-This is evidence for a human to correlate, not an automated root-cause claim — see
-`docs/RECOVERY.md`'s Confirmed/Likely/Hypothesis framework, which this follows.
+The external (Hetzner) monitor still can't see the Pi's perspective — it only ever reports what
+it itself observed (public reachability). Reading its alerts alongside the local monitor's
+already-correlated classification above still helps: if Hetzner reports an outage AND the
+local monitor's classification is "broadcast host unreachable," that's two independent
+vantage points agreeing, not a coincidence. This is evidence for a human to weigh, not an
+automated root-cause claim — see `docs/RECOVERY.md`'s Confirmed/Likely/Hypothesis framework,
+which this follows.
 
 ## Alerting: ntfy.sh (push)
 
@@ -60,8 +68,19 @@ on the Beelink (mode 600) — treat it like a low-sensitivity credential (see `d
 anyone who learns it can post to (and read) the same channel, though they can't affect the
 broadcast itself.
 
-**To receive alerts**: install the free ntfy app (iOS/Android) or use ntfy.sh's web push, and
-subscribe to the topic in `~/hungree-goat/secrets/ntfy-topic.txt`.
+**To receive alerts (iPhone/Android)**:
+1. Install the free **ntfy** app.
+2. Tap **+**.
+3. Tap **Add Subscription**.
+4. Enter the topic name from `~/hungree-goat/secrets/ntfy-topic.txt` (not printed in this doc
+   or the UI — treat it like a low-sensitivity credential, see `docs/security.md`).
+5. Leave **"Use another server"** off — the default `https://ntfy.sh` is exactly right, no
+   custom server needed.
+6. Tap **Subscribe**.
+7. Allow notification permission when prompted.
+
+The Monitoring & Alerts → Notifications tab in Control has a **Send Test Push** button to
+verify the whole chain end-to-end.
 
 Each monitor tracks its own state (`~/.hgc-monitor-state-external` / `~/.hgc-monitor-state-local`)
 to:
@@ -96,34 +115,71 @@ reuse the existing events/alerts system rather than a second, parallel incident 
 never touch Liquidsoap, FFmpeg, or the real YouTube broadcast — simulations write a clearly
 `[TEST]`-labeled event and, for down/recovery, a labeled test push.
 
+## Email — Resend (`email_send()`, `apps/control/hgc/main.py`)
+
+Preferred provider per the operator's existing account. Reads the API key from
+`~/hungree-goat/secrets/resend-api-key.txt` (0600, never logged, never returned by any API
+response) — activates automatically the moment that file exists, with **no other
+configuration needed**. Sender `alerts@hungreegoat.com`, destination `info@hungreegoat.com`.
+Wired into the escalation ladder: the watchdog's `_notify_hgc_alert_state()` sends one email
+per incident once it's been unresolved for 5 minutes (`EMAIL_ESCALATION_SEC`), and only marks
+it sent if the Resend call actually succeeded — a missing/invalid key retries next tick rather
+than silently giving up. `GET /api/monitoring/overview` reports `email.configured` honestly;
+until a key exists this shows **"Resend API key required"**, never a fabricated success.
+If `hungreegoat.com` isn't yet verified as a sending domain in Resend, a test send reports
+that precisely (Resend's own rejection reason, via `POST /api/monitoring/test {"kind":"email"}`).
+
+## SMS (optional, not a blocker)
+
+Destination is known (`+1 840-999-2755`) — the missing piece is a provider (Twilio, Telnyx, or
+similar). Shown honestly in Notifications as **"Provider required"**, never as a missing
+destination. Does not block push or email; the escalation ladder's 10-minute tier already has
+the right shape (`_notify_hgc_alert_state()` would gain a third branch calling a
+`notify_sms()` the same way `email_send()` is called today) once a provider exists.
+
+## Pi / Uptime Kuma — what's actually needed
+
+Inspected without touching anything (no password reset, no database write, no monitor
+changes):
+
+```text
+Existing Uptime Kuma:
+Host: pi-node-01, docker compose service in ~/services/pi-stack/compose.yaml
+Image: louislam/uptime-kuma:1 (v1.23.17)
+URL: http://192.168.6.235:3001 (LAN-only)
+Data: ~/services/pi-stack/data/uptime-kuma/kuma.db (sqlite, 13MB), healthy, up since 2026-09-18
+Existing monitors (5): ChangeDetection.io, FreshRSS, Linkding, n8n, Syncthing GUI — all
+  unrelated personal services, nothing HUNGREE-Goat-related yet.
+Need: the admin username/password for this instance's web UI.
+Reason: Kuma v1.x has no REST API — adding a monitor requires either an authenticated
+  Socket.IO session (needs the real login) or direct sqlite writes to kuma.db while the
+  service is live (not attempted — real risk of corrupting a running app's own state; not
+  worth it for an optional integration when the login is the actual ask).
+```
+
+Until that login is provided, add these 4 checks manually via the Kuma web UI (a few minutes,
+does not disturb the 5 existing monitors) — HTTP(s) monitor type, expected status 200:
+`https://api.hungreegoat.com/v1/health/broadcast`, `https://control.hungreegoat.com/`,
+`https://player.hungreegoat.com/`, `https://hungreegoat.com/`.
+
+## External monitoring — infrastructure decision (closed)
+
+No new paid infrastructure. The existing `hermes-ro` cron job on the shared Hetzner gateway
+(`hetzner-usg`) is the permanent external monitor — it costs nothing extra, needs no elevated
+permissions (outbound HTTPS only), and does not touch the shared box's other tenants. A
+dedicated monitoring VPS was considered and explicitly ruled out as unnecessary; not tracked
+as a gap.
+
 ## Known gaps (deliberately not built yet)
 
-- **Email escalation (5 min unresolved)** and **SMS escalation (10 min unresolved)**: no SMTP
-  or SMS provider credentials exist anywhere accessible. Per the "do not fabricate credentials"
-  rule, these are not implemented — only push (ntfy) exists today. Providing SMTP credentials
-  (host/user/pass or an API key for a provider like Postmark/SendGrid) and an SMS provider
-  (e.g. Twilio) would let this be added without changing the architecture — the state-file/
-  cooldown logic above already has the right shape for that ladder, it's just missing a second
-  and third `notify_email()`/`notify_sms()` call gated on `now - first_bad_at` thresholds.
-- **Uptime Kuma integration on the Pi**: not done. The existing instance's admin login isn't
-  available to this automation, and resetting it unprompted would lock out the operator's own
-  access to their existing personal dashboard. Either provide that login, or add the four
-  HUNGREE Goat checks manually via its web UI (semantic health URL above, plus the three public
-  domains) — takes a few minutes.
-- **Dedicated monitoring compute on Hetzner** (rather than piggybacking on the shared
-  `hermes-ro` cron job): the current external monitor works today and needs no new spend, but
-  a small dedicated VPS (~€4-5/mo in the same Hetzner Cloud project — `hcloud` CLI is already
-  configured) would be a cleaner, more capable base for future monitoring work (e.g. a real
-  Uptime Kuma instance) without adding any load or risk to the shared multi-tenant gateway that
-  hosts unrelated Umanah Systems Group client services (EspoCRM, Documenso, client data rooms).
-  This is a real recurring-cost decision, not made unilaterally — flagged for the operator.
+- **SMS escalation**: see above — optional, provider required, architecture ready.
 - **Operator-editable alert-rule thresholds**: the Alert Rules tab is currently read-only —
   thresholds live in code next to the checks they describe (`streamer.py`'s `StallDetector`,
   `main.py`'s watchdog) specifically so they can't drift out of sync with what's actually
   evaluated. Making them editable would need those checks to read from `db.get_setting()`
-  instead of a constant — a reasonable follow-up, not done here.
-- **Automated cross-host incident correlation**: the external and local monitors each alert
-  independently with labeled messages a human can correlate (see the table above); there's no
-  shared incident record between them yet (that would need one monitor to report to the other,
-  or both to report to a third point — deliberately not built to keep each monitor's failure
-  domain fully independent of the others).
+  instead of a constant — a reasonable follow-up, not done here. A full Create/Edit Rule
+  wizard UI (multi-step form, custom conditions) was deliberately not built for the same
+  reason: it would be UI with no real backend behind it, which is worse than not having it.
+- **Uptime Kuma integration on the Pi**: pending the admin login above — see that section for
+  the exact ask; the current Pi cron monitor (`hgc-monitor-local.sh`) is fully independent of
+  Kuma and keeps working regardless.

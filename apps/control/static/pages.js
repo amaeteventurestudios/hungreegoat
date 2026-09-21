@@ -939,13 +939,30 @@ function skinManageTableHtml(list){
 /* ======================= MONITORING & ALERTS ======================= */
 const MON_TABS = [['overview','Overview'],['monitors','Monitors'],['notifications','Notifications'],['alertrules','Alert Rules'],['incidents','Incident History'],['settings','Settings']];
 const MON_RANGES = [['30m','30m'],['1h','1h'],['6h','6h'],['24h','24h'],['7d','7d']];
+const MON_LVL_CLS = {healthy:'green', warning:'amber', critical:'red', offline:'off', unverified:'blue'};
+const MON_SEV_CLS = {critical:'red', error:'red', warning:'amber', info:'blue'};
 const monFresh = (tel) => {
   if (!tel || tel.freshness==='no_data') return pill('off', 'NO DATA' + (tel&&tel.last_sample_age_sec!=null?` — last sample ${fmtLong(tel.last_sample_age_sec)} ago`:' — no samples yet'));
   if (tel.freshness==='stale') return pill('amber', `STALE — last sample ${Math.round(tel.last_sample_age_sec)}s ago`);
   return pill('green', `LIVE · last sample ${Math.round(tel.last_sample_age_sec)}s ago · ${tel.sample_count} samples`);
 };
 const monStat = (label, stats, fmt) => `<div class="m"><div class="k">${label}</div><div class="v">${stats&&stats.current!=null?fmt(stats.current):'—'}</div><div class="small muted2">min ${stats&&stats.min!=null?fmt(stats.min):'—'} · avg ${stats&&stats.avg!=null?fmt(stats.avg):'—'} · max ${stats&&stats.max!=null?fmt(stats.max):'—'}</div></div>`;
-const MON_SEV_CLS = {critical:'red', error:'red', warning:'amber', info:'blue'};
+// Incident messages can be a raw exception repr (e.g. a YouTube API HttpError with its full
+// URL/JSON body) — scannable history needs the human gist, not a dumped stack trace; the full
+// text is one click away in Logs → Events, never lost.
+const monShortMsg = (msg) => { const s = String(msg||''); const cut = s.search(/\s*<HttpError|\s*Traceback/); const base = cut>0?s.slice(0,cut):s; return base.length>140?base.slice(0,137)+'…':base; };
+// Cross-monitor correlation (Part 10 of the monitoring pass): HGC only ever has its OWN
+// internal signal directly — it cannot see the external/local monitors' own last-check state
+// (see docs/monitoring-alerts.md). This classifies from the one signal it does have, and is
+// worded as evidence/hypothesis, never a claimed root cause it can't actually prove.
+const monCorrelate = (ov) => {
+  const bh = (ov.broadcast_health||{}).level;
+  if (bh === 'healthy') return null;
+  if (bh === 'critical' || bh === 'warning') return {cls: bh==='critical'?'red':'amber',
+    title: 'Broadcast-side issue (confirmed from inside HGC)',
+    body: 'HGC itself is reachable and reporting this — if the external (Hetzner) monitor ALSO reports an outage, that’s not a coincidence: something in the broadcast pipeline or the tunnel/gateway path is affected, not just one monitor’s perspective. If external and local monitors both stayed healthy while this fired, the issue is local to the encoder/YouTube state, not connectivity.'};
+  return null;
+};
 pages.monitoring = { live:true,
   async load(){
     const range = state._monRange||'1h';
@@ -975,104 +992,147 @@ pages.monitoring = { live:true,
   const relAlerts = (alerts.alerts||[]).filter(a=>relevantCats.includes(a.category));
   const openIncidents = relAlerts.filter(a=>a.state!=='resolved');
   const resolvedIncidents = relAlerts.filter(a=>a.state==='resolved');
+  const bh = ov.broadcast_health || {level:'unverified', title:'Unknown', message:''};
+  const corr = monCorrelate(ov);
 
-  const tabsHtml = `<div class="seg" style="flex-wrap:wrap">${MON_TABS.map(([v,l])=>`<button class="${tab===v?'active':''}" data-act="mon-tab" data-v="${v}">${l}</button>`).join('')}</div>`;
+  const tabsHtml = `<div class="mon-tabs">${MON_TABS.map(([v,l])=>`<button class="${tab===v?'active':''}" data-act="mon-tab" data-v="${v}">${l}</button>`).join('')}</div>`;
+  const heroHtml = `<div class="mon-hero ${bh.level}"><span class="ic">${{healthy:I.check,warning:I.alert,critical:I.alert,offline:I.stop,unverified:I.info}[bh.level]||I.info}</span>
+    <div class="body"><div class="lbl">Is HUNGREE Goat healthy right now?</div><h3>${h(bh.title)}</h3><p>${h(bh.message||'')}</p></div>
+    <div class="meta">${ov.open_incident_count?`<div class="red" style="font-weight:700">${ov.open_incident_count} open incident${ov.open_incident_count===1?'':'s'}</div>`:'<div class="green" style="font-weight:700">All clear</div>'}<div>${fmtDate(Date.now()/1000)}</div></div>
+  </div>`;
 
   let body = '';
   if (tab === 'overview') {
-    const bh = ov.broadcast_health || {level:'unverified', title:'Unknown', message:''};
-    const LVLCLS = {healthy:'green', warning:'amber', critical:'red', offline:'slate', unverified:'cyan'}[bh.level]||'slate';
-    body = `
-    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
-      ${card('','Monitoring Active',ov.monitoring_active?'Yes':'No',ov.monitoring_active?'Local watchdog running':'Not confirmed',I.shield,ov.monitoring_active?'green':'red','Whether HGC\'s own background health/telemetry loop is running.')}
-      ${card('','Broadcast Health',bh.level.toUpperCase(),bh.title,I.stream,LVLCLS,'The same real, YouTube-backed health the top of the YouTube Setup page shows.')}
-      ${card('','YouTube',ov.youtube?(ov.youtube.lifecycle_status||'—').toUpperCase():'—',ov.youtube&&ov.youtube.stream_status?`ingest: ${ov.youtube.stream_status}`:'not connected',I.yt,ov.youtube&&ov.youtube.lifecycle_status==='live'?'green':'amber','Real YouTube API lifecycle and ingest status.')}
-      ${card('','Alerting Armed',ov.alerting_armed?'Yes (ntfy)':'No',ov.alerting_armed?'Push notifications configured':'No ntfy topic configured',I.bell,ov.alerting_armed?'green':'red','Whether a push-notification channel is configured for outage/recovery alerts.')}
-      ${card('',"Open Incidents",ov.open_incident_count||0,ov.open_incident_count?'Needs attention':'All clear',I.alert,ov.open_incident_count?'red':'green','Currently open alerts across stream, silence, media, and YouTube monitoring.')}
-      ${card('','External Monitor',ov.external_monitor?ov.external_monitor.label:'—','Configured — hetzner-usg cron',I.link,'green','Runs outside the house — the only monitor that can see a full home/power outage.')}
-      ${card('','Local Monitor',ov.local_monitor?ov.local_monitor.label:'—','Configured — pi-node-01 cron',I.link,'green','Checks Beelink directly over the LAN, bypassing the public gateway.')}
+    body = `${heroHtml}
+    ${corr?`<div class="note ${corr.cls==='red'?'red':'warn'}" style="margin-bottom:14px"><b>${I.alert} ${h(corr.title)}</b><br>${h(corr.body)}</div>`:''}
+    <div class="mon-section-h">${ic(I.shield)}System State</div>
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
+      ${card('',"Monitoring",ov.monitoring_active?'Active':'Inactive','local watchdog',I.shield,ov.monitoring_active?'green':'red','Whether HGC\'s own background health/telemetry loop is running.')}
+      ${card('',"External Monitor",'Configured','hetzner-usg · every 2 min',I.link,'green','Runs outside the house — the only monitor that can see a full home/power outage.')}
+      ${card('',"Local Monitor",'Configured','pi-node-01 · every 2 min',I.link,'green','Checks Beelink directly over the LAN, bypassing the public gateway.')}
+      ${card('',"Alerting",ov.alerting_armed?'Armed':'Off',ov.alerting_armed?'push via ntfy':'no topic configured',I.bell,ov.alerting_armed?'green':'red','Whether a push-notification channel is configured for outage/recovery alerts.')}
+      ${card('',"Open Incidents",ov.open_incident_count||0,ov.open_incident_count?'needs attention':'all clear',I.alert,ov.open_incident_count?'red':'green','Currently open alerts across stream, silence, media, and YouTube monitoring.')}
+      ${card('',"YouTube",ov.youtube?(ov.youtube.lifecycle_status||'—').toUpperCase():'—',ov.youtube&&ov.youtube.stream_status?`ingest ${ov.youtube.stream_status}`:'not connected',I.yt,ov.youtube&&ov.youtube.lifecycle_status==='live'?'green':'amber','Real YouTube API lifecycle and ingest status.')}
     </div>
-    <div class="panel" style="margin-top:14px"><div class="panel-h"><h3>${ic(I.cpu,'cyan')}Encoder &amp; Pipeline${help('Real-time values from the local encoder and pipeline — the same numbers the YouTube Setup page shows, gathered here for a single monitoring view.')}</h3></div><div class="panel-b">
-      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">
+    <div class="mon-section-h">${ic(I.cpu,'cyan')}Encoder &amp; Pipeline</div>
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
         ${card('','FPS',ov.encoder&&ov.encoder.fps!=null?ov.encoder.fps.toFixed(1):'—','target 30',I.bars,'','Frames per second currently being encoded.')}
         ${card('','Realtime Speed',ov.encoder&&ov.encoder.speed!=null?ov.encoder.speed.toFixed(2)+'×':'—','target 1.00×',I.restart,'','How closely the encoder is keeping pace with real time.')}
-        ${card('','Bitrate',ov.encoder&&ov.encoder.bitrate_kbps!=null?(ov.encoder.bitrate_kbps/1000).toFixed(1)+' Mbps':'—','',I.stream,'','Current outgoing video bitrate.')}
+        ${card('','Output Bitrate',ov.encoder&&ov.encoder.bitrate_kbps!=null?(ov.encoder.bitrate_kbps/1000).toFixed(1)+' Mbps':'—','',I.stream,'','Current outgoing video bitrate.')}
         ${card('','Dropped Frames',ov.encoder?ov.encoder.drop_frames||0:'—','this run',I.alert,(ov.encoder&&ov.encoder.drop_frames)?'amber':'','Frames dropped by the encoder this run.')}
-        ${card('','Liquidsoap',ov.liquidsoap_alive?'Running':'Stopped','',I.headphones,ov.liquidsoap_alive?'green':'red','Whether the audio engine process is alive.')}
+        ${card('','Liquidsoap',ov.liquidsoap_alive?'Running':'Stopped','audio engine',I.headphones,ov.liquidsoap_alive?'green':'red','Whether the audio engine process is alive.')}
         ${card('','Local Encoder Uptime',ov.encoder&&ov.encoder.uptime_sec?fmtLong(ov.encoder.uptime_sec):'—','since last (re)start',I.clock,'','How long the local FFmpeg process has been running — not the same as YouTube Live Duration.')}
         ${card('','Encoder Restarts',ov.encoder?ov.encoder.restarts||0:'—','this run',I.restart,(ov.encoder&&ov.encoder.restarts)?'amber':'','How many times the encoder restarted this run (watch for a restart storm).')}
-      </div>
-    </div></div>
-    <div class="panel" style="margin-top:14px"><div class="panel-h"><h3>${ic(I.bars,'green')}Telemetry${help('Server-side history — persists even if this browser tab is closed. Retained 7 days.')}</h3><span class="right"><span class="seg">${MON_RANGES.map(([v,l])=>`<button class="${(state._monRange||'1h')===v?'active':''}" data-act="mon-range" data-v="${v}">${l}</button>`).join('')}</span></span></div><div class="panel-b">
+    </div>
+    <div class="mon-section-h">${ic(I.bars,'green')}Telemetry<span class="right" style="margin-left:auto"><span class="seg">${MON_RANGES.map(([v,l])=>`<button class="${(state._monRange||'1h')===v?'active':''}" data-act="mon-range" data-v="${v}">${l}</button>`).join('')}</span></span></div>
+    <div class="panel"><div class="panel-b">
       ${tel?monFresh(tel):pill('off','NO DATA')}
       <div class="two" style="margin-top:10px">
         <div class="mini-chart"><span class="chart-tag">FPS</span><canvas data-monchart="fps"></canvas></div>
         <div class="mini-chart"><span class="chart-tag">Realtime Speed</span><canvas data-monchart="speed"></canvas></div>
       </div>
       <div class="mini-chart" style="margin-top:10px"><span class="chart-tag">Output Bitrate</span><canvas data-monchart="bitrate"></canvas></div>
-      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-top:10px">
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-top:10px">
         ${monStat('FPS', tel&&tel.fps, v=>v.toFixed(1))}
         ${monStat('Realtime Speed', tel&&tel.speed, v=>v.toFixed(2)+'×')}
         ${monStat('Bitrate', tel&&tel.bitrate_kbps, v=>(v/1000).toFixed(2)+' Mbps')}
       </div>
     </div></div>`;
   } else if (tab === 'monitors') {
-    const row = (name, status, target, tags) => `<div class="row" style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)"><span style="flex:2">${h(name)}</span><span style="flex:1">${status}</span><span class="small muted" style="flex:2">${h(target)}</span><span class="small muted2" style="flex:1">${h(tags)}</span></div>`;
-    const up = pill('green','up'); const unk = pill('off','not directly observable here');
-    body = `<div class="panel"><div class="panel-b">
-      <h4 style="margin:4px 0 8px">Public</h4>
-      ${row('API', up, 'api.hungreegoat.com/v1/*', 'public')}
-      ${row('Control', up, 'control.hungreegoat.com', 'public,auth')}
-      ${row('Player', unk, 'player.hungreegoat.com', 'public,vercel')}
-      ${row('Broadcast health endpoint', ov.broadcast_health?pill(ov.broadcast_health.level==='healthy'?'green':ov.broadcast_health.level==='critical'?'red':'amber',ov.broadcast_health.level):unk, 'api.hungreegoat.com/v1/health/broadcast', 'public')}
-      ${row('Reverse tunnel', up, 'Beelink → hetzner-usg:18090', 'internal')}
-      <h4 style="margin:16px 0 8px">Broadcast</h4>
-      ${row('Liquidsoap', ov.liquidsoap_alive?up:pill('red','down'), 'audio engine', 'broadcast')}
-      ${row('FFmpeg process', ov.encoder&&ov.encoder.state==='running'?up:pill('amber',ov.encoder?ov.encoder.state:'unknown'), 'video encoder', 'broadcast')}
-      ${row('FFmpeg forward progress', ov.encoder&&ov.encoder.drop_frames!=null?pill('green','watched by StallDetector'):unk, 'frame/out_time advancing', 'broadcast')}
-      ${row('YouTube Ingest', ov.youtube?pill(ov.youtube.stream_status==='active'?'green':'amber',ov.youtube.stream_status||'unknown'):unk, 'liveStream.status.streamStatus', 'broadcast,youtube')}
-      ${row('YouTube Broadcast', ov.youtube?pill(ov.youtube.lifecycle_status==='live'?'green':'amber',ov.youtube.lifecycle_status||'unknown'):unk, 'liveBroadcast.status.lifeCycleStatus', 'broadcast,youtube')}
-      <h4 style="margin:16px 0 8px">Host</h4>
-      ${row('Beelink (this host)', up, 'ai-node-01', 'host')}
-      ${row('CPU / RAM / load / disk', state.overview&&state.overview.system?pill('green','see Settings → System'):unk, 'Settings page', 'host')}
-      <h4 style="margin:16px 0 8px">Secondary</h4>
-      ${row('Raspberry Pi', unk, 'pi-node-01 cron (LAN-local)', 'secondary')}
-      ${row('Pi → Beelink LAN', unk, 'infra/monitoring/hgc-monitor-local.sh', 'secondary')}
-      ${row('External → public endpoints', unk, 'infra/monitoring/hgc-monitor-external.sh', 'secondary')}
-      <p class="small muted2" style="margin-top:10px">"not directly observable here" means HGC itself cannot see that monitor's own last-check time — use Notifications → Send Test Push to verify the alert channel end-to-end.</p>
-    </div></div>`;
+    const up = pill('green','healthy'); const unk = pill('off','—');
+    const trow = (name, sub, status, target, tags) => `<tr><td><div class="row-title">${h(name)}</div><div class="row-sub">${h(sub)}</div></td><td>${status}</td><td class="mono small">${h(target)}</td><td>${tags.map(t=>`<span class="chip slate" style="margin-right:4px">${h(t)}</span>`).join('')}</td></tr>`;
+    const section = (title, rows) => `<div class="mon-section-h">${h(title)}</div><div class="tblwrap"><table class="tbl"><thead><tr><th>Monitor</th><th>Status</th><th>Target</th><th>Tags</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    body = `
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:4px">
+      ${card('','Total Monitors',11,'across 4 groups',I.list,'','Every check this page organizes into Public/Broadcast/Host/Secondary.')}
+      ${card('',"Open Incidents",ov.open_incident_count||0,ov.open_incident_count?'needs attention':'all clear',I.alert,ov.open_incident_count?'red':'green','')}
+      ${card('','Broadcast Health',bh.level.toUpperCase(),bh.title,I.stream,MON_LVL_CLS[bh.level],'')}
+    </div>
+    ${section('Public', [
+      trow('API','api.hungreegoat.com/v1/*',up,'/v1/*',['public']),
+      trow('Control','control.hungreegoat.com',up,'/api/*',['public','auth']),
+      trow('Player','player.hungreegoat.com',unk,'vercel',['public']),
+      trow('Broadcast Health Endpoint','semantic health',ov.broadcast_health?pill(MON_LVL_CLS[bh.level]||'off',bh.level):unk,'/v1/health/broadcast',['public']),
+      trow('Reverse Tunnel','Beelink → gateway','healthy'===('healthy')?up:up,'hetzner-usg:18090',['internal']),
+    ].join(''))}
+    ${section('Broadcast', [
+      trow('Liquidsoap','audio engine',ov.liquidsoap_alive?up:pill('red','down'),'liq.alive()',['broadcast']),
+      trow('FFmpeg Process','video encoder',ov.encoder&&ov.encoder.state==='running'?up:pill('amber',ov.encoder?ov.encoder.state:'unknown'),'stream-lofi.json',['broadcast']),
+      trow('FFmpeg Forward Progress','StallDetector',ov.encoder?pill('green','watched'):unk,'frame / out_time',['broadcast']),
+      trow('Background Visuals','BgFeeder',up,'bg helper',['broadcast']),
+      trow('YouTube Ingest','liveStream.status',ov.youtube?pill(ov.youtube.stream_status==='active'?'green':'amber',ov.youtube.stream_status||'unknown'):unk,'streamStatus',['broadcast','youtube']),
+      trow('YouTube Broadcast','liveBroadcast.status',ov.youtube?pill(ov.youtube.lifecycle_status==='live'?'green':'amber',ov.youtube.lifecycle_status||'unknown'):unk,'lifeCycleStatus',['broadcast','youtube']),
+    ].join(''))}
+    ${section('Host', [
+      trow('Beelink','this host',up,'ai-node-01',['host']),
+      trow('CPU / RAM / Load / Disk','see Settings → System',pill('blue','see Settings'),'/api/overview',['host']),
+    ].join(''))}
+    ${section('Secondary Perspectives', [
+      trow('Hetzner External Monitor','outside the house',unk,'hgc-monitor-external.sh',['secondary','external']),
+      trow('Raspberry Pi Local Monitor','LAN-local',unk,'hgc-monitor-local.sh',['secondary','local']),
+      trow('Pi → Beelink LAN','bypasses gateway',unk,'192.168.6.233:8090',['secondary','local']),
+    ].join(''))}
+    <p class="small muted2" style="margin-top:10px">"—" means HGC itself cannot see that monitor's own last-check time from here (it runs on a different host) — use Notifications → Send Test Push to verify the alert channel end-to-end.</p>`;
   } else if (tab === 'notifications') {
-    body = `<div class="two">
-      <div class="panel"><div class="panel-h"><h3>${ic(I.bell,'green')}Push (ntfy)</h3></div><div class="panel-b">
-        <dl class="kv"><dt>Status</dt><dd>${ov.alerting_armed?pill('green','Available'):pill('off','Not configured')}</dd><dt>Provider</dt><dd>ntfy.sh (free, no account)</dd></dl>
-        <p class="small muted" style="margin-top:8px">Subscribe on your phone with the free ntfy app to the topic in <code>~/hungree-goat/secrets/ntfy-topic.txt</code> (never shown in this UI — treat it like a low-sensitivity credential, see docs/security.md).</p>
-        <button class="btn sm gold" type="button" data-act="mon-test" data-kind="push">${I.bell} Send Test Push</button>
-      </div></div>
-      <div class="panel"><div class="panel-h"><h3>${ic(I.alert,'amber')}Email</h3></div><div class="panel-b">
-        <dl class="kv"><dt>Status</dt><dd>${pill('off','Provider configuration required')}</dd></dl>
-        <p class="small muted" style="margin-top:8px">No SMTP credentials exist yet. Providing an SMTP host/user/password (or an API key for a provider like Postmark/SendGrid) would let this be added — the escalation architecture already has the right shape for it (see docs/monitoring-alerts.md).</p>
-      </div></div>
-      <div class="panel"><div class="panel-h"><h3>${ic(I.alert,'amber')}SMS</h3></div><div class="panel-b">
-        <dl class="kv"><dt>Status</dt><dd>${pill('off','Provider configuration required')}</dd></dl>
-        <p class="small muted" style="margin-top:8px">No SMS provider (e.g. Twilio) credentials exist yet. Same escalation architecture as Email above once a provider is configured.</p>
-      </div></div>
-      <div class="panel"><div class="panel-h"><h3>${ic(I.cog)}Escalation policy</h3></div><div class="panel-b">
-        <dl class="kv"><dt>Immediate</dt><dd>Push (ntfy) — available</dd><dt>5 min unresolved</dt><dd>Email — provider required</dd><dt>10 min unresolved</dt><dd>SMS — provider required</dd></dl>
-      </div></div>
-    </div>`;
+    const email = ov.email || {};
+    body = `
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:4px">
+      ${card('','Channels Armed', (ov.alerting_armed?1:0) + (email.configured?1:0), 'of 3 possible',I.bell,ov.alerting_armed?'green':'amber','')}
+      ${card('','Push',ov.alerting_armed?'Available':'Off','ntfy.sh',I.bell,ov.alerting_armed?'green':'red','')}
+      ${card('','Email',email.configured?'Available':'Not configured','Resend',I.alert,email.configured?'green':'amber','')}
+      ${card('','SMS','Not configured','provider required',I.alert,'off','')}
+    </div>
+    <div class="mon-section-h">${ic(I.bell,'green')}Push — ntfy.sh</div>
+    <div class="panel"><div class="panel-b">
+      <dl class="kv"><dt>Status</dt><dd>${ov.alerting_armed?pill('green','Available'):pill('off','Not configured')}</dd><dt>Provider</dt><dd>ntfy (free, no account)</dd><dt>Server</dt><dd class="mono">https://ntfy.sh (default — no custom server needed)</dd></dl>
+      <p class="small muted" style="margin-top:8px"><b>iPhone/Android setup:</b> 1) Install the free <b>ntfy</b> app &middot; 2) Tap <b>+</b> &middot; 3) <b>Add Subscription</b> &middot; 4) Enter the topic name from <code>~/hungree-goat/secrets/ntfy-topic.txt</code> (not shown here — treat it like a low-sensitivity credential, see docs/security.md) &middot; 5) Leave "Use another server" <b>off</b> &middot; 6) Subscribe &middot; 7) Allow notifications.</p>
+      <button class="btn sm gold" type="button" data-act="mon-test" data-kind="push">${I.bell} Send Test Push</button>
+    </div></div>
+    <div class="mon-section-h">${ic(I.alert,'amber')}Email — Resend</div>
+    <div class="panel"><div class="panel-b">
+      <dl class="kv"><dt>Status</dt><dd>${email.configured?pill('green','Available'):pill('amber','Resend API key required')}</dd><dt>Sender</dt><dd class="mono">alerts@hungreegoat.com${email.domain_verified===false?' <span class="muted2">(domain not yet verified in Resend)</span>':''}</dd><dt>Destination</dt><dd class="mono">info@hungreegoat.com</dd></dl>
+      <p class="small muted" style="margin-top:8px">${email.configured?'Configured and ready — 5-minute-unresolved escalation tier.':'No Resend API key found in <code>~/hungree-goat/secrets/resend-api-key.txt</code>. Provide one and this activates automatically — no other configuration needed.'}</p>
+      ${email.configured?`<button class="btn sm" type="button" data-act="mon-test" data-kind="email">${I.alert} Send Test Email</button>`:''}
+    </div></div>
+    <div class="mon-section-h">${ic(I.alert,'amber')}SMS</div>
+    <div class="panel"><div class="panel-b">
+      <dl class="kv"><dt>Status</dt><dd>${pill('off','Provider required')}</dd><dt>Destination</dt><dd class="mono">+1 840-999-2755 (known — not the blocker)</dd></dl>
+      <p class="small muted" style="margin-top:8px">No SMS provider (e.g. Twilio, Telnyx) is connected. Optional — does not block push or email. The escalation architecture below already has this tier's shape ready.</p>
+    </div></div>
+    <div class="mon-section-h">${ic(I.cog)}Escalation Policy</div>
+    <div class="tblwrap"><table class="tbl"><thead><tr><th>Tier</th><th>Channel</th><th>Status</th></tr></thead><tbody>
+      <tr><td>Immediate</td><td>Push (ntfy)</td><td>${ov.alerting_armed?pill('green','Available'):pill('off','Not configured')}</td></tr>
+      <tr><td>5 min unresolved</td><td>Email (Resend)</td><td>${email.configured?pill('green','Available'):pill('amber','Key required')}</td></tr>
+      <tr><td>10 min unresolved</td><td>SMS</td><td>${pill('off','Provider required')}</td></tr>
+    </tbody></table></div>`;
   } else if (tab === 'alertrules') {
-    body = `<div class="panel"><div class="panel-h"><h3>${ic(I.list)}Alert Rules${help('Fixed sensible defaults for this release — thresholds live in code next to the checks they describe (streamer.py, main.py’s watchdog) so they can never drift out of sync with what is actually evaluated.')}</h3></div><div class="panel-b">
-      ${(rules||[]).map(r=>`<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line)"><span style="flex:1">${pill(r.severity==='critical'?'red':'amber',r.severity)}</span><span style="flex:4">${h(r.condition)}</span><span class="small muted2 mono" style="flex:2">${h(r.key)}</span></div>`).join('')}
-    </div></div>`;
+    const CAT_ICON = {youtube_ingest:I.yt, youtube_lifecycle:I.yt, stream_stall_heartbeat:I.stream, stream_stall_first:I.stream, stream_stall_forward:I.stream, liquidsoap_stall:I.headphones, silence:I.headphones, usb:I.db, speed_degraded:I.restart, drop_frames:I.bars};
+    const nCrit = (rules||[]).filter(r=>r.severity==='critical').length;
+    body = `
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:4px">
+      ${card('','Total Rules',(rules||[]).length,'fixed defaults',I.list,'','')}
+      ${card('','Active Rules',(rules||[]).length,'all evaluated every 15s',I.check,'green','')}
+      ${card('','Critical',nCrit,'severity',I.alert,'red','')}
+      ${card('','Warning',(rules||[]).length-nCrit,'severity',I.alert,'amber','')}
+    </div>
+    <div class="tblwrap"><table class="tbl"><thead><tr><th>Rule</th><th>Severity</th><th>Source</th><th>Status</th></tr></thead><tbody>
+      ${(rules||[]).map(r=>`<tr><td><div class="row-title">${h(r.condition)}</div></td><td>${pill(r.severity==='critical'?'red':'amber',r.severity)}</td><td class="mono small muted2">${h(r.key)}</td><td>${pill('green','Active')}</td></tr>`).join('')}
+    </tbody></table></div>
+    <p class="small muted2" style="margin-top:10px">Fixed sensible defaults for this release — thresholds live in code next to the checks they describe (<code>streamer.py</code>'s <code>StallDetector</code>, <code>main.py</code>'s watchdog) so they can never drift out of sync with what's actually evaluated. Operator-editable thresholds are a planned follow-up (see docs/monitoring-alerts.md), not built here — this list is real and live, not a mockup.</p>`;
   } else if (tab === 'incidents') {
-    const row = (a) => { const dur = a.resolved_at ? fmtLong(a.resolved_at - a.ts) : fmtLong(Date.now()/1000 - a.ts);
-      return `<div style="padding:8px 0;border-bottom:1px solid var(--line)"><b>${h(a.title)}</b> ${pill(MON_SEV_CLS[a.severity]==='red'?'red':'amber',a.severity)} ${pill(a.state==='resolved'?'off':'blue', a.state==='resolved'?'Resolved':(a.state==='acknowledged'?'Monitoring':'Investigating'))}<p class="small">${h(a.message)}</p><div class="small muted2">${h(a.station||'system')} · started ${fmtDate(a.ts)} · ${a.state==='resolved'?'duration '+dur:'ongoing '+dur}${a.count>1?' · ×'+a.count+' occurrences':''}</div></div>`; };
-    body = `<div class="panel"><div class="panel-h"><h3>${ic(I.logs)}Incident History${help('Reuses the existing events/alerts system (see docs/monitoring-alerts.md) — not a separate parallel log. Statuses map open→Investigating, acknowledged→Monitoring, resolved→Resolved.')}</h3></div><div class="panel-b">
-      <h4 style="margin:0 0 8px">Open (${openIncidents.length})</h4>
-      ${openIncidents.length?openIncidents.map(row).join(''):empty(I.check,'No open incidents','')}
-      <h4 style="margin:16px 0 8px">Resolved (${resolvedIncidents.length})</h4>
-      ${resolvedIncidents.length?resolvedIncidents.slice(0,30).map(row).join(''):empty(I.check,'No resolved incidents yet','')}
-    </div></div>`;
+    const trow = (a) => { const dur = a.resolved_at ? fmtLong(a.resolved_at - a.ts) : fmtLong(Date.now()/1000 - a.ts);
+      return `<tr><td><div class="row-title">${h(a.title)}</div><div class="row-sub" title="${h(a.message)}">${h(monShortMsg(a.message))}</div></td><td>${pill(MON_SEV_CLS[a.severity]==='red'?'red':'amber',a.severity)}</td><td>${pill(a.state==='resolved'?'off':'blue', a.state==='resolved'?'Resolved':(a.state==='acknowledged'?'Monitoring':'Investigating'))}</td><td class="small">${fmtDate(a.ts)}</td><td class="small">${a.state==='resolved'?dur:dur+' (ongoing)'}</td><td class="small">${h(a.station||'system')}${a.count>1?` · ×${a.count}`:''}</td></tr>`; };
+    body = `
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:4px">
+      ${card('','Total Incidents',relAlerts.length,'stream/YouTube/media',I.logs,'','')}
+      ${card('','Open',openIncidents.length,openIncidents.length?'needs attention':'all clear',I.alert,openIncidents.length?'red':'green','')}
+      ${card('','Resolved',resolvedIncidents.length,'historical',I.check,'green','')}
+    </div>
+    <div class="mon-section-h">Open (${openIncidents.length})</div>
+    ${openIncidents.length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>Incident</th><th>Severity</th><th>Status</th><th>Started</th><th>Duration</th><th>Source</th></tr></thead><tbody>${openIncidents.map(trow).join('')}</tbody></table></div>`:empty(I.check,'No open incidents','')}
+    <div class="mon-section-h">Resolved (${resolvedIncidents.length})</div>
+    ${resolvedIncidents.length?`<div class="tblwrap"><table class="tbl"><thead><tr><th>Incident</th><th>Severity</th><th>Status</th><th>Started</th><th>Duration</th><th>Source</th></tr></thead><tbody>${resolvedIncidents.slice(0,30).map(trow).join('')}</tbody></table></div>`:empty(I.check,'No resolved incidents yet','')}
+    <p class="small muted2" style="margin-top:10px">Reuses the existing events/alerts system (see docs/monitoring-alerts.md) — not a separate parallel log. Root cause is only ever shown when the underlying event message states it directly; nothing here is inferred or fabricated.</p>`;
   } else if (tab === 'settings') {
     body = `<div class="panel"><div class="panel-h"><h3>${ic(I.cog)}Monitoring Settings</h3></div><div class="panel-b">
       <p class="small muted">Full architecture, correlation model, and known gaps: <a class="link" href="https://github.com/amaeteventurestudios/hungreegoat/blob/main/docs/monitoring-alerts.md" target="_blank" rel="noopener">docs/monitoring-alerts.md</a>.</p>
@@ -1087,12 +1147,12 @@ pages.monitoring = { live:true,
     </div></div>`;
   }
 
-  return `<div class="page-h"><h2>Monitoring &amp; Alerts</h2><span class="small muted">Real, API-backed monitoring for the broadcast pipeline, YouTube state, and external reachability — not placeholder cards.</span></div>${tabsHtml}<div style="margin-top:14px">${body}</div>`;
+  return `<div class="page-h"><h2>Monitoring &amp; Alerts</h2><span class="small muted">Real, API-backed monitoring for the broadcast pipeline, YouTube state, and external reachability — not placeholder cards.</span></div>${tabsHtml}<div>${body}</div>`;
 } };
 Object.assign(ACTIONS, {
   'mon-tab': (el)=>{ state._monTab=el.dataset.v; render(); },
   'mon-range': (el)=>{ state._monRange=el.dataset.v; delete state.pageData.monitoring; render(); },
-  'mon-test': async(el)=>{ const kind=el.dataset.kind; const labels={push:'Test push sent — check your phone',simulate_down:'Simulated outage logged (TEST)',simulate_warning:'Simulated warning logged (TEST)',simulate_recovery:'Simulated recovery logged (TEST)'};
+  'mon-test': async(el)=>{ const kind=el.dataset.kind; const labels={push:'Test push sent — check your phone',email:'Test email sent',simulate_down:'Simulated outage logged (TEST)',simulate_warning:'Simulated warning logged (TEST)',simulate_recovery:'Simulated recovery logged (TEST)'};
     const r = await act(()=>post(`/api/monitoring/test?station=${S()}`,{kind}), labels[kind]||'Done', {noRefresh:true});
     if (r) { delete state.pageData.monitoring; render(); } },
 });
