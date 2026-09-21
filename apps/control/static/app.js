@@ -284,7 +284,10 @@ function drawSparks(){ $$('canvas[data-spark]').forEach(c=>{ const d=hist[c.data
    an optional dashed target line (e.g. 1.0x realtime), an optional gradient fill, and a
    "no data yet" placeholder so a freshly (re)loaded page never renders a blank canvas. */
 function drawLineChart(canvas, series, opts={}) {
-  if (!canvas) return;
+  // Returns the CSS-pixel {x,y} of the true latest non-null sample within the canvas, or null —
+  // purely additive: existing callers that ignore the return value are unaffected. Used only to
+  // position a subtle "live" overlay dot on top of the canvas; never changes what's drawn here.
+  if (!canvas) return null;
   const dpr = Math.min(2, window.devicePixelRatio||1);
   const cw = canvas.clientWidth||300, ch = canvas.clientHeight||150;
   canvas.width = Math.max(1,cw*dpr); canvas.height = Math.max(1,ch*dpr);
@@ -298,7 +301,7 @@ function drawLineChart(canvas, series, opts={}) {
   if (opts.target!=null && opts.target <= maxV) { const y=padT+h-h*(opts.target/maxV); ctx.setLineDash([4,4]); ctx.strokeStyle='rgba(159,176,198,.55)';
     ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(padL+w,y); ctx.stroke(); ctx.setLineDash([]); }
   const n = series.length;
-  if (n<2 || !vals.length) { ctx.fillStyle='#6f8199'; ctx.font='12px Inter, sans-serif'; ctx.textAlign='center'; ctx.fillText('No data yet — keep this page open while streaming', padL+w/2, padT+h/2); ctx.textAlign='left'; return; }
+  if (n<2 || !vals.length) { ctx.fillStyle='#6f8199'; ctx.font='12px Inter, sans-serif'; ctx.textAlign='center'; ctx.fillText('No data yet — keep this page open while streaming', padL+w/2, padT+h/2); ctx.textAlign='left'; return null; }
   const pts = series.map((v,i)=>[padL + w*i/(n-1), v==null?null:padT+h-h*Math.min(1,v/maxV)]);
   if (opts.fill) { ctx.beginPath(); let started=false, first=null, last=null;
     pts.forEach(([x,y])=>{ if(y==null) return; if(!started){ ctx.moveTo(x,y); started=true; first=x; } else ctx.lineTo(x,y); last=x; });
@@ -307,6 +310,30 @@ function drawLineChart(canvas, series, opts={}) {
   ctx.beginPath(); let started=false;
   pts.forEach(([x,y])=>{ if(y==null){ started=false; return; } if(!started){ ctx.moveTo(x,y); started=true; } else ctx.lineTo(x,y); });
   ctx.strokeStyle=opts.color||'#4f8cff'; ctx.lineWidth=2; ctx.lineJoin='round'; ctx.stroke();
+  let lastPt = null;
+  for (let i=pts.length-1; i>=0; i--) { if (pts[i][1]!=null) { lastPt = {x: pts[i][0], y: pts[i][1]}; break; } }
+  return lastPt;
+}
+// Positions the subtle "live" dot + shimmer overlay for a chart (see app.css) from the exact
+// pixel returned by drawLineChart() — never touches the canvas, the series, or any value.
+// `live` gates the whole effect: false (stale/no-data) just hides it, falling back to
+// whatever static styling the caller already applies elsewhere (e.g. the STALE/NO DATA pill).
+function chartLiveDot(container, lastPt, color, live) {
+  if (!container) return;
+  let dot = container.querySelector(':scope > .chart-dot');
+  let shim = container.querySelector(':scope > .chart-shimmer');
+  if (!dot) { dot = document.createElement('span'); dot.className = 'chart-dot'; container.appendChild(dot); }
+  if (!shim) { shim = document.createElement('span'); shim.className = 'chart-shimmer'; container.appendChild(shim); }
+  shim.classList.toggle('live', !!live && !!lastPt);
+  if (!live || !lastPt) { dot.style.display = 'none'; return; }
+  dot.style.display = 'block';
+  dot.style.left = lastPt.x + 'px';
+  dot.style.top = lastPt.y + 'px';
+  dot.style.background = color || '#4f8cff';
+  // Retriggered on every call (each live poll tick) rather than only on a value change — a
+  // metric that's genuinely flat still just received a fresh sample, which is exactly the
+  // reassurance this is for. Reflow-forced restart so the CSS animation actually replays.
+  dot.classList.remove('chart-dot-fresh'); void dot.offsetWidth; dot.classList.add('chart-dot-fresh');
 }
 let meterLevel=0, meterTarget=0;
 function animateMeter(){ meterLevel += (meterTarget-meterLevel)*0.25; const t=performance.now()/1000;
@@ -401,5 +428,5 @@ Object.assign(FORMS, {
   setInterval(pollMeter, 2500); setInterval(tickClock, 1000); animateMeter();
   setInterval(async()=>{ try{ const v=await api('/api/version'); if(window.HGC_V && v.assets!==window.HGC_V){ toast('HUNGREE Goat Control was updated — reloading','ok'); setTimeout(()=>location.reload(), 1500); } }catch{} }, 60000);
 })();
-return { state, api, post, put, patch, del, act, toast, confirmDlg, render, refresh, h, I, fmtDur, fmtLong, fmtBytes, fmtTime, fmtDate, st, artUrl, ASSET, ACTIONS, FORMS, CHANGES, previewTrack, listenStart, mobile, help, hist, drawLineChart, pages:{} };
+return { state, api, post, put, patch, del, act, toast, confirmDlg, render, refresh, h, I, fmtDur, fmtLong, fmtBytes, fmtTime, fmtDate, st, artUrl, ASSET, ACTIONS, FORMS, CHANGES, previewTrack, listenStart, mobile, help, hist, drawLineChart, chartLiveDot, pages:{} };
 })();

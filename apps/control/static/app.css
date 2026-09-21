@@ -395,6 +395,24 @@ button.mediaAction{font-family:inherit}
 .mini-chart{position:relative;height:150px}
 .mini-chart canvas{width:100%;height:100%;display:block}
 .chart-tag{position:absolute;top:6px;right:6px;padding:2px 9px;border-radius:7px;background:rgba(0,0,0,.55);font:700 11.5px var(--display);color:var(--text)}
+
+/* ---------- live chart presence (purely presentational — see chartLiveDot() in app.js) ---------- */
+/* A calm "this is really updating" cue for series that are legitimately flat because the real
+   value is stable — never alters the drawn line, axes, or data itself. */
+.chart-dot{position:absolute;width:7px;height:7px;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:2;display:none}
+.chart-dot::after{content:'';position:absolute;inset:-7px;border-radius:50%;background:inherit;opacity:.3;animation:chart-dot-pulse 2.4s ease-in-out infinite}
+@keyframes chart-dot-pulse{0%,100%{transform:scale(.55);opacity:.32}50%{transform:scale(1.7);opacity:0}}
+.chart-dot-fresh{animation:chart-dot-fresh .22s ease-out}
+@keyframes chart-dot-fresh{0%{transform:translate(-50%,-50%) scale(.5);opacity:.4}100%{transform:translate(-50%,-50%) scale(1);opacity:1}}
+.chart-shimmer{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .5s ease;background:linear-gradient(100deg,transparent 42%,rgba(255,255,255,.05) 50%,transparent 58%);background-size:240% 100%}
+.chart-shimmer.live{opacity:1;animation:chart-shimmer-sweep 8s linear infinite}
+@keyframes chart-shimmer-sweep{0%{background-position:130% 0}100%{background-position:-30% 0}}
+/* A small breathing dot INSIDE the LIVE pill only — the pill's own text (sample age, count)
+   already changes every render, so animating the whole pill would be busy; this animates
+   just the indicator, per "do not animate the whole banner". */
+.pill-live-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:currentColor;margin-right:5px;vertical-align:middle;animation:pill-breathe 2.6s ease-in-out infinite}
+@keyframes pill-breathe{0%,100%{opacity:1}50%{opacity:.4}}
+@media (prefers-reduced-motion: reduce){.chart-dot::after,.chart-dot-fresh,.chart-shimmer.live,.pill-live-dot{animation:none!important}}
 .chart-legend{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted)}
 .chart-legend i{width:13px;height:2px;display:inline-block;border-radius:1px}
 details.adv{border:1px solid var(--line);border-radius:var(--r);background:var(--panel);box-shadow:var(--shadow);overflow:hidden}

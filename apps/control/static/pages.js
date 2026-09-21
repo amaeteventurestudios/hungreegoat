@@ -521,8 +521,16 @@ pages.youtube = { live:true,
       oauth: (oauthr.status==='fulfilled' && oauthr.value) ? oauthr.value : {connected:false, client_configured:false},
       broadcast: (bcr.status==='fulfilled' && bcr.value) ? bcr.value : {bound:false} }; },
   after(){ const b=(HGC.hist.yt||{})[S()]||{bitrate:[],speed:[]};
-    HGC.drawLineChart(document.querySelector('canvas[data-ytchart="bitrate"]'), b.bitrate, {color:'#2ecc8a', fill:true, fmtY:v=>(v/1000).toFixed(1)+'M'});
-    HGC.drawLineChart(document.querySelector('canvas[data-ytchart="speed"]'), b.speed, {color:'#ff5a6a', target:1.0, min:1.0, fmtY:v=>v.toFixed(1)+'×'}); },
+    // "Live" here = the local encoder is actually running (same signal the rest of this page
+    // already uses) — these two charts are browser-session-only history with no server-side
+    // freshness field, so this is the honest equivalent for gating the live dot/shimmer.
+    const yNow = (state.pageData.youtube||{}).y || {};
+    const running = yNow.state==='running' && !yNow.stale;
+    const bCanvas = document.querySelector('canvas[data-ytchart="bitrate"]'), sCanvas = document.querySelector('canvas[data-ytchart="speed"]');
+    const bPt = HGC.drawLineChart(bCanvas, b.bitrate, {color:'#2ecc8a', fill:true, fmtY:v=>(v/1000).toFixed(1)+'M'});
+    const sPt = HGC.drawLineChart(sCanvas, b.speed, {color:'#ff5a6a', target:1.0, min:1.0, fmtY:v=>v.toFixed(1)+'×'});
+    HGC.chartLiveDot(bCanvas&&bCanvas.closest('.mini-chart'), bPt, '#2ecc8a', running);
+    HGC.chartLiveDot(sCanvas&&sCanvas.closest('.mini-chart'), sPt, '#ff5a6a', running); },
   view({y, ev, oauth, broadcast}) {
   y = y || {}; ev = Array.isArray(ev) ? ev : []; oauth = oauth || {connected:false, client_configured:false}; broadcast = broadcast || {bound:false};
   const s=st(); const m=y.meta||{}; const show=state._showKey;
@@ -944,7 +952,9 @@ const MON_SEV_CLS = {critical:'red', error:'red', warning:'amber', info:'blue'};
 const monFresh = (tel) => {
   if (!tel || tel.freshness==='no_data') return pill('off', 'NO DATA' + (tel&&tel.last_sample_age_sec!=null?` — last sample ${fmtLong(tel.last_sample_age_sec)} ago`:' — no samples yet'));
   if (tel.freshness==='stale') return pill('amber', `STALE — last sample ${Math.round(tel.last_sample_age_sec)}s ago`);
-  return pill('green', `LIVE · last sample ${Math.round(tel.last_sample_age_sec)}s ago · ${tel.sample_count} samples`);
+  // Built directly (not via pill(), which HTML-escapes its text) so the breathing dot span
+  // survives — see .pill-live-dot in app.css. Only the LIVE case gets it.
+  return `<span class="pill green"><span class="pill-live-dot"></span>${h(`LIVE · last sample ${Math.round(tel.last_sample_age_sec)}s ago · ${tel.sample_count} samples`)}</span>`;
 };
 const monStat = (label, stats, fmt) => `<div class="m"><div class="k">${label}</div><div class="v">${stats&&stats.current!=null?fmt(stats.current):'—'}</div><div class="small muted2">min ${stats&&stats.min!=null?fmt(stats.min):'—'} · avg ${stats&&stats.avg!=null?fmt(stats.avg):'—'} · max ${stats&&stats.max!=null?fmt(stats.max):'—'}</div></div>`;
 // Incident messages can be a raw exception repr (e.g. a YouTube API HttpError with its full
@@ -980,9 +990,14 @@ pages.monitoring = { live:true,
   after(){
     const d = state.pageData.monitoring; if (!d || !d.tel) return;
     const pts = d.tel.points||[];
-    HGC.drawLineChart(document.querySelector('canvas[data-monchart="fps"]'), pts.map(p=>p.fps), {color:'#4f8cff', target:30, fmtY:v=>v.toFixed(0)});
-    HGC.drawLineChart(document.querySelector('canvas[data-monchart="speed"]'), pts.map(p=>p.speed), {color:'#ff5a6a', target:1.0, min:1.0, fmtY:v=>v.toFixed(1)+'×'});
-    HGC.drawLineChart(document.querySelector('canvas[data-monchart="bitrate"]'), pts.map(p=>p.bitrate_kbps), {color:'#2ecc8a', fill:true, fmtY:v=>(v/1000).toFixed(1)+'M'});
+    const live = d.tel.freshness === 'live';
+    const fpsCanvas = document.querySelector('canvas[data-monchart="fps"]'), spdCanvas = document.querySelector('canvas[data-monchart="speed"]'), brCanvas = document.querySelector('canvas[data-monchart="bitrate"]');
+    const fpsPt = HGC.drawLineChart(fpsCanvas, pts.map(p=>p.fps), {color:'#4f8cff', target:30, fmtY:v=>v.toFixed(0)});
+    const spdPt = HGC.drawLineChart(spdCanvas, pts.map(p=>p.speed), {color:'#ff5a6a', target:1.0, min:1.0, fmtY:v=>v.toFixed(1)+'×'});
+    const brPt = HGC.drawLineChart(brCanvas, pts.map(p=>p.bitrate_kbps), {color:'#2ecc8a', fill:true, fmtY:v=>(v/1000).toFixed(1)+'M'});
+    HGC.chartLiveDot(fpsCanvas&&fpsCanvas.closest('.mini-chart'), fpsPt, '#4f8cff', live);
+    HGC.chartLiveDot(spdCanvas&&spdCanvas.closest('.mini-chart'), spdPt, '#ff5a6a', live);
+    HGC.chartLiveDot(brCanvas&&brCanvas.closest('.mini-chart'), brPt, '#2ecc8a', live);
   },
   view({ov, rules, tel, alerts}) {
   const tab = state._monTab||'overview';
