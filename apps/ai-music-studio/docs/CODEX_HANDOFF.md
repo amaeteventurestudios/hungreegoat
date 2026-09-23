@@ -1,35 +1,135 @@
 # Codex handoff — 2026-09-23
 
-> **Current update — supersedes the historical snapshot below:** Phase 06 has a
-> source-backed OSS provisioning design. Pinned Windmill OSS v1.817.0 cannot
-> create ordinary users or service accounts, but that does **not** require a
-> service account: a normal non-superadmin user token with `workspace_id=studio`
-> and exact scope `jobs:run:scripts:f/studio/execute` meets the least-privilege
-> requirement. The provisioner now bootstraps only the `studio` workspace and
-> fixed `f/studio/execute` script, persists its hash, and removes the bootstrap
-> secret; it never uses the reserved superadmin identity for runtime work. The
-> rebuilt Studio API is at `0005_orchestration (head)`, API/web readiness passes, 41
-> worker tests pass, and lint/typecheck/build/boundary checks pass. The remaining
-> live diagnostic, worker/dispatcher recovery, browser orchestration and visual
-> gates need that normal, non-superadmin Windmill account token in the private
-> 0600 `windmill-token` file. This deployment has no configured external
-> identity lifecycle and the OSS user/password APIs are unavailable, which is
-> the remaining setup dependency. On 2026-09-23, the official pinned v1.817.0
-> `wmill user add` command was run against the live server with an ephemeral
-> superadmin session: it invoked `POST /api/users/create`, exited 1, and received
-> `Internal: User creation is not implemented in the open-source version.` The
-> matching Instance Settings UI calls the same endpoint. See
-> `docs/HUMAN_BLOCKERS.md` for the sanitized command, server log, and rejected
-> impersonation alternative. `script-hash` is populated;
-> `windmill-token` remains empty. See `docs/HUMAN_BLOCKERS.md`. Resume with Terra
-> High after the token exists, verify permitted exact-script/own-job polling and
-> denied list/other-script access without printing the token, then run the live
-> acceptance commands already listed below. Check the local usage guard before
-> and after each major batch.
->
-> The last coherent Phase 06 implementation commit is `ebd0b28 feat(studio):
-> add durable windmill orchestration`. Phase 07 depends on this live job path and
-> must not begin until the Phase 06 runtime-token gate passes.
+## Current session checkpoint — 2026-09-23T14:34:04-07:00
+
+**Model:** Terra High
+
+**Usage:** weekly 4% used / 96% remaining; guard `continue` (the current Codex
+display does not provide a 5-hour value).
+
+**Phase:** Phase 06 — Orchestration Kernel. Do not start Phase 07.
+**State:** this autonomous build was intentionally stopped after the documented
+Windmill identity-path investigation. The next session must begin from this
+checkpoint and must not treat the issue below as human-only.
+
+### Completed phases and Phase 06 work
+
+- Phases 00–05 are complete and committed.
+- Phase 06 durable orchestration implementation is committed in
+  `ebd0b28 feat(studio): add durable windmill orchestration`: migration
+  `0005_orchestration`, durable job attempts/outbox, dispatcher, internal worker
+  routes, immutable events, recovery behavior, `system.verify`, tagged worker
+  packaging, and job activity UI.
+- Windmill source image `hg-studio-windmill:1.817.0-source` is built from pinned
+  v1.817.0 source. The provisioner creates the `studio` workspace and fixed
+  `f/studio/execute` script, persists its private script hash, and removes the
+  temporary bootstrap superadmin from runtime.
+- Runtime-identity findings were recorded in `34aca19 docs(studio): clarify
+  Windmill OSS runtime identity` and `1345877 docs(studio): verify Windmill OSS
+  user provisioning`.
+
+### Current Windmill technical issue
+
+A normal non-superadmin user token with `workspace_id=studio` and exact scope
+`jobs:run:scripts:f/studio/execute` is the intended least-privilege runtime
+credential. The current pinned OSS server does not create that user through its
+documented paths: a real `windmill-cli@1.817.0` `wmill user add` invocation
+called `POST /api/users/create`, exited 1, and received HTTP 500 `Internal: User
+creation is not implemented in the open-source version.` The Instance Settings
+form calls the same endpoint. Windmill logged the error at `users_oss.rs:40:9`.
+The attempted account was not created; the database still contains only the
+seeded superadmin.
+
+This is a **technical issue pending autonomous architecture/substitution
+investigation**. It is not a confirmed human-only blocker. The next session may
+replace, reconfigure, upgrade, downgrade, or redesign this path under its revised
+autonomy instructions. Do not retain a bootstrap-superadmin credential as the
+runtime token, and do not use the examined impersonation endpoint as a workaround:
+it omits requested scopes and `workspace_id`.
+
+### Current repository and private state
+
+- Last Studio commit: `1345877 docs(studio): verify Windmill OSS user
+  provisioning`.
+- Other relevant Studio commits: `34aca19`, `ebd0b28`, `f1f0d95`, and
+  `64e8610`.
+- **Uncommitted Studio files:** none.
+- Protected unrelated changes: `apps/control/hgc/dj_orchestrator.py` modified;
+  untracked `docs/YOUTUBE_OAUTH_HANDOFF.md`, `docs/images/for-businesses-reference-page.png`,
+  `docs/images/hungree-goat-business-og.webp`, and `docs/images/menu-bar.png`.
+  Do not reset, clean, stage, or commit them.
+- Private orchestration directory is configured outside Git at
+  `/home/aumanah/.local/share/hg-studio/dev/orchestration`. `script-hash` is
+  nonempty and mode 0600; `windmill-token` is empty and mode 0600. Do not print
+  either file's contents.
+
+### Verification already completed
+
+- `python3 scripts/test-api.py`: 41 passed.
+- `PYTHONPATH=apps/worker python3 -m unittest discover -s apps/worker/tests -v`:
+  5 passed.
+- `npm run lint`, `npm run typecheck`, `npm run build`, Compose config, Python
+  import/compile checks, `git diff --check`, and the Studio boundary check passed
+  before the final live gate.
+- Migration `0005_orchestration (head)` is applied. API and web readiness are
+  healthy.
+- No live diagnostic, worker/dispatcher restart-recovery, browser orchestration,
+  or visual Phase 06 gate has passed because the runtime identity path is not
+  established.
+
+### Running services and relevant logs
+
+`studio-api`, `studio-web`, `studio-postgres`, and
+`studio-windmill-postgres` are healthy. `studio-windmill` is running and reports
+degraded only because no workers are alive. `studio-migrate` exited 0.
+`studio-worker` and `studio-dispatcher` are intentionally not started while
+`windmill-token` is empty.
+
+Relevant log evidence:
+
+```text
+POST /api/users/create -> HTTP 500
+Internal: User creation is not implemented in the open-source version. @users_oss.rs:40:9
+```
+
+### Exact recovery commands
+
+Run from `apps/ai-music-studio` after reading the revised autonomy instructions:
+
+```bash
+/home/aumanah/.local/bin/codex-usage-guard
+git -C /home/aumanah/hungree-goat-src/hungreegoat-canonical status --short
+git -C /home/aumanah/hungree-goat-src/hungreegoat-canonical diff --check
+sed -n '1,260p' docs/CODEX_HANDOFF.md
+sed -n '1,360p' scripts/provision-orchestration.py
+sed -n '1,360p' apps/api/src/studio_api/orchestration_client.py
+sed -n '1,360p' docs/ORCHESTRATION_CONTRACT.md
+bash scripts/compose.sh ps --all
+bash scripts/compose.sh logs --tail=160 studio-windmill
+```
+
+Then reconstruct the exact runtime state and independently investigate an
+autonomous replacement/reconfiguration of the Windmill identity path before
+starting the live Phase 06 acceptance commands. Preserve the committed Studio
+state and all unrelated changes listed above.
+
+### Recommended recovery model and prompt
+
+Use **Terra High** for the Phase 06 architecture/integration recovery. The exact
+resume prompt is:
+
+> Resume from `apps/ai-music-studio/docs/CODEX_HANDOFF.md` after reading the
+> rewritten autonomy instructions. Preserve every unrelated repository change.
+> Phase 06 durable orchestration is committed; do not redo it. Treat the
+> Windmill runtime identity failure as a technical issue pending autonomous
+> architecture/substitution investigation, not as a human-only blocker. First
+> run the Codex usage guard, inspect status/diff, services, logs, pinned source,
+> and private orchestration file metadata without printing credentials. Then
+> autonomously choose and verify a least-privilege replacement, reconfiguration,
+> upgrade, downgrade, or redesign; complete the Phase 06 live acceptance only
+> after that path is proven. Do not begin Phase 07 until Phase 06 passes.
+
+## Historical interrupted record
 
 ## Current phase and task
 
