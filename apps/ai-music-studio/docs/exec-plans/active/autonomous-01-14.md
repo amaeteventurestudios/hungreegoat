@@ -223,3 +223,28 @@ Generated fixtures are explicitly labeled, with private manifests under ignored
 test-results. Protected outside-Studio baseline still matches all 293 files.
 Final mobile upload/name-limit revision: two targeted domain cases passed in 7.4s,
 and its updated mobile screenshot was visually inspected.
+
+### Phase 06 recovery checkpoint (2026-09-23)
+The interrupted implementation has been recovered without resetting unrelated
+work. It adds durable `job_attempts`/`job_outbox` records and migration 0005
+(including a backfill for existing Phase 05 jobs), dispatcher reconciliation,
+attempt leases, worker-only internal job routes, a fixed `system.verify` local
+diagnostic, a source-built Windmill image, a tagged worker image, and browser
+job activity/retry/cancel views. The source image is pinned to Windmill v1.817.0
+and archive SHA256 `093ba2e8a9d436de80ffaf52bb0abee2998e5fc82d3d646dbbb07d2c89ca84ce`.
+
+Completed checks: `python3 scripts/test-api.py` reported 41 passed; worker
+unittests reported 5 passed; `npm run lint`, `npm run typecheck`, `npm run build`,
+`git diff --check`, Compose config, and Python import/compile checks passed. The
+Windmill and worker/API/web images were rebuilt successfully after the recovered
+changes. These checks predate the final real-Windmill acceptance gate.
+
+The source-built OSS server is live locally with its bootstrap secret removed.
+Live provisioning reached workspace creation, then confirmed that
+`POST /api/users/create` returns HTTP 500: `User creation is not implemented in
+the open-source version. @users_oss.rs:40:9`. The current provisioner therefore
+cannot create its intended restricted ordinary machine identity, runtime token,
+or script hash. No diagnostic execution, worker restart/recovery, or browser
+orchestration tests have passed. The implementation remains uncommitted until
+that OSS-compatible credential/provisioning design is corrected and verified.
+See `docs/CODEX_HANDOFF.md` for exact runtime state and resume commands.
