@@ -14,6 +14,7 @@ from studio_api.music import (
     CreateGenerationInput,
     MusicGenerationJobInput,
     ProductionPlanData,
+    ReviewGenerationVersionInput,
     music_prompt,
 )
 from studio_api.provider_http import CATALOGS
@@ -27,6 +28,7 @@ VERSION_FIELDS = (
     "version",
     "asset_id",
     "approved",
+    "rejected",
     "favorite",
     "notes",
     "provider_request_id",
@@ -76,6 +78,25 @@ def list_versions(
         .offset(offset)
     )
     return {"items": [version_public(row) for row in rows]}
+
+
+@router.patch("/generation-versions/{version_id}")
+def review_version(
+    version_id: UUID, data: ReviewGenerationVersionInput, auth: Auth, db: DB
+) -> dict:
+    row = scoped(db, GenerationVersion, version_id, auth.workspace_id)
+    if row.asset_id is None:
+        raise fail(409, "version_not_ready", "Generated audio is not ready for review")
+    if data.approved is True and data.rejected is True:
+        raise fail(422, "invalid_review", "A version cannot be approved and rejected")
+    for field, value in data.model_dump(exclude_none=True).items():
+        setattr(row, field, value.strip() if field == "notes" else value)
+    if data.approved is True:
+        row.rejected = False
+    elif data.rejected is True:
+        row.approved = False
+    db.commit()
+    return version_public(row)
 
 
 @router.post("/songs/{song_id}/generations", status_code=202)

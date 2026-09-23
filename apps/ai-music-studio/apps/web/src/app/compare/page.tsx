@@ -1,2 +1,2 @@
-import { Workstation } from "@/components/workstation";
-export default function Page() { return <Workstation page="compare" />; }
+import { CompareWorkspace } from "@/components/compare-workspace";
+export default function Page() { return <CompareWorkspace />; }

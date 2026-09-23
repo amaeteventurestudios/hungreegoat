@@ -74,7 +74,11 @@ independent work.
   provider request metadata, safe retry semantics, and responsive Generation UI.
   API 46 tests, worker 10 tests, lint/typecheck/build and 100 browser checks pass;
   no paid provider request was issued.
-- 09–14: Pending their dependency-ready implementation.
+- 09: Verified — two-slot WaveSurfer playback, seek, synchronized A/B switching,
+  metadata and explicit persisted review decisions; workspace-scoped API and
+  database exclusivity constraint. API 46 tests, migration at head with no model
+  drift, and 104 browser checks pass, including four-viewport fixture playback.
+- 10–14: Pending their dependency-ready implementation.
 
 ## Research
 - Compose project isolation: https://docs.docker.com/compose/how-tos/project-name/

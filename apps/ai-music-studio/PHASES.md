@@ -34,12 +34,13 @@ Missing provider credentials block only the live provider call requiring them. B
 
 ## Current Status
 
-Phases 00–08 are verified. Phase 06 uses a restricted local OSS runtime identity;
+Phases 00–09 are verified. Phase 06 uses a restricted local OSS runtime identity;
 Phase 07 has provider-neutral structured-plan adapters; and Phase 08 has a
 provider-neutral durable generation contract, ElevenLabs worker adapter, bounded
 leased audio intake, immutable generated assets and responsive Version A–D UI.
 Fixture coverage verifies the paid-provider path without issuing a paid request.
-Phase 09 is the next dependency-ready checkpoint. See the active execution record
+Phase 09 adds authenticated WaveSurfer A/B review and durable, mutually exclusive
+approval/rejection decisions. Phase 10 is the next dependency-ready checkpoint. See the active execution record
 for current evidence.
 
 ## Completion

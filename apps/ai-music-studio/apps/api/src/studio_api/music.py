@@ -49,6 +49,13 @@ class MusicGenerationResult(StrictModel):
         return value
 
 
+class ReviewGenerationVersionInput(StrictModel):
+    favorite: bool | None = None
+    approved: bool | None = None
+    rejected: bool | None = None
+    notes: str | None = Field(default=None, max_length=8000)
+
+
 def music_prompt(song, plan: ProductionPlanData, direction: str) -> str:
     """Produce a bounded vendor prompt from canonical song and plan data."""
     parts = [

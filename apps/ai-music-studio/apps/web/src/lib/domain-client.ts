@@ -14,6 +14,7 @@ export const domain = {
  generations:(song:string)=>apiRequest<{items:MusicGeneration[]}>(`/songs/${encodeURIComponent(song)}/generations?limit=100`),
  generationVersions:(generation:string)=>apiRequest<{items:GenerationVersion[]}>(`/generations/${encodeURIComponent(generation)}/versions?limit=100`),
  createGeneration:(song:string,body:{idempotency_key:string;version_count:number;duration_seconds?:number;prompt:string},csrf:string|null)=>apiRequest<{generation_id:string;job_id:string;state:string}>(`/songs/${encodeURIComponent(song)}/generations`,{method:"POST",body,csrf}),
+ reviewVersion:(id:string,body:Partial<Pick<GenerationVersion,"favorite"|"approved"|"rejected"|"notes">>,csrf:string|null)=>apiRequest<GenerationVersion>(`/generation-versions/${encodeURIComponent(id)}`,{method:"PATCH",body,csrf}),
 };
 export async function uploadAudio(project:string,song:string|null,file:File,csrf:string|null):Promise<AudioAsset> {
  if(file.size>100*1024*1024)throw new Error("Choose an audio file smaller than 100 MiB.");

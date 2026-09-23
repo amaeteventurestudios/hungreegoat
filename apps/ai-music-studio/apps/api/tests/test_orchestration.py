@@ -516,6 +516,27 @@ def test_music_outputs_are_lease_bound_immutable_and_reconciled(orchestration):
         }
         assert db.get(Generation, generation_id).settings["version_count"] == 2
     assert browser.get(f"/api/v1/assets/{first.json()['asset_id']}/stream").content == audio
+    browser.headers["Origin"] = ORIGIN
+    versions = browser.get(f"/api/v1/generations/{generation_id}/versions").json()["items"]
+    assert [version["version"] for version in versions] == [1, 2]
+    version_url = f"/api/v1/generation-versions/{versions[0]['id']}"
+    rejected = browser.patch(
+        version_url, json={"rejected": True, "favorite": True, "notes": "  Try a quieter bass.  "}
+    )
+    assert rejected.status_code == 200, rejected.text
+    assert rejected.json()["rejected"] and rejected.json()["favorite"]
+    assert not rejected.json()["approved"] and rejected.json()["notes"] == "Try a quieter bass."
+    approved = browser.patch(version_url, json={"approved": True})
+    assert approved.status_code == 200 and approved.json()["approved"]
+    assert not approved.json()["rejected"]
+    assert browser.patch(version_url, json={"approved": True, "rejected": True}).status_code == 422
+    assert (
+        browser.patch(f"/api/v1/generation-versions/{uuid4()}", json={"favorite": True}).status_code
+        == 404
+    )
+    assert browser.get(f"/api/v1/generations/{generation_id}/versions").json()["items"][0][
+        "approved"
+    ]
 
 
 def test_existing_execution_identity_mismatch_is_not_accepted(orchestration):

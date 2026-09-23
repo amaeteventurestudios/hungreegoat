@@ -232,11 +232,13 @@ class GenerationVersion(Identity, ProjectScope, Base):
             ["generations.id", "generations.project_id", "generations.workspace_id"],
         ),
         CheckConstraint("version > 0", name="generation_version_positive"),
+        CheckConstraint("NOT (approved AND rejected)", name="generation_review_exclusive"),
     )
     generation_id: Mapped[UUID]
     version: Mapped[int]
     asset_id: Mapped[UUID | None]
     approved: Mapped[bool] = mapped_column(default=False)
+    rejected: Mapped[bool] = mapped_column(default=False)
     favorite: Mapped[bool] = mapped_column(default=False)
     notes: Mapped[str] = mapped_column(String(8000), default="")
     provider_request_id: Mapped[str | None] = mapped_column(String(200))

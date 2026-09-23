@@ -104,3 +104,8 @@ Production plans are validated against one Studio-owned schema and persisted as 
 Status: Accepted (Phase 08)
 
 ElevenLabs Music responses are fetched only by the leased Studio worker and sent to a bounded, authenticated internal intake endpoint. The API independently validates the audio, writes an immutable asset, and records a generic `GenerationVersion` with provider request metadata. A lost provider response is outcome-unknown and cannot be blindly retried; safe retries resume already committed versions without duplicate generation.
+
+## ADR-022 — Non-Destructive Generation Review
+Status: Accepted (Phase 09)
+
+Waveform playback uses authenticated same-origin asset streams in the browser; no browser audio engine writes canonical assets. Favorite, notes, approval, and rejection are workspace-scoped metadata on immutable generated versions. A database constraint and API transition logic prevent simultaneous approval and rejection. Switching A/B playback pauses the other slot and preserves the current comparison position; new generation requests remain explicit paid actions.
