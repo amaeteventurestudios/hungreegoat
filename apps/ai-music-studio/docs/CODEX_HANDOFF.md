@@ -17,6 +17,10 @@
 > denied list/other-script access without printing the token, then run the live
 > acceptance commands already listed below. Check the local usage guard before
 > and after each major batch.
+>
+> The last coherent Phase 06 implementation commit is `ebd0b28 feat(studio):
+> add durable windmill orchestration`. Phase 07 depends on this live job path and
+> must not begin until the Phase 06 runtime-token gate passes.
 
 ## Current phase and task
 

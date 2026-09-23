@@ -63,8 +63,10 @@ independent work.
   25 API tests, 87 browser tests and four-viewport visual review pass.
 - 05: Verified — projects/songs/immutable assets, 33 API tests, 89 browser tests,
   2 targeted post-polish checks and actual database/API recovery with audio SHA256.
-- 06: In progress — Windmill, durable dispatch/attempts, workers and recovery.
-- 07–14: Pending dependency-ready checkpoints.
+- 06: Blocked only on normal-account Windmill runtime token — durable
+  dispatch/attempts/workers are implemented and locally verified; the live gate
+  must validate the scoped token before worker/dispatcher startup.
+- 07–14: Pending the Phase 06 live orchestration dependency.
 
 ## Research
 - Compose project isolation: https://docs.docker.com/compose/how-tos/project-name/
