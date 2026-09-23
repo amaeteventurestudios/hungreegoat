@@ -1,13 +1,19 @@
-# Phase 10 — Mastering and Export
+# Phase 10 — Stem Separation & Mixing
 
 ## Objective
-Create final masters and delivery formats.
+Create normalized stems and a practical Studio mixer.
 
 ## Work
-MasteringProvider, Matchering adapter, reference upload/select, mastering workflow, FFmpeg exports, WAV/MP3 presets, mastering UI.
+- StemSeparator abstraction
+- Demucs adapter
+- separation worker
+- vocals/drums/bass/other normalization
+- stem assets/lineage
+- stem playback
+- mute/solo/volume
+- recombination/mix versions
+- downloads
+- engine health
 
 ## Acceptance
-- real master completes
-- exports work
-- source/reference remain preserved
-- lineage/metadata correct
+Codex verifies real local separation with safe fixture audio, mixer behavior, lineage, recombination, and replaceable abstraction, then continues.

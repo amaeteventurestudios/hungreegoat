@@ -7,11 +7,13 @@ Domain and UI code depend on normalized interfaces, never vendor SDK schemas.
 Methods:
 - create_plan
 - refine_plan
+- list_models where supported
 - health_check
 
 Initial adapters:
 - OpenAI
-- Claude
+- OpenRouter
+- Anthropic/Claude
 
 ## MusicGenerationProvider
 Methods:
@@ -19,60 +21,61 @@ Methods:
 - get_status
 - cancel
 - download_outputs
+- list_models/capabilities where supported
 - health_check
 
 Initial adapter:
 - ElevenLabs Music
 
-## AudioAnalyzer
+## SecretStore
 Methods:
-- analyze
-- health_check
+- set_secret(provider, value)
+- has_secret(provider)
+- masked_secret(provider)
+- get_secret_for_server_use(provider)
+- delete_secret(provider)
 
-Initial implementation:
+Raw secret retrieval is server-only and never exposed through public API responses.
+
+## Provider Configuration
+Normalized fields:
+- provider
+- enabled
+- secret_reference
+- masked_secret
+- default_model
+- capabilities
+- health_status
+- last_health_check_at
+- nonsecret_options
+
+## AudioAnalyzer
+Initial:
 - FFprobe
 - librosa
 - SoundFile
 
 ## TempoProcessor
-Methods:
-- transform
-- health_check
-
-Initial adapter:
+Initial:
 - Rubber Band
 
 ## StemSeparator
-Methods:
-- separate
-- health_check
-
-Initial adapter:
+Initial:
 - Demucs
 
 ## MasteringProvider
-Methods:
-- master
-- health_check
-
-Initial adapter:
+Initial:
 - Matchering
 
 ## StorageProvider
-Methods:
-- put
-- open
-- delete
-- get_download_reference
-
-Initial adapter:
+Initial:
 - local filesystem
 
 Future:
 - S3-compatible object storage
 
-## Normalized Errors
-Map provider/engine failures into internal codes such as:
+## Errors
+Normalize provider/engine failures:
 - provider_auth_failed
 - provider_rate_limited
 - provider_timeout

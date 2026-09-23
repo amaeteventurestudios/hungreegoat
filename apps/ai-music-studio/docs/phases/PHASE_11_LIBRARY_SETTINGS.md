@@ -1,12 +1,22 @@
-# Phase 11 — Library and Settings
+# Phase 11 — Mastering, Library & Export
 
 ## Objective
-Complete asset discovery and configuration.
+Complete release preparation and asset management.
 
 ## Work
-Searchable library, filters, details, versions/stems/masters/exports, provider health, defaults, workspace preferences, storage usage.
+- MasteringProvider
+- Matchering adapter
+- reference-track workflow
+- mastering versions
+- pre/post comparison
+- FFmpeg exports
+- WAV
+- MP3
+- stems package
+- searchable/filterable Library
+- lineage viewer
+- provider/settings polish
+- storage usage
 
 ## Acceptance
-- every derived asset can be located
-- provider health is real
-- settings persist
+Codex verifies mastering, exports, library discoverability, preserved source/reference assets, settings persistence, and UI quality, then continues.

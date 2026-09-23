@@ -1,31 +1,18 @@
-# Phase 00 — Monorepo Integration
+# Phase 00 — Monorepo Reconnaissance & Integration
 
 ## Objective
-Make `apps/ai-music-studio` a well-defined application boundary inside the existing Hungree Goat monorepo.
+Understand the actual environment and establish a safe autonomous build boundary.
 
 ## Work
-- verify monorepo structure
-- preserve sibling apps
-- establish Studio-local workspace plan
-- establish source/runtime distinction
-- establish environment naming
-- add implementation scaffolding only inside Studio unless a root workspace change is unavoidable
-- validate no nested `.git`
-- create execution-plan mechanism
-- inspect existing root tooling before changing it
-
-## No-Touch
-Do not modify:
-- `apps/control`
-- `apps/player`
-- `apps/dj-studio`
-
-unless a root workspace requirement genuinely needs a compatibility adjustment and it is documented first.
+- inspect repository and runtime trees
+- inspect existing Docker/Caddy/network conventions
+- inspect available CPU/GPU/audio tooling
+- inspect existing modified/untracked files and protect them
+- verify Studio source/runtime paths
+- create the active autonomous execution plan
+- verify no nested Git repository
+- inventory ports and service-name collisions
+- record baseline health of existing Hungree Goat services
 
 ## Acceptance
-- Git top-level remains Hungree Goat root
-- Studio files live under `apps/ai-music-studio`
-- no nested repo
-- docs accurately describe paths
-- no unrelated changes staged
-- Phase 01 can proceed cleanly
+Codex performs all checks itself. When the phase passes, continue directly to Phase 01.

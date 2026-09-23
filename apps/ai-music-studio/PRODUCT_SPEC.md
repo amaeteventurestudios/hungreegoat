@@ -6,40 +6,72 @@ Hungree Goat AI Music Studio
 Production URL: `https://studio.hungreegoat.com`
 
 ## Primary Goal
-Move from idea to generated, edited, tempo-adjusted, stem-separated, mastered, exportable music without manually stitching together many tools.
+Move from an idea to generated, edited, tempo-adjusted, stem-separated, mastered, exportable music without manually stitching together many tools.
 
-## Screens
-### 1. Dashboard
-Recent projects, active jobs, approved masters, storage usage, quick New Song, resumable work, mini-player.
+## 1. Dashboard
+Recent projects, active jobs, masters, storage usage, quick New Song, resumable work, mini-player.
 
-### 2. New Project / New Song
+## 2. New Project / New Song
 Project, title, source idea/song, style, BPM, optional key, vocal mode, duration, tags, notes, optional reference.
 
-Primary action: `Generate Production Plan`.
+## 3. AI Producer
+Natural-language brief plus structured style, tempo, key, instrumentation, structure, energy curve, negative instructions, and delivery notes.
 
-### 3. AI Producer
-Natural-language request plus structured output: style, tempo, key, instrumentation, structure, energy curve, negative instructions, delivery notes.
+Provider selectable from configured AI providers.
 
-### 4. Generation
+## 4. Generation
 Provider/model, settings, Version A/B/C/D, progress, duration, status, preview, retry/cancel when supported, approve.
 
-### 5. Listen & Compare
+## 5. Listen & Compare
 Waveform, A/B switching, metadata, notes, favorite, approve, regenerate, send to arrangement.
 
-### 6. Edit / Arrangement
-Timeline, sections, selected-section inspector, instrumentation, energy, instructions, revision history, capability-aware section regeneration.
+## 6. Edit / Arrangement
+Timeline, sections, inspector, instrumentation, energy, instructions, revision history, capability-aware regeneration.
 
-### 7. Tempo / Remix
-Detected BPM, target BPM, ratio, preserve pitch, preserve formants where supported, pitch semitones, time stretch, double-time, half-time, preview, extreme-ratio warning.
+## 7. Tempo / Remix
+Detected BPM, target BPM, ratio, preserve pitch/formants where supported, pitch semitones, time stretch, double-time, half-time, preview, extreme-ratio warning.
 
-### 8. Stems & Mastering
-Vocals/drums/bass/other, mute/solo/play, progress; mastering source/reference/settings/output.
+## 8. Stems & Mixing
+Vocals/drums/bass/other, mute/solo/play, per-stem level, recombination, downloads.
 
-### 9. Library / Final Masters
-Search/filter assets, versions, stems, masters, exports, lineage, notes, playback, download/export.
+## 9. Mastering
+Source mix, reference track, mastering settings, A/B pre/post, master versions.
 
-### 10. Settings / Integrations
-AI providers, music generation, separator, tempo engine, mastering engine, credential status, defaults, storage, workspace, appearance.
+## 10. Library / Final Masters
+Search/filter assets, songs, versions, stems, masters, exports, lineage, notes, playback, download/export.
+
+## 11. Settings / Integrations
+This is a first-class product surface, not developer-only configuration.
+
+Sections:
+- Providers
+- Audio Engines
+- Storage
+- Audio Defaults
+- Export Defaults
+- Workspace
+- Appearance
+- Health
+
+Provider cards:
+- ElevenLabs
+- OpenAI
+- OpenRouter
+- Anthropic/Claude
+- future providers
+
+Each provider card supports:
+- Connected / Not Connected
+- Enabled / Disabled
+- masked credential
+- Add / Replace credential
+- Test Connection
+- provider health
+- last successful health check
+- default model dropdown where applicable
+- optional advanced settings
+
+Raw credentials are never re-displayed after storage.
 
 ## Global Requirements
 - durable job status
@@ -50,3 +82,4 @@ AI providers, music generation, separator, tempo engine, mastering engine, crede
 - keyboard accessibility
 - responsive layout
 - transparent unsupported-capability states
+- no hardcoded provider credentials

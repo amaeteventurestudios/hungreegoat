@@ -1,13 +1,19 @@
-# Phase 05 — AI Producer
+# Phase 05 — Orchestration Kernel
 
 ## Objective
-Convert natural language into a validated structured music production plan.
+Create durable long-running execution through Windmill.
 
 ## Work
-AIProducerProvider, OpenAI adapter, Claude adapter, production-plan schema, create/refine, plan versioning, Producer UI.
+- Windmill deployment
+- OrchestrationClient
+- tagged ai/audio/separation/mastering workers
+- job lifecycle
+- progress/events
+- retry/backoff
+- cancellation where safe
+- idempotency
+- browser refresh recovery
+- UI job status
 
 ## Acceptance
-- at least one real provider path verified
-- malformed model output safely handled
-- plan versions persist
-- active plan can be selected
+Codex proves long-running mock jobs, failure persistence, retry, recovery after refresh, and worker interruption behavior, then continues.

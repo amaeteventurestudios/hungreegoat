@@ -1,14 +1,25 @@
-# Phase 04 — Orchestration Kernel
+# Phase 04 — Domain, Assets & Persistence
 
 ## Objective
-Connect FastAPI to Windmill and establish durable job execution.
+Implement Studio domain truth and immutable media lineage.
 
 ## Work
-Windmill service, orchestration client, tagged workers, lifecycle, progress, failure mapping, retry/cancel, UI job progress.
+- projects
+- songs
+- production plans
+- generations/versions
+- arrangements
+- audio assets
+- lineage
+- audio analysis records
+- tempo versions
+- stem sets/stems
+- mix versions
+- masters/exports
+- jobs/events
+- local StorageProvider
+- upload/stream/download
+- migrations and API contracts
 
 ## Acceptance
-- long-running mock workflow completes
-- browser refresh recovers status
-- failure is visible
-- retry works
-- worker interruption does not corrupt domain state
+Codex runs CRUD, storage, migration, validation, restart-persistence, and path-safety tests, fixes failures, then continues.

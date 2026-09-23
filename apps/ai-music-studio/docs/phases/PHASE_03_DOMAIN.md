@@ -1,13 +1,28 @@
-# Phase 03 — Domain and Persistence
+# Phase 03 — Identity, Settings, Secrets & Integrations
 
 ## Objective
-Implement the canonical Studio domain.
+Build private Studio access plus first-class provider configuration before provider-dependent features.
 
 ## Work
-Projects, songs, production plans, generations, assets, lineage, jobs, provider configuration, local StorageProvider, uploads, migrations, API CRUD.
+- authentication/session foundation
+- workspace settings
+- Settings → Integrations dashboard
+- SecretStore abstraction
+- provider configuration model/API
+- ElevenLabs card
+- OpenAI card
+- OpenRouter card
+- Anthropic/Claude card
+- masked credentials
+- add/replace/delete credential
+- enable/disable
+- default model selection
+- provider health/test connection
+- audio/export defaults
+- engine health cards for Rubber Band, Demucs, Matchering
+
+## Rules
+No hardcoded provider API keys. Missing credentials are recorded as human blockers but do not stop unrelated work.
 
 ## Acceptance
-- CRUD tests pass
-- uploads survive restart
-- storage keys are safe
-- logical asset IDs are used consistently
+Codex verifies secret redaction, settings persistence, health paths, auth boundaries, and UI behavior, then continues automatically.

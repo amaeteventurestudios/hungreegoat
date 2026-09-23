@@ -4,6 +4,7 @@ Use UUID primary keys and UTC timestamps.
 
 ## Core Entities
 - users
+- workspaces
 - projects
 - songs
 - production_plans
@@ -22,58 +23,47 @@ Use UUID primary keys and UTC timestamps.
 - jobs
 - job_events
 - provider_configs
+- workspace_settings
 
-## Hierarchy
-```text
-Project
-└── Song
-    ├── Production Plan versions
-    ├── Generations
-    │   └── Generation Versions
-    ├── Arrangements
-    ├── Tempo Versions
-    ├── Stem Sets
-    ├── Mix Versions
-    ├── Masters
-    └── Exports
-```
-
-## audio_assets
-Minimum fields:
+## Provider Config
+Minimum:
 - id
-- project_id
-- song_id
-- kind
-- storage_provider
-- storage_key
-- original_filename
-- mime_type
-- size_bytes
-- sha256
-- duration_seconds
-- sample_rate
-- channels
-- bit_depth
-- created_at
-
-## asset_lineage
-- parent_asset_id
-- child_asset_id
-- transformation_type
-- transformation_metadata_json
-
-## provider_configs
-- id
+- workspace_id
 - provider_type
 - provider_name
 - enabled
-- nonsecret_config_json
 - secret_reference
+- masked_secret_hint
+- default_model
+- nonsecret_config_json
+- capabilities_json
 - health_status
 - last_health_check_at
+- created_at
+- updated_at
+
+Never store raw provider API keys in ordinary provider configuration columns.
+
+## Hierarchy
+```text
+Workspace
+└── Project
+    └── Song
+        ├── Production Plan versions
+        ├── Generations
+        │   └── Generation Versions
+        ├── Arrangements
+        ├── Tempo Versions
+        ├── Stem Sets
+        ├── Mix Versions
+        ├── Masters
+        └── Exports
+```
+
+## Assets
+Every audio transformation produces a new immutable `audio_asset` and lineage record.
 
 ## Rules
 - JSONB is for flexible/provider metadata, not a substitute for relational design.
-- Never store raw API keys in ordinary database columns.
-- Assets are immutable after successful promotion.
-- Application code references logical asset IDs, not arbitrary public filesystem paths.
+- Raw secrets never live in ordinary DB config fields.
+- Application code references logical asset IDs.

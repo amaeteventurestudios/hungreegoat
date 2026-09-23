@@ -1,13 +1,20 @@
-# Phase 06 — Music Generation
+# Phase 06 — AI Producer
 
 ## Objective
-Generate multiple music versions through a replaceable provider adapter.
+Convert natural-language musical intent into validated structured production plans.
 
 ## Work
-MusicGenerationProvider, ElevenLabs adapter, generation workflow, Version A/B/C/D, progress, output retrieval, immutable assets, rate-limit/retry handling.
+- AIProducerProvider abstraction
+- OpenAI adapter
+- OpenRouter adapter
+- Anthropic/Claude adapter
+- provider/model selection from Settings
+- production-plan schema
+- create/refine/version/activate
+- Producer UI
+
+## Missing Credential Behavior
+If one or more provider credentials are unavailable, fully build/test the adapter contract and use available providers or mocks. Record only the unavailable credential in HUMAN_BLOCKERS.md and continue.
 
 ## Acceptance
-- real end-to-end generation verified
-- outputs persisted
-- errors survive refresh
-- UI is not coupled to ElevenLabs response shapes
+At least one available real provider path should be verified when credentials exist; otherwise all noncredential behavior must be verified. Continue automatically.

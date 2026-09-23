@@ -11,6 +11,15 @@ AI Music Studio is a first-class application inside the existing Hungree Goat mo
 - Runtime/deployment tree: `/home/aumanah/hungree-goat`
 - Production URL: `https://studio.hungreegoat.com`
 
+## Autonomous Mandate
+Read `AUTONOMOUS_EXECUTION.md` before doing work.
+
+Codex is authorized to execute Phase 00 through Phase 12 continuously without routine owner confirmation. Research, decide, install, implement, test, repair, verify, document, and continue autonomously.
+
+Do not stop between phases. Do not ask the owner for ordinary implementation decisions.
+
+Only true human-only blockers may interrupt completion. Record those in `docs/HUMAN_BLOCKERS.md`, continue all independent work, and consolidate remaining owner actions into one final handoff.
+
 ## Hard Boundary
 By default, do not modify:
 - `apps/control/`
@@ -19,24 +28,24 @@ By default, do not modify:
 - existing broadcast services
 - existing root deployment behavior
 
-Only touch sibling applications when the active task explicitly requires cross-app integration and the execution plan names the exact impact.
+Only touch sibling applications when an explicit cross-app integration requires it and the execution plan documents the exact impact.
 
-Do not create a nested `.git` directory. The Studio belongs to the parent Hungree Goat repository.
+Do not create a nested `.git`. Studio belongs to the parent Hungree Goat repository.
 
 ## Mission
 Build a self-hosted browser-based AI music production studio that orchestrates mature AI and audio engines instead of rebuilding them.
 
-Core journey:
 `Idea → AI Producer → Music Generation → Version Review → Arrangement → Tempo/Pitch → Stems → Mastering → Exports`
 
 ## Read First
-1. `CODEX.md`
-2. `MONOREPO_LAYOUT.md`
-3. `ARCHITECTURE.md`
-4. `PRODUCT_SPEC.md`
-5. `PHASES.md`
-6. active phase file in `docs/phases/`
+1. `AUTONOMOUS_EXECUTION.md`
+2. `CODEX.md`
+3. `MONOREPO_LAYOUT.md`
+4. `ARCHITECTURE.md`
+5. `PRODUCT_SPEC.md`
+6. `PHASES.md`
 7. relevant subsystem docs
+8. current phase file
 
 ## Core Stack
 Frontend:
@@ -62,7 +71,8 @@ Orchestration:
 
 AI/music:
 - OpenAI adapter
-- Claude adapter
+- OpenRouter adapter
+- Anthropic/Claude adapter
 - ElevenLabs Music adapter
 
 Audio:
@@ -82,24 +92,26 @@ Infrastructure:
 ## Architecture Laws
 1. Browser code never executes server audio engines directly.
 2. UI calls the Studio API.
-3. The API validates commands, persists domain intent, and creates jobs.
+3. API validates commands, persists domain intent, and creates jobs.
 4. Windmill coordinates long-running execution.
 5. PostgreSQL is canonical domain truth.
 6. Windmill execution state is operational state, not project truth.
-7. External providers are behind adapters.
+7. Providers are behind adapters.
 8. Audio engines are behind adapters.
 9. Never overwrite source or derived audio.
 10. Every transformation creates a new immutable asset and lineage record.
-11. Database records use logical asset IDs, not arbitrary public paths.
-12. Provider-specific data must not leak into shared UI/domain contracts.
-13. Never construct shell commands by concatenating untrusted user input.
-14. Active jobs must recover after browser refresh/reconnect.
+11. Database records use logical asset IDs.
+12. Provider-specific data must not leak into shared contracts.
+13. Never construct shell commands from untrusted concatenated input.
+14. Active jobs recover after browser refresh/reconnect.
 15. Existing Hungree Goat apps are protected boundaries.
+16. Provider credentials are never hardcoded.
+17. Missing provider credentials do not block unrelated phases.
 
 ## UI Law
-Use shadcn/ui wherever a suitable component exists. Custom components are reserved for domain UI such as waveform, A/B compare, arrangement timeline, stem mixer, tempo preview, energy curve, and mini-player.
+Use shadcn/ui wherever a suitable component exists. Custom components are reserved for waveform, A/B compare, arrangement timeline, stem mixer, tempo preview, energy curve, and mini-player.
 
-Use Grid/Flexbox, shared tokens, consistent typography, and responsive layouts. Avoid structural absolute positioning and magic fixed heights.
+Use Grid/Flexbox, shared tokens, consistent typography, and responsive layouts. Avoid structural absolute positioning and arbitrary fixed heights.
 
 ## Coding Rules
 - TypeScript strict mode.
@@ -114,17 +126,19 @@ Use Grid/Flexbox, shared tokens, consistent typography, and responsive layouts. 
 - Do not silently swallow exceptions.
 
 ## Testing Rules
-For meaningful features:
+Codex owns verification. Run and fix:
 - unit tests
-- API contract tests
+- API tests
 - workflow/job tests
-- integration tests where practical
+- integration tests where possible
 - UI/E2E tests
 - visual QA
-- regression tests for bug fixes when practical
+- regression tests
+
+Do not ask the owner to manually verify anything Codex can verify itself.
 
 ## Existing-Work Protection
-The canonical checkout may contain unrelated modified or untracked files. Never reset, clean, discard, stage, or commit unrelated changes. Restrict work and staging to `apps/ai-music-studio/` unless the task explicitly requires otherwise.
+The checkout may contain unrelated modified/untracked files. Never reset, clean, discard, stage, or commit unrelated changes. Restrict work and staging to Studio paths unless a documented integration requires otherwise.
 
 ## Working Style
-Complete one phase or coherent task at a time. Inspect before editing. Prefer existing patterns. Make the simplest reversible choice. Never claim an integration works without real verification.
+Inspect, decide, implement, test, fix, document, continue. Prefer simple reversible decisions. Never claim an integration works without verification. Never stop for routine approval.

@@ -1,20 +1,18 @@
-# Phase 02 — shadcn Product Shell
+# Phase 02 — Product Shell & Design System
 
 ## Objective
-Build the full visual information architecture before deep integrations.
+Build the complete visual skeleton using shadcn before deep feature wiring.
 
 ## Work
-- initialize shadcn/Base UI
 - design tokens
 - sidebar/topbar
-- routing/page headers
-- shared job status
+- page headers
+- cards/tables/forms/dialogs/sheets
+- progress/job components
 - mini-player shell
-- all ten product routes
-- responsive layout
+- all product routes
+- responsive behavior
+- visual reference support under docs/ui-references/
 
 ## Acceptance
-- routes navigate
-- shared components used
-- visual QA passes required sizes
-- no obvious alignment/overflow defects
+Codex performs automated/browser visual QA at required sizes, fixes defects, and continues automatically.

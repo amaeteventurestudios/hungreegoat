@@ -1,13 +1,18 @@
-# Phase 08 — Tempo and Remix
+# Phase 08 — Review & Arrangement
 
 ## Objective
-Analyze tempo and create non-destructive tempo/pitch variants.
+Provide studio-quality review, approval, and non-destructive arrangement revision.
 
 ## Work
-librosa/SoundFile analysis, FFprobe metadata, Rubber Band, target BPM, preserve pitch, pitch semitones, extreme-ratio warnings, double-time/half-time distinction.
+- wavesurfer playback
+- A/B comparison
+- notes/favorite/approve
+- arrangement structure
+- timeline
+- section inspector
+- revision history
+- capability-aware section regeneration
+- honest fallback when provider lacks section regeneration
 
 ## Acceptance
-- representative transforms such as 90→120 and 90→180 verified
-- source unchanged
-- ratio/duration metadata correct
-- invalid media fails clearly
+Codex verifies playback, A/B behavior, persistence, immutable revisions, responsive layout, and unsupported-capability handling, then continues.

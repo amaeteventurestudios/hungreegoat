@@ -1,9 +1,9 @@
 # CODEX.md — AI Music Studio Engineering Handbook
 
-## Purpose
-This is the deeper engineering handbook for Codex. `AGENTS.md` is the persistent operating guide.
+## Operating Mode
+This is an autonomous end-to-end build.
 
-AI Music Studio is not a separate repository. It is a first-class app inside the Hungree Goat monorepo.
+Read `AUTONOMOUS_EXECUTION.md`. Execute Phase 00 through Phase 12 continuously. There is no phase-by-phase owner approval loop.
 
 ## Repository Context
 - Git root: `/home/aumanah/hungree-goat-src/hungreegoat-canonical`
@@ -15,29 +15,12 @@ AI Music Studio is not a separate repository. It is a first-class app inside the
 ## Product Goal
 Create a production workstation, not a chatbot.
 
-The user should be able to:
-1. create a project/song
-2. describe the musical goal
-3. generate a structured production plan
-4. generate multiple versions
-5. listen and compare
-6. approve a version
-7. edit arrangement metadata/sections
-8. create tempo/pitch/remix variants
-9. separate stems
-10. master against a reference
-11. export WAV/MP3/stems
-12. return later and recover complete lineage
+The user can create a project/song, describe the goal, generate a production plan, generate multiple versions, compare and approve, edit arrangement, create tempo/pitch variants, separate stems, master, export, and return later to complete reproducible lineage.
 
 ## Principle
 Build the orchestration layer, not the engines.
 
 Do not reimplement music generation, stem separation, time stretching, transcoding, analysis, reference mastering, or generic UI primitives.
-
-## V1 Boundaries
-V1 is private/self-hosted, project-based, versioned, durable, non-destructive, and provider-agnostic.
-
-V1 is not a full DAW, social network, streaming platform, plugin host, licensing marketplace, native mobile app, or Kubernetes deployment.
 
 ## Required Abstractions
 - `AIProducerProvider`
@@ -48,101 +31,75 @@ V1 is not a full DAW, social network, streaming platform, plugin host, licensing
 - `MasteringProvider`
 - `StorageProvider`
 - `OrchestrationClient`
+- `SecretStore`
 
-## Studio Structure
-Within `apps/ai-music-studio/`:
+## Provider Strategy
+AI Producer providers:
+- OpenAI
+- OpenRouter
+- Anthropic/Claude
 
-```text
-AGENTS.md
-CODEX.md
-MONOREPO_LAYOUT.md
-ARCHITECTURE.md
-PRODUCT_SPEC.md
-PHASES.md
-UI_SYSTEM.md
-ORCHESTRATION_KERNEL.md
-DATA_MODEL.md
-API_CONTRACTS.md
-AUDIO_PIPELINE.md
-PROVIDER_ABSTRACTIONS.md
-SECURITY.md
-TESTING_QA.md
-DEPLOYMENT.md
-OPERATIONS.md
-LICENSING.md
-DECISIONS.md
-DEFINITION_OF_DONE.md
-START_CODEX_PROMPT.md
-apps/
-  web/
-  api/
-packages/
-  ui/
-  contracts/
-  config/
-workers/
-  audio/
-  separation/
-  mastering/
-windmill/
-  flows/
-  scripts/
-infra/
-  caddy/
-  docker/
-docs/
-  phases/
-  exec-plans/
-tests/
-```
+Music generation:
+- ElevenLabs initially
+
+All must be configurable through Settings → Integrations. Do not require source-code edits to rotate keys or switch defaults.
+
+## Secrets Dashboard
+Build an integrations dashboard early, before provider-dependent functionality.
+
+For each provider:
+- connection state
+- masked credential
+- update/replace credential
+- enable/disable
+- test connection
+- model/default selection
+- health status
+- last successful test
+
+Store secrets server-side. Never return raw stored secrets to the browser.
 
 ## Cross-App Rule
-Do not refactor `apps/control`, `apps/player`, or `apps/dj-studio` merely because similar code exists there. Reuse only when there is a stable shared contract worth extracting or an explicit integration requires it.
-
-Any cross-app change requires a `Cross-App Impact` section in the execution plan.
+Do not refactor `apps/control`, `apps/player`, or `apps/dj-studio` merely because similar code exists. Cross-app changes require documented impact and regression testing.
 
 ## Execution Discipline
-For multi-file work:
-1. read relevant docs
-2. inspect the existing tree
-3. write/update an execution plan
-4. implement the smallest coherent slice
-5. run tests
-6. visually verify UI changes
-7. update docs
-8. summarize exactly what changed
+For each phase:
+1. read docs and inspect existing state
+2. create/update an execution plan
+3. research current upstream docs when necessary
+4. implement
+5. run checks
+6. fix failures autonomously
+7. visually verify UI
+8. update docs
+9. commit Studio-scoped work when appropriate
+10. continue immediately to the next phase
+
+Do not pause for owner confirmation.
+
+## Decision Rule
+When multiple technically sound choices exist, choose based on:
+1. project docs
+2. maintainability
+3. reversibility
+4. minimal coupling
+5. mature open-source support
+6. simplest operational model
+
+Document material choices instead of asking.
 
 ## No Fake Completion
-An integration is not complete because code compiles. Real completion requires working configuration, verified invocation, normalized output, persisted assets, surfaced errors, understood retry behavior, synchronized UI state, and documented verification.
+An integration is not complete because code compiles. Real completion requires configuration, verified invocation when credentials exist, normalized output, persistence, surfaced errors, retry behavior, synchronized UI state, and documented verification.
 
-## Mocks
-Mocks are allowed before integration phases if they implement the real interface, are visibly identified, can be removed without a UI rewrite, and never masquerade as real provider output.
+If credentials do not yet exist, finish the provider adapter, settings UI, secure secret path, health-check path, mocks/fixtures if appropriate, and every independent test. Record the credential as a human blocker and continue.
 
-## Screen Map
-1. Dashboard
-2. New Project / New Song
-3. AI Producer
-4. Generation
-5. Listen & Compare
-6. Edit / Arrangement
-7. Tempo / Remix
-8. Stems & Mastering
-9. Library / Final Masters
-10. Settings / Integrations
+## Visual References
+If visual reference images are present in `docs/ui-references/`, use them as visual ground truth. If they are absent, continue from `UI_SYSTEM.md` and `PRODUCT_SPEC.md`.
 
 ## Commit Discipline
-Because this is a shared monorepo:
-- stage paths intentionally
-- do not use destructive broad Git commands
-- do not commit unrelated changes
-- prefer Studio-scoped commits
-
-Examples:
-- `feat(studio): scaffold app shell`
-- `feat(studio-api): add project domain`
-- `feat(studio-orchestration): add generation flow`
-- `feat(studio-audio): add tempo worker`
-- `docs(studio): complete phase 04`
+Stage intentionally. Do not reset unrelated work. Prefer Studio-scoped commits.
 
 ## Success Definition
-A user can open `https://studio.hungreegoat.com`, create a project, generate and compare versions, transform tempo, separate stems, master a mix, export results, close the browser, return later, and find a complete reproducible project history.
+A user can open `https://studio.hungreegoat.com`, configure providers in the UI, create a project, generate and compare versions, transform tempo, separate stems, master, export, close the browser, return later, and recover the complete history.
+
+The run ends only after Phase 12 and a consolidated final report.

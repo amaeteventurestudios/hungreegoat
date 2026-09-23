@@ -1,23 +1,37 @@
-# Master Build Phases
+# Autonomous Master Build — Phase 00 through Phase 12
 
-Build one phase at a time.
+Codex executes these phases continuously. A phase gate is an internal verification checkpoint, not a request for owner approval.
 
 | Phase | Name | Outcome |
 |---:|---|---|
-| 00 | Monorepo Integration | Boundaries, workspace plan, no nested repo |
-| 01 | Infrastructure Foundation | Next.js, FastAPI, PostgreSQL, Docker baseline |
-| 02 | shadcn Product Shell | Navigation, tokens, responsive screen skeletons |
-| 03 | Domain & Persistence | Projects, songs, assets, jobs, provider config |
-| 04 | Orchestration Kernel | Windmill, tagged workers, durable progress/retry |
-| 05 | AI Producer | Prompt → structured production plan |
-| 06 | Music Generation | Provider abstraction + ElevenLabs integration |
-| 07 | Review & Arrangement | Waveform, A/B, approval, arrangement versions |
-| 08 | Tempo / Remix | librosa analysis + Rubber Band transforms |
-| 09 | Stems | Demucs adapter + stem UI |
-| 10 | Mastering & Export | Matchering + FFmpeg export |
-| 11 | Library & Settings | Asset discovery, provider health, defaults |
-| 12 | Production Hardening | Auth, Caddy, backups, monitoring, production URL |
+| 00 | Monorepo Reconnaissance & Integration | Safe Studio boundary, environment inventory, execution plan |
+| 01 | Platform Foundation | Next.js/React/shadcn, FastAPI, PostgreSQL, Docker baseline |
+| 02 | Product Shell & Design System | Complete responsive Studio shell and all primary routes |
+| 03 | Identity, Settings, Secrets & Integrations | Login/workspace plus secure provider dashboard and credential management |
+| 04 | Domain, Assets & Persistence | Projects, songs, immutable assets, lineage, jobs, settings data |
+| 05 | Orchestration Kernel | Windmill, tagged workers, durable jobs, retries, progress, recovery |
+| 06 | AI Producer | OpenAI/OpenRouter/Claude adapters and structured production plans |
+| 07 | Music Generation | ElevenLabs adapter, generation batches, immutable versions |
+| 08 | Review & Arrangement | Waveforms, A/B comparison, approval, arrangement revisions |
+| 09 | Audio Analysis & Tempo/Remix | librosa/SoundFile/FFmpeg analysis and Rubber Band transforms |
+| 10 | Stem Separation & Mixing | Demucs abstraction, stems, mixer, recombination |
+| 11 | Mastering, Library & Export | Matchering, final masters, searchable library, WAV/MP3/stems exports |
+| 12 | Production Hardening & Launch | Caddy/TLS, backups, monitoring, security, E2E verification, production launch |
 
-Detailed phase specs live in `docs/phases/`.
+## Continuous Execution Rule
+For each phase:
+1. implement
+2. test
+3. fix
+4. verify
+5. document
+6. commit appropriately
+7. continue
 
-A phase is complete only when behavior, persistence, recovery, error handling, tests, and documentation satisfy acceptance criteria.
+Do not wait for another owner prompt.
+
+## Credential Independence
+Missing provider credentials must not halt unrelated work. Build provider interfaces, Settings UI, secret storage, health checks, mocks/fixtures where appropriate, and continue. Record truly missing credentials in `docs/HUMAN_BLOCKERS.md`.
+
+## Completion
+The build is complete after Phase 12 when the system is production-deployed or every technically possible task is finished and only documented external human-only blockers remain.

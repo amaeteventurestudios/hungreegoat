@@ -1,15 +1,29 @@
-# Phase 12 — Production Hardening
+# Phase 12 — Production Hardening & Launch
 
 ## Objective
-Deploy a secure, observable, recoverable Studio at `studio.hungreegoat.com`.
+Deploy and verify the complete Studio at `https://studio.hungreegoat.com`.
 
 ## Work
-Auth hardening, Caddy, TLS, secrets, backups, restore test, Uptime Kuma, resource limits, security headers, smoke tests, runbook.
+- production Compose/service definitions
+- Caddy route/TLS
+- security headers
+- authentication hardening
+- secrets permissions
+- migrations
+- backup scripts
+- restore test
+- Uptime Kuma monitors
+- structured log review
+- disk/resource checks
+- provider/engine health
+- E2E production smoke test
+- visual production QA
+- restart/recovery testing
+- verify existing Hungree Goat services remain healthy
+- final documentation/report
+
+## Human Blockers
+Only external actions that cannot be completed autonomously remain in `docs/HUMAN_BLOCKERS.md`. Do not stop early for them; finish every independent production task first.
 
 ## Acceptance
-- production URL works over HTTPS
-- services restart cleanly
-- backup/restore documented
-- internal ports not exposed
-- full Studio journey succeeds
-- existing Hungree Goat Control/Player/DJ/broadcast remain healthy
+Codex validates production URL, TLS, API, DB, workers, audio paths, backups, monitoring, and regression health for existing Hungree Goat services. Then produce one consolidated final report.
