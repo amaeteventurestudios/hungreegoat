@@ -114,3 +114,8 @@ Waveform playback uses authenticated same-origin asset streams in the browser; n
 Status: Accepted (Phase 10)
 
 The existing `Arrangement` domain table stores bounded section plans linked to an approved generated version and its unchanged source asset. A locked parent row and required base revision serialize concurrent writes; edits and restoration append rather than mutate history. The current music adapter has no Studio-supported section-targeted regeneration contract, so the UI presents a truthful metadata-only fallback instead of implying that moving sections edits recorded audio.
+
+## ADR-024 — Leased Local Audio Analysis and Tempo Rendering
+Status: Accepted (Phase 11)
+
+The Studio worker performs bounded FFprobe/Librosa/SoundFile analysis and FFmpeg Rubber Band tempo rendering; the API only schedules jobs and validates/stores results. The worker's immutable asset mount is read-only. Tempo output commits a new FLAC asset, `TempoVersion`, and source lineage atomically under the current lease; a committed result is reused on retry. Analysis metadata is versioned by analyzer identifier. Browser preview changes playback rate only and does not claim pitch/formant fidelity. The API caps sources and outputs at ten minutes and limits speed to 0.5–2× to bound CPU, output size, and audible artifacts.

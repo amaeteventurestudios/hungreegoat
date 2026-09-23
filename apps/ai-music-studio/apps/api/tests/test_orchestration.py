@@ -1,6 +1,7 @@
 import hashlib
 import io
 import os
+import subprocess
 import wave
 from datetime import timedelta
 from uuid import UUID, uuid4
@@ -597,6 +598,173 @@ def test_existing_execution_identity_mismatch_is_not_accepted(orchestration):
     job = browser.get(f"/api/v1/jobs/{id}").json()
     assert job["state"] == "failed" and job["outcome_unknown"] and not job["can_retry"]
     assert client.submissions == 0
+
+
+def test_audio_analysis_is_leased_idempotent_and_scoped(orchestration):
+    browser, config, engine, diagnostic_id, execution = orchestration
+    project_id = browser.get(f"/api/v1/jobs/{diagnostic_id}").json()["project_id"]
+    song = browser.post(f"/api/v1/projects/{project_id}/songs", json={"title": "Analyze me"}).json()
+    uploaded = browser.post(
+        f"/api/v1/projects/{project_id}/assets/upload",
+        files={"file": ("tone.wav", wav_bytes(), "audio/wav")},
+        data={"song_id": song["id"]},
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    asset = uploaded.json()
+    url = f"/api/v1/assets/{asset['id']}/analysis"
+    key = str(uuid4())
+    queued = browser.post(url, json={"idempotency_key": key})
+    assert queued.status_code == 202, queued.text
+    job_id = UUID(queued.json()["job_id"])
+    assert browser.post(url, json={"idempotency_key": key}).json()["job_id"] == str(job_id)
+    with Session(engine) as db:
+        attempt = db.scalar(select(JobAttempt).where(JobAttempt.job_id == job_id))
+    lease = claim(browser, job_id, attempt.execution_id)
+    base = f"/api/v1/internal/jobs/{job_id}/attempts/1"
+    browser.headers.pop("Origin")
+    bad = browser.post(
+        base + "/complete",
+        headers=worker_headers(lease),
+        json={"outputs": [], "result": {"source_asset_id": str(uuid4())}},
+    )
+    assert bad.status_code == 422
+    completed = browser.post(
+        base + "/complete",
+        headers=worker_headers(lease),
+        json={
+            "outputs": [],
+            "result": {
+                "source_asset_id": asset["id"],
+                "analyzer_version": "librosa-0.11-ffmpeg-v1",
+                "duration_seconds": asset["duration_seconds"],
+                "sample_rate": asset["sample_rate"],
+                "channels": asset["channels"],
+                "detected_bpm": None,
+                "musical_key": None,
+                "loudness_lufs": -48.2,
+                "peaks": [0.01] * 256,
+            },
+        },
+    )
+    assert completed.status_code == 200 and completed.json()["state"] == "succeeded"
+    browser.headers["Origin"] = ORIGIN
+    analysis = browser.get(url).json()["items"]
+    assert len(analysis) == 1
+    assert analysis[0]["measurements"]["loudness_lufs"] == -48.2
+    assert analysis[0]["asset_id"] == asset["id"]
+    assert browser.get(f"/api/v1/assets/{asset['id']}/stream").content == wav_bytes()
+
+
+def test_tempo_variant_upload_is_immutable_lineage_linked_and_idempotent(orchestration, tmp_path):
+    browser, config, engine, diagnostic_id, execution = orchestration
+    project_id = browser.get(f"/api/v1/jobs/{diagnostic_id}").json()["project_id"]
+    song = browser.post(
+        f"/api/v1/projects/{project_id}/songs", json={"title": "Tempo source"}
+    ).json()
+    source = browser.post(
+        f"/api/v1/projects/{project_id}/assets/upload",
+        files={"file": ("source.wav", wav_bytes(), "audio/wav")},
+        data={"song_id": song["id"]},
+    ).json()
+    url = f"/api/v1/assets/{source['id']}/tempo-versions"
+    payload = {
+        "idempotency_key": str(uuid4()),
+        "mode": "time_stretch",
+        "source_bpm": 120,
+        "target_bpm": 150,
+        "preserve_pitch": True,
+        "pitch_semitones": 0,
+        "preserve_formants": True,
+        "transients": "mixed",
+    }
+    assert browser.post(url, json={**payload, "target_bpm": 120}).status_code == 422
+    queued = browser.post(url, json=payload)
+    assert queued.status_code == 202, queued.text
+    assert browser.post(url, json=payload).json()["job_id"] == queued.json()["job_id"]
+    job_id = UUID(queued.json()["job_id"])
+    with Session(engine) as db:
+        attempt = db.scalar(select(JobAttempt).where(JobAttempt.job_id == job_id))
+    lease = claim(browser, job_id, attempt.execution_id)
+    base = f"/api/v1/internal/jobs/{job_id}/attempts/1"
+    output_path = tmp_path / "derived.flac"
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-nostdin",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "anullsrc=r=22050:cl=mono",
+            "-t",
+            "0.8",
+            "-c:a",
+            "flac",
+            str(output_path),
+        ],
+        check=True,
+        timeout=20,
+    )
+    flac = output_path.read_bytes()
+    browser.headers.pop("Origin")
+    uploaded = browser.put(
+        base + "/derived-audio",
+        content=flac,
+        headers={**worker_headers(lease), "Content-Type": "audio/flac"},
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    derived_id = uploaded.json()["asset_id"]
+    duplicate = browser.put(
+        base + "/derived-audio",
+        content=b"not audio",
+        headers={**worker_headers(lease), "Content-Type": "audio/flac"},
+    )
+    assert duplicate.json() == {"asset_id": derived_id, "already_present": True}
+    complete = browser.post(
+        base + "/complete",
+        headers=worker_headers(lease),
+        json={"outputs": [], "result": {"source_asset_id": source["id"], "asset_id": derived_id}},
+    )
+    assert complete.status_code == 200 and complete.json()["state"] == "succeeded"
+    browser.headers["Origin"] = ORIGIN
+    versions = browser.get(url).json()["items"]
+    assert len(versions) == 1 and versions[0]["asset_id"] == derived_id
+    assert versions[0]["ratio"] == 1.25
+    lineage = browser.get(f"/api/v1/assets/{derived_id}/lineage").json()["items"]
+    assert len(lineage) == 1 and lineage[0]["parent_asset_id"] == source["id"]
+    assert browser.get(f"/api/v1/assets/{source['id']}/stream").content == wav_bytes()
+
+
+def test_interrupted_local_tempo_job_can_retry_without_unknown_outcome(orchestration):
+    browser, config, engine, diagnostic_id, execution = orchestration
+    project_id = browser.get(f"/api/v1/jobs/{diagnostic_id}").json()["project_id"]
+    source = browser.post(
+        f"/api/v1/projects/{project_id}/assets/upload",
+        files={"file": ("source.wav", wav_bytes(), "audio/wav")},
+    ).json()
+    queued = browser.post(
+        f"/api/v1/assets/{source['id']}/tempo-versions",
+        json={"idempotency_key": str(uuid4()), "source_bpm": 100, "target_bpm": 120},
+    )
+    assert queued.status_code == 202
+    job_id = UUID(queued.json()["job_id"])
+    with Session(engine) as db:
+        attempt = db.scalar(select(JobAttempt).where(JobAttempt.job_id == job_id))
+        execution_id = attempt.execution_id
+    client = FakeOrchestrator()
+    claim(browser, job_id, execution_id)
+    with Session(engine) as db:
+        attempt = db.scalar(select(JobAttempt).where(JobAttempt.job_id == job_id))
+        attempt.lease_expires_at = utcnow() - timedelta(seconds=1)
+        outbox = db.scalar(select(JobOutbox).where(JobOutbox.job_id == job_id))
+        outbox.state = "dispatched"
+        db.commit()
+    reconcile_once(engine, client)
+    job = browser.get(f"/api/v1/jobs/{job_id}").json()
+    assert job["state"] == "failed" and job["can_retry"] and not job["outcome_unknown"]
+    assert browser.post(f"/api/v1/jobs/{job_id}/retry").status_code == 202
 
 
 def test_windmill_http_contract(orchestration):

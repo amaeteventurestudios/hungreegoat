@@ -17,6 +17,7 @@ from starlette.exceptions import HTTPException
 from starlette.formparsers import MultiPartException
 
 from studio_api.arrangement_routes import router as arrangement_router
+from studio_api.audio_routes import router as audio_router
 from studio_api.auth import require_session
 from studio_api.auth import router as auth_router
 from studio_api.config import Settings
@@ -71,6 +72,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
 
     app.include_router(auth_router)
     app.include_router(arrangement_router)
+    app.include_router(audio_router)
     app.include_router(settings_router)
     app.include_router(provider_router)
     app.include_router(producer_router)
@@ -142,7 +144,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                     r"/api/v1/projects/[^/]+/assets/upload", request.url.path
                 )
                 worker_output = request.method == "PUT" and re.fullmatch(
-                    r"/api/v1/internal/jobs/[^/]+/attempts/[1-9][0-9]*/outputs/[1-4]",
+                    r"/api/v1/internal/jobs/[^/]+/attempts/[1-9][0-9]*/(?:outputs/[1-4]|derived-audio)",
                     request.url.path,
                 )
                 if upload or worker_output:

@@ -188,6 +188,38 @@ class WorkerClient:
         except (ValueError, UnicodeError):
             raise ProtocolFailure(502, "invalid_worker_response") from None
 
+    def upload_derived_audio(self, audio: bytes) -> dict[str, Any]:
+        if not audio or len(audio) > 100 * 1024 * 1024:
+            raise WorkerFailure("invalid_derived_audio", "Derived audio is invalid")
+        headers = {"Authorization": "Bearer " + self.token, "Content-Type": "audio/flac"}
+        if self.lease:
+            headers["X-Job-Lease"] = self.lease
+        request = urllib.request.Request(
+            self.url + "/derived-audio", headers=headers, data=audio, method="PUT"
+        )
+        try:
+            with self.opener.open(request, timeout=45) as response:
+                body = response.read(1024 * 1024 + 1)
+                if len(body) > 1024 * 1024:
+                    raise ProtocolFailure(502, "invalid_worker_response")
+                result = json.loads(body)
+                if not isinstance(result, dict):
+                    raise ProtocolFailure(502, "invalid_worker_response")
+                return result
+        except urllib.error.HTTPError as error:
+            try:
+                data = json.loads(error.read(8192))
+                code = data.get("error", {}).get("code", "worker_request_failed")
+                if not isinstance(code, str) or len(code) > 100:
+                    code = "worker_request_failed"
+            except (ValueError, AttributeError):
+                code = "worker_request_failed"
+            raise ProtocolFailure(error.code, code) from None
+        except (urllib.error.URLError, TimeoutError, OSError):
+            raise ProtocolFailure(503, "worker_connection_unavailable") from None
+        except (ValueError, UnicodeError):
+            raise ProtocolFailure(502, "invalid_worker_response") from None
+
 
 @dataclass
 class WorkerContext:

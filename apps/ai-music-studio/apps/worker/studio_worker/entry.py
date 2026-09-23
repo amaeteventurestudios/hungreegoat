@@ -8,6 +8,7 @@ import time
 from typing import Any
 from uuid import UUID, uuid4
 
+from studio_worker.audio import analyze_audio, render_tempo, source_path
 from studio_worker.music import request_music
 from studio_worker.producer import create_plan
 from studio_worker.runtime import (
@@ -139,6 +140,43 @@ def music_generation(context: WorkerContext) -> dict[str, Any]:
     return {"generation_id": inputs["generation_id"], "outputs": outputs}
 
 
+def audio_analysis(context: WorkerContext) -> dict[str, Any]:
+    inputs = context.claim["inputs"]
+    if not isinstance(inputs.get("source_asset_id"), str) or not isinstance(
+        inputs.get("source_key"), str
+    ):
+        raise WorkerFailure("invalid_audio_input", "Audio analysis inputs are invalid")
+    context.progress(10, "verifying")
+    source = source_path(inputs["source_key"])
+    context.progress(25, "working")
+    result = analyze_audio(source, inputs["source_asset_id"])
+    context.check_cancelled()
+    context.progress(95, "finishing")
+    return result
+
+
+def tempo_version(context: WorkerContext) -> dict[str, Any]:
+    inputs = context.claim["inputs"]
+    source_id, key = inputs.get("source_asset_id"), inputs.get("source_key")
+    if not isinstance(source_id, str) or not isinstance(key, str):
+        raise WorkerFailure("invalid_tempo_input", "Tempo inputs are invalid")
+    completed = inputs.get("completed_asset_id")
+    if completed:
+        return {"source_asset_id": source_id, "asset_id": str(UUID(completed))}
+    context.progress(10, "verifying")
+    source = source_path(key)
+    context.progress(25, "working")
+    audio = render_tempo(source, inputs, context.check_cancelled)
+    context.check_cancelled()
+    context.progress(85, "uploading")
+    uploaded = context.client.upload_derived_audio(audio)
+    asset_id = uploaded.get("asset_id")
+    if not isinstance(asset_id, str):
+        raise WorkerFailure("worker_protocol", "Derived audio could not be stored")
+    context.progress(95, "finishing")
+    return {"source_asset_id": source_id, "asset_id": asset_id}
+
+
 def execute(job_id: str, attempt: int) -> dict[str, Any]:
     client = WorkerClient(job_id, attempt)
     execution_id = str(UUID(os.environ["WM_JOB_ID"]))
@@ -179,6 +217,10 @@ def execute(job_id: str, attempt: int) -> dict[str, Any]:
             result = production_plan(context)
         elif claim["kind"] == "music.generate":
             result = music_generation(context)
+        elif claim["kind"] == "audio.analyze":
+            result = audio_analysis(context)
+        elif claim["kind"] == "audio.tempo":
+            result = tempo_version(context)
         else:
             raise WorkerFailure(
                 "unsupported_job", "This worker does not support the requested job"

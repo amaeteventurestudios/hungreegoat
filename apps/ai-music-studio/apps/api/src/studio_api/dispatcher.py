@@ -11,7 +11,14 @@ from sqlalchemy.orm import Session
 from studio_api.config import Settings
 from studio_api.database import create_database_engine
 from studio_api.domain_models import Job
-from studio_api.job_service import TERMINAL, current_attempt, event, locked_job, terminal
+from studio_api.job_service import (
+    INTERRUPTION_RETRY_KINDS,
+    TERMINAL,
+    current_attempt,
+    event,
+    locked_job,
+    terminal,
+)
 from studio_api.logging import configure_logging
 from studio_api.models import utcnow
 from studio_api.orchestration_client import (
@@ -141,9 +148,9 @@ def reconcile_once(engine, client: OrchestrationClient) -> None:
             # A worker that disappears can leave Windmill's remote execution in
             # a non-terminal state.  The Studio lease is the authoritative
             # liveness signal: do not redispatch the same execution and risk a
-            # duplicate operation.  Diagnostics are safe to retry; provider
-            # work requires explicit reconciliation because billing may be
-            # ambiguous.
+            # duplicate operation. Local deterministic audio jobs and diagnostics
+            # are safe to retry; provider work requires explicit reconciliation
+            # because billing may be ambiguous.
             if (
                 job.state == "running"
                 and attempt.lease_expires_at is not None
@@ -156,8 +163,8 @@ def reconcile_once(engine, client: OrchestrationClient) -> None:
                     "failed",
                     "worker_lease_expired",
                     "Worker lease expired before finalization",
-                    retryable=job.kind == "system.verify",
-                    unknown=job.kind != "system.verify",
+                    retryable=job.kind in INTERRUPTION_RETRY_KINDS,
+                    unknown=job.kind not in INTERRUPTION_RETRY_KINDS,
                 )
                 db.commit()
                 continue
@@ -188,7 +195,13 @@ def reconcile_once(engine, client: OrchestrationClient) -> None:
             ):
                 # Success without a domain finalization is not domain success.
                 if job.cancel_requested:
-                    terminal(db, job, attempt, "cancelled", retryable=job.kind == "system.verify")
+                    terminal(
+                        db,
+                        job,
+                        attempt,
+                        "cancelled",
+                        retryable=job.kind in INTERRUPTION_RETRY_KINDS,
+                    )
                 else:
                     terminal(
                         db,
@@ -197,8 +210,8 @@ def reconcile_once(engine, client: OrchestrationClient) -> None:
                         "failed",
                         "execution_interrupted",
                         "Execution ended before finalization",
-                        retryable=job.kind == "system.verify",
-                        unknown=job.kind != "system.verify",
+                        retryable=job.kind in INTERRUPTION_RETRY_KINDS,
+                        unknown=job.kind not in INTERRUPTION_RETRY_KINDS,
                     )
             elif remote is None:
                 terminal(
@@ -208,8 +221,8 @@ def reconcile_once(engine, client: OrchestrationClient) -> None:
                     "failed",
                     "execution_missing",
                     "Execution could not be reconciled",
-                    retryable=job.kind == "system.verify",
-                    unknown=job.kind != "system.verify",
+                    retryable=job.kind in INTERRUPTION_RETRY_KINDS,
+                    unknown=job.kind not in INTERRUPTION_RETRY_KINDS,
                 )
             db.commit()
 

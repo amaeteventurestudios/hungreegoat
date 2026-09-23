@@ -149,7 +149,7 @@ services:
       JSON_FMT: 'true'
     volumes:
       - ${STUDIO_ORCHESTRATION_DIRECTORY}/worker-token:/run/studio-orchestration/worker-token:ro
-      - ${STUDIO_ASSET_ROOT}:/var/lib/studio/assets
+      - ${STUDIO_ASSET_ROOT}:/var/lib/studio/assets:ro
       - worker-cache:/tmp/windmill
     depends_on:
       studio-windmill-postgres:

@@ -82,7 +82,12 @@ independent work.
   approved-source requirement, parent-row locking and optimistic base revision
   prevent silent overwrite. API 46 tests and 108 browser checks pass, including
   four-viewport revision restore fixtures.
-- 11–14: Pending their dependency-ready implementation.
+- 11: Verified locally — FFprobe/Librosa/SoundFile analysis, FFmpeg Rubber Band
+  rendering, lease-bound output intake, immutable FLAC plus lineage, and a real
+  restricted-worker fixture that preserved source SHA-256. API 49 tests, worker
+  image 13 tests, and 112 responsive browser checks pass; interruption retry is
+  safe for local deterministic jobs without changing provider uncertainty rules.
+- 12–14: Pending their dependency-ready implementation.
 
 ## Research
 - Compose project isolation: https://docs.docker.com/compose/how-tos/project-name/

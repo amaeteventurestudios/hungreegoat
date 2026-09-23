@@ -9,8 +9,11 @@ from fastapi import APIRouter, Depends, Query, Request
 from pydantic import Field
 from sqlalchemy import func, select
 
+from studio_api.audio import AudioAnalysisResult, AudioAnalyzeJobInput, TempoJobInput, TempoResult
 from studio_api.auth import fail
 from studio_api.domain_models import (
+    AssetLineage,
+    AudioAnalysis,
     AudioAsset,
     Generation,
     GenerationVersion,
@@ -19,6 +22,7 @@ from studio_api.domain_models import (
     ProductionPlan,
     Project,
     Song,
+    TempoVersion,
 )
 from studio_api.domain_routes import DB, JOB_FIELDS, Auth, Limit, Offset, public, scoped, storage
 from studio_api.job_service import (
@@ -47,6 +51,13 @@ from studio_api.storage import (
 )
 
 router = APIRouter(prefix="/api/v1")
+SAFE_RETRY_KINDS = {
+    "system.verify",
+    "producer.plan",
+    "music.generate",
+    "audio.analyze",
+    "audio.tempo",
+}
 
 
 def service_auth(request: Request) -> None:
@@ -162,7 +173,7 @@ def cancel_job(job_id: UUID, auth: Auth, db: DB) -> dict:
             job,
             attempt,
             "cancelled",
-            retryable=job.kind in {"system.verify", "producer.plan", "music.generate"},
+            retryable=job.kind in SAFE_RETRY_KINDS,
         )
     else:
         event(db, job, "Cancellation requested")
@@ -247,6 +258,19 @@ def claim(
                 .order_by(GenerationVersion.version)
             )
         ]
+    elif job.kind == "audio.analyze":
+        inputs = AudioAnalyzeJobInput.model_validate(job.parameters).model_dump(mode="json")
+        source = scoped(db, AudioAsset, inputs["source_asset_id"], job.workspace_id)
+        if source.project_id != job.project_id:
+            raise fail(409, "invalid_source", "Audio source does not match this job")
+        inputs["source_key"] = source.storage_key
+    elif job.kind == "audio.tempo":
+        inputs = TempoJobInput.model_validate(job.parameters).model_dump(mode="json")
+        source = scoped(db, AudioAsset, inputs["source_asset_id"], job.workspace_id)
+        if source.project_id != job.project_id:
+            raise fail(409, "invalid_source", "Audio source does not match this job")
+        inputs["source_key"] = source.storage_key
+        inputs["completed_asset_id"] = str(job.result_asset_id) if job.result_asset_id else None
     else:
         raise fail(409, "unsupported_operation", "No worker handler is enabled for this job")
     db.commit()
@@ -332,7 +356,7 @@ def complete(
             job,
             attempt,
             "cancelled",
-            retryable=job.kind in {"system.verify", "producer.plan", "music.generate"},
+            retryable=job.kind in SAFE_RETRY_KINDS,
         )
     elif job.kind == "system.verify":
         if data.outputs:
@@ -349,6 +373,75 @@ def complete(
         ):
             raise fail(422, "invalid_result", "Diagnostic verification did not match its input")
         attempt.result = result.model_dump()
+        terminal(db, job, attempt, "succeeded")
+    elif job.kind == "audio.analyze":
+        if data.outputs:
+            raise fail(422, "unsupported_operation", "Analysis does not accept audio outputs")
+        try:
+            result = AudioAnalysisResult.model_validate(data.result)
+            inputs = AudioAnalyzeJobInput.model_validate(job.parameters)
+        except ValueError:
+            raise fail(422, "invalid_result", "Invalid audio analysis result") from None
+        if (
+            result.source_asset_id != inputs.source_asset_id
+            or result.analyzer_version != inputs.analyzer_version
+            or any(not 0 <= peak <= 1 for peak in result.peaks)
+        ):
+            raise fail(422, "invalid_result", "Analysis result does not match its source")
+        source = scoped(db, AudioAsset, inputs.source_asset_id, job.workspace_id)
+        if (
+            source.project_id != job.project_id
+            or abs(result.duration_seconds - source.duration_seconds) > 1
+            or result.sample_rate != source.sample_rate
+            or result.channels != source.channels
+        ):
+            raise fail(422, "invalid_result", "Analysis media properties do not match source")
+        existing = db.scalar(
+            select(AudioAnalysis).where(
+                AudioAnalysis.asset_id == source.id,
+                AudioAnalysis.analyzer_version == inputs.analyzer_version,
+            )
+        )
+        if existing is None:
+            existing = AudioAnalysis(
+                workspace_id=job.workspace_id,
+                project_id=job.project_id,
+                asset_id=source.id,
+                analyzer_version=inputs.analyzer_version,
+                detected_bpm=result.detected_bpm,
+                musical_key=result.musical_key,
+                measurements=result.model_dump(mode="json"),
+            )
+            db.add(existing)
+            db.flush()
+        attempt.result = {"analysis_id": str(existing.id), "source_asset_id": str(source.id)}
+        terminal(db, job, attempt, "succeeded")
+    elif job.kind == "audio.tempo":
+        if data.outputs:
+            raise fail(422, "unsupported_operation", "Tempo output uses the leased upload endpoint")
+        try:
+            result = TempoResult.model_validate(data.result)
+            inputs = TempoJobInput.model_validate(job.parameters)
+        except ValueError:
+            raise fail(422, "invalid_result", "Invalid tempo result") from None
+        if (
+            result.source_asset_id != inputs.source_asset_id
+            or job.result_asset_id != result.asset_id
+        ):
+            raise fail(422, "invalid_result", "Tempo result does not match uploaded audio")
+        version = db.scalar(
+            select(TempoVersion).where(
+                TempoVersion.asset_id == result.asset_id,
+                TempoVersion.source_asset_id == inputs.source_asset_id,
+                TempoVersion.workspace_id == job.workspace_id,
+            )
+        )
+        if version is None:
+            raise fail(422, "invalid_result", "Tempo version was not stored")
+        attempt.result = {
+            "source_asset_id": str(result.source_asset_id),
+            "asset_id": str(result.asset_id),
+        }
         terminal(db, job, attempt, "succeeded")
     elif job.kind == "producer.plan":
         if data.outputs:
@@ -449,7 +542,7 @@ def worker_fail(
                 job,
                 attempt,
                 "cancelled",
-                retryable=job.kind in {"system.verify", "producer.plan", "music.generate"},
+                retryable=job.kind in SAFE_RETRY_KINDS,
             )
         else:
             code = "diagnostic_failed" if job.kind == "system.verify" else "processing_failed"
@@ -461,7 +554,7 @@ def worker_fail(
                 code,
                 "Worker could not complete this job",
                 retryable=data.retryable
-                and job.kind in {"system.verify", "producer.plan", "music.generate"}
+                and job.kind in SAFE_RETRY_KINDS
                 and not data.outcome_unknown,
                 unknown=data.outcome_unknown,
             )
@@ -575,6 +668,88 @@ async def upload_music_output(
         raise fail(
             503, "storage_unavailable", "Audio storage or validation is unavailable"
         ) from None
+    finally:
+        if not committed:
+            db.rollback()
+            if key:
+                try:
+                    storage(request).delete_uncommitted(key)
+                except (StorageError, OSError):
+                    pass
+
+
+@router.put(INTERNAL + "/derived-audio")
+async def upload_tempo_output(
+    job_id: UUID, number: int, request: Request, service: Service, db: DB
+) -> dict:
+    """Atomically store one validated, lineage-linked tempo variant per job."""
+    job, _ = leased(db, job_id, number, request)
+    if job.kind != "audio.tempo" or job.state in TERMINAL:
+        raise fail(409, "output_unavailable", "This job cannot accept derived audio")
+    inputs = TempoJobInput.model_validate(job.parameters)
+    if job.result_asset_id:
+        return {"asset_id": job.result_asset_id, "already_present": True}
+    if request.headers.get("content-type", "").split(";", 1)[0].lower() != "audio/flac":
+        raise fail(422, "invalid_output", "Tempo output must be FLAC audio")
+    source = scoped(db, AudioAsset, inputs.source_asset_id, job.workspace_id)
+    if source.project_id != job.project_id:
+        raise fail(409, "invalid_source", "Audio source does not match this job")
+    key = None
+    committed = False
+    try:
+        body = await request.body()
+        store = storage(request)
+        key, size, digest = store.save_upload(io.BytesIO(body))
+        media = probe_audio(store.path_for(key))
+        expected_duration = source.duration_seconds / inputs.ratio
+        if media["media_type"] != "audio/flac" or abs(
+            media["duration_seconds"] - expected_duration
+        ) > max(1.0, expected_duration * 0.05):
+            raise fail(422, "invalid_output", "Derived audio duration or format is invalid")
+        asset = AudioAsset(
+            workspace_id=job.workspace_id,
+            project_id=job.project_id,
+            song_id=source.song_id,
+            kind="tempo",
+            original_filename=safe_filename(f"tempo-{source.id}-{inputs.target_bpm:g}bpm.flac"),
+            storage_key=key,
+            byte_size=size,
+            sha256=digest,
+            **media,
+        )
+        db.add(asset)
+        db.flush()
+        db.add(
+            AssetLineage(
+                workspace_id=job.workspace_id,
+                project_id=job.project_id,
+                parent_asset_id=source.id,
+                child_asset_id=asset.id,
+                operation="tempo.transform",
+                parameters=inputs.model_dump(mode="json"),
+            )
+        )
+        db.add(
+            TempoVersion(
+                workspace_id=job.workspace_id,
+                project_id=job.project_id,
+                source_asset_id=source.id,
+                asset_id=asset.id,
+                ratio=inputs.ratio,
+                pitch_semitones=inputs.pitch_semitones,
+                preserve_pitch=inputs.preserve_pitch,
+            )
+        )
+        job.result_asset_id = asset.id
+        db.commit()
+        committed = True
+        return {"asset_id": asset.id, "already_present": False}
+    except UploadTooLarge:
+        raise fail(413, "output_too_large", "Derived audio exceeds 100 MiB") from None
+    except InvalidMedia:
+        raise fail(422, "invalid_output", "Derived output is unsupported audio") from None
+    except (StorageError, OSError):
+        raise fail(503, "storage_unavailable", "Audio storage is unavailable") from None
     finally:
         if not committed:
             db.rollback()

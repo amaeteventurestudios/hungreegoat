@@ -1,2 +1,2 @@
-import { Workstation } from "@/components/workstation";
-export default function Page() { return <Workstation page="tempo" />; }
+import { TempoWorkspace } from "@/components/tempo-workspace";
+export default function Page() { return <TempoWorkspace />; }
