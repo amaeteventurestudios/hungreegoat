@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException
 from starlette.formparsers import MultiPartException
 
+from studio_api.arrangement_routes import router as arrangement_router
 from studio_api.auth import require_session
 from studio_api.auth import router as auth_router
 from studio_api.config import Settings
@@ -69,6 +70,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     )
 
     app.include_router(auth_router)
+    app.include_router(arrangement_router)
     app.include_router(settings_router)
     app.include_router(provider_router)
     app.include_router(producer_router)

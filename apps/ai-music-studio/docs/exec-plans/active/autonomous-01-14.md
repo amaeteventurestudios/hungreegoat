@@ -78,7 +78,11 @@ independent work.
   metadata and explicit persisted review decisions; workspace-scoped API and
   database exclusivity constraint. API 46 tests, migration at head with no model
   drift, and 104 browser checks pass, including four-viewport fixture playback.
-- 10–14: Pending their dependency-ready implementation.
+- 10: Verified — bounded section timeline, inspector and revision history; an
+  approved-source requirement, parent-row locking and optimistic base revision
+  prevent silent overwrite. API 46 tests and 108 browser checks pass, including
+  four-viewport revision restore fixtures.
+- 11–14: Pending their dependency-ready implementation.
 
 ## Research
 - Compose project isolation: https://docs.docker.com/compose/how-tos/project-name/

@@ -1,0 +1,46 @@
+import { expect, test } from "@playwright/test";
+
+test("arrangement edits create immutable revisions and can restore older plans", async ({ page, request }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", error => pageErrors.push(error.message));
+  const session = await (await request.get("/api/v1/auth/session")).json();
+  const headers = { Origin: "http://localhost:3210", "X-CSRF-Token": session.csrf_token };
+  const project = await request.post("/api/v1/projects", { data: { name: `Arrange ${crypto.randomUUID().slice(0, 8)}` }, headers });
+  expect(project.status()).toBe(201);
+  const song = await request.post(`/api/v1/projects/${(await project.json()).id}/songs`, { data: { title: "A shaped journey" }, headers });
+  expect(song.status()).toBe(201);
+  const songId = (await song.json()).id;
+  const generationId = crypto.randomUUID();
+  const versionId = crypto.randomUUID();
+  const revisions: { id: string; version_id: string; revision: number; asset_id: string; sections: unknown[]; created_at: string }[] = [];
+  await page.route(`**/api/v1/songs/${songId}/generations*`, route => route.fulfill({ json: { items: [{ id: generationId, song_id: songId, model: "music_v2" }] } }));
+  await page.route(`**/api/v1/generations/${generationId}/versions*`, route => route.fulfill({ json: { items: [{ id: versionId, generation_id: generationId, version: 1, asset_id: crypto.randomUUID(), approved: true, rejected: false, favorite: false, notes: "", provider_request_id: null, metadata: {}, created_at: new Date().toISOString() }] } }));
+  await page.route(`**/api/v1/generation-versions/${versionId}/arrangements*`, async route => {
+    if (route.request().method() === "GET") return route.fulfill({ json: { items: [...revisions].reverse() } });
+    const body = route.request().postDataJSON();
+    if (body.base_revision !== revisions.length) return route.fulfill({ status: 409, json: { error: { code: "arrangement_conflict", message: "Newer revision", details: {} } } });
+    const revision = { id: crypto.randomUUID(), version_id: versionId, revision: revisions.length + 1, asset_id: crypto.randomUUID(), sections: structuredClone(body.sections), created_at: new Date().toISOString() };
+    revisions.push(revision);
+    return route.fulfill({ status: 201, json: revision });
+  });
+  await page.goto(`/arrangement?song_id=${songId}`);
+  await expect(page.getByRole("heading", { name: "Arrangement" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Select Intro" })).toBeVisible();
+  await page.getByRole("button", { name: "Save first revision" }).click();
+  await expect(page.getByText("Viewing revision 1")).toBeVisible();
+  await page.getByRole("spinbutton", { name: "Energy (0–100)" }).fill("42");
+  await page.getByRole("button", { name: "Save new revision" }).click();
+  await expect(page.getByText("Viewing revision 2")).toBeVisible();
+  expect((revisions[0].sections[0] as { energy: number }).energy).toBe(25);
+  expect((revisions[1].sections[0] as { energy: number }).energy).toBe(42);
+  await page.getByRole("tab", { name: "Revision history" }).click();
+  await page.getByRole("button", { name: /Revision 1/ }).click();
+  await expect(page.getByText("Viewing revision 1")).toBeVisible();
+  await page.getByRole("spinbutton", { name: "Energy (0–100)" }).fill("44");
+  await page.getByRole("button", { name: "Save new revision" }).click();
+  await expect(page.getByText("Viewing revision 3")).toBeVisible();
+  expect((revisions[2].sections[0] as { energy: number }).energy).toBe(44);
+  expect((revisions[0].sections[0] as { energy: number }).energy).toBe(25);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  expect(pageErrors).toEqual([]);
+});

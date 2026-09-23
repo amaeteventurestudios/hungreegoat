@@ -109,3 +109,8 @@ ElevenLabs Music responses are fetched only by the leased Studio worker and sent
 Status: Accepted (Phase 09)
 
 Waveform playback uses authenticated same-origin asset streams in the browser; no browser audio engine writes canonical assets. Favorite, notes, approval, and rejection are workspace-scoped metadata on immutable generated versions. A database constraint and API transition logic prevent simultaneous approval and rejection. Switching A/B playback pauses the other slot and preserves the current comparison position; new generation requests remain explicit paid actions.
+
+## ADR-023 — Arrangement Plans Are Immutable Metadata Revisions
+Status: Accepted (Phase 10)
+
+The existing `Arrangement` domain table stores bounded section plans linked to an approved generated version and its unchanged source asset. A locked parent row and required base revision serialize concurrent writes; edits and restoration append rather than mutate history. The current music adapter has no Studio-supported section-targeted regeneration contract, so the UI presents a truthful metadata-only fallback instead of implying that moving sections edits recorded audio.

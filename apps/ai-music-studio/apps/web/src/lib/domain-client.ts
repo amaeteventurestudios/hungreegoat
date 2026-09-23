@@ -1,4 +1,4 @@
-import type { StudioProject, StudioSong, AudioAsset, AssetLineage, GenerationVersion, MusicGeneration, ProductionPlan } from "@hungreegoat/studio-contracts";
+import type { StudioProject, StudioSong, AudioAsset, AssetLineage, ArrangementRevision, ArrangementSection, GenerationVersion, MusicGeneration, ProductionPlan } from "@hungreegoat/studio-contracts";
 import { apiRequest, ApiError } from "@/lib/api-client";
 export const domain = {
  projects:(query="",offset=0)=>apiRequest<{items:StudioProject[]}>(`/projects?${new URLSearchParams({limit:"100",q:query,offset:String(offset)})}`),
@@ -15,6 +15,8 @@ export const domain = {
  generationVersions:(generation:string)=>apiRequest<{items:GenerationVersion[]}>(`/generations/${encodeURIComponent(generation)}/versions?limit=100`),
  createGeneration:(song:string,body:{idempotency_key:string;version_count:number;duration_seconds?:number;prompt:string},csrf:string|null)=>apiRequest<{generation_id:string;job_id:string;state:string}>(`/songs/${encodeURIComponent(song)}/generations`,{method:"POST",body,csrf}),
  reviewVersion:(id:string,body:Partial<Pick<GenerationVersion,"favorite"|"approved"|"rejected"|"notes">>,csrf:string|null)=>apiRequest<GenerationVersion>(`/generation-versions/${encodeURIComponent(id)}`,{method:"PATCH",body,csrf}),
+ arrangements:(version:string)=>apiRequest<{items:ArrangementRevision[]}>(`/generation-versions/${encodeURIComponent(version)}/arrangements?limit=100`),
+ createArrangement:(version:string,body:{base_revision:number;sections:ArrangementSection[]},csrf:string|null)=>apiRequest<ArrangementRevision>(`/generation-versions/${encodeURIComponent(version)}/arrangements`,{method:"POST",body,csrf}),
 };
 export async function uploadAudio(project:string,song:string|null,file:File,csrf:string|null):Promise<AudioAsset> {
  if(file.size>100*1024*1024)throw new Error("Choose an audio file smaller than 100 MiB.");

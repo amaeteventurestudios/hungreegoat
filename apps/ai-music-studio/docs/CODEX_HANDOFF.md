@@ -3,9 +3,9 @@
 ## Current State
 
 - Model / effort: Terra High.
-- Usage: weekly 12% used / 88% remaining at the last live guard; check again before the next batch.
-- Current phase: 10 — Arrangement and Section Editing.
-- Last committed Studio checkpoint before Phase 09: `a0a157b feat(studio): add durable music generation`.
+- Usage: weekly 13% used / 87% remaining at the last live guard; check again before the next batch.
+- Current phase: 11 — Audio Analysis and Tempo / Remix.
+- Last committed Studio checkpoint before Phase 10: `05085e2 feat(studio): add waveform A-B generation review` (pushed to `origin/main`).
 
 ## Completed
 
@@ -18,6 +18,7 @@
 - Phase 07 is complete: `producer.plan` is durable and idempotent; its worker adapters use provider-specific structured-output requests while the Studio validates one canonical schema and atomically versions plans. The Producer UI creates plans from selected-song context and displays the active plan. Fixture validation: API 45 tests, worker 8 tests, production build, and a live no-credential browser flow pass. No paid provider request was attempted.
 - Phase 08 is complete: `music.generate` creates a durable provider-neutral Generation with one to four immutable `GenerationVersion` outputs. The ElevenLabs adapter runs only in the leased worker, saves validated audio through a bounded authenticated intake endpoint, and records provider request IDs without exposing credentials. Ambiguous provider outcomes are non-retryable; ordinary safe retries resume committed outputs. Local migration `0006_music_generation` applied successfully. Verification: API 46 tests, worker 10 tests, lint/typecheck/build, and the 100-test responsive browser regression. No paid provider request was made.
 - Phase 09 is complete: authenticated WaveSurfer A/B waveform playback and seeking, position-preserving exclusive switching, persistent favorite/notes/approve/reject review, provider metadata, and an explicit Generate-more link. Migration `0007_review_rejection` adds a mutually exclusive rejection decision. API 46 tests, web lint/typecheck/build, real migration check, four-viewport targeted browser playback/review, and the full 104-test browser regression pass.
+- Phase 10 is complete locally: approved ready generated versions can own immutable section-plan revisions. The Studio API validates sections and serializes saves with a source-version lock and optimistic base revision. The timeline inspector supports section duration, energy, instrumentation, production/vocal notes, add/remove/reorder, and restoration of history as a new revision. No source audio is modified or paid regeneration implied. API 46 tests, targeted four-viewport browser revision tests, and the full 108-test browser regression pass.
 
 ## Runtime
 
@@ -27,7 +28,7 @@
 
 ## Current Technical Position
 
-Pinned Windmill OSS v1.817.0 rejects ordinary-user creation through its documented CLI/UI endpoint. This is resolved by the narrowly scoped local database bootstrap described above. Phase 10 can build on immutable generation/version assets and existing `Arrangement` domain tables; live paid-provider generation remains separately dependent on configured provider credentials.
+Pinned Windmill OSS v1.817.0 rejects ordinary-user creation through its documented CLI/UI endpoint. This is resolved by the narrowly scoped local database bootstrap described above. Phase 11 can build on the existing `AudioAnalysis` and `TempoVersion` tables and immutable asset lineage; live paid-provider generation remains separately dependent on configured provider credentials. The production hostname currently fails TLS handshake (`unrecognized name`) at its configured gateway IP; this remains Phase 14 deployment work, not a reason to idle local phases.
 
 ## Protected Unrelated Work
 
@@ -38,5 +39,5 @@ Pinned Windmill OSS v1.817.0 rejects ordinary-user creation through its document
 ## Resume
 
 1. Run `/home/aumanah/.local/bin/codex-usage-guard` and print the normalized usage line.
-2. Read `docs/phases/PHASE_10_ARRANGEMENT.md` and current execution-plan records.
-3. Implement the next dependency-ready Phase 10 slice; keep arrangement revisions non-destructive and use deterministic fixtures where external engines are unavailable.
+2. Read `docs/phases/PHASE_11_TEMPO_REMIX.md` and current execution-plan records.
+3. Implement the next dependency-ready Phase 11 slice; keep audio analysis and tempo variants durable, non-destructive, and lineage-tracked.

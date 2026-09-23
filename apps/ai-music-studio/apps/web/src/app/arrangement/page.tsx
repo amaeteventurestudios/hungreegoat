@@ -1,2 +1,2 @@
-import { Workstation } from "@/components/workstation";
-export default function Page() { return <Workstation page="arrangement" />; }
+import { ArrangementWorkspace } from "@/components/arrangement-workspace";
+export default function Page() { return <ArrangementWorkspace />; }

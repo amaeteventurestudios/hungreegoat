@@ -537,6 +537,56 @@ def test_music_outputs_are_lease_bound_immutable_and_reconciled(orchestration):
     assert browser.get(f"/api/v1/generations/{generation_id}/versions").json()["items"][0][
         "approved"
     ]
+    arrangement_url = version_url + "/arrangements"
+    sections = [
+        {
+            "kind": "intro",
+            "name": "Opening",
+            "duration_seconds": 12,
+            "energy": 30,
+            "instrumentation": ["piano", "soft bass"],
+            "production_notes": "Leave space",
+            "vocal_instructions": "",
+        },
+        {
+            "kind": "chorus",
+            "name": "Lift",
+            "duration_seconds": 24,
+            "energy": 80,
+            "instrumentation": ["drums"],
+            "production_notes": "Warm transient",
+            "vocal_instructions": "Hold the last word",
+        },
+    ]
+    first_arrangement = browser.post(
+        arrangement_url, json={"base_revision": 0, "sections": sections}
+    )
+    assert first_arrangement.status_code == 201, first_arrangement.text
+    assert first_arrangement.json()["revision"] == 1
+    assert first_arrangement.json()["asset_id"] == versions[0]["asset_id"]
+    assert (
+        browser.post(arrangement_url, json={"base_revision": 0, "sections": sections}).status_code
+        == 409
+    )
+    sections[0]["energy"] = 42
+    second_arrangement = browser.post(
+        arrangement_url, json={"base_revision": 1, "sections": sections}
+    )
+    assert second_arrangement.status_code == 201 and second_arrangement.json()["revision"] == 2
+    history = browser.get(arrangement_url).json()["items"]
+    assert [row["revision"] for row in history] == [2, 1]
+    assert history[1]["sections"][0]["energy"] == 30
+    assert history[0]["sections"][0]["energy"] == 42
+    assert (
+        browser.post(arrangement_url, json={"base_revision": 2, "sections": []}).status_code == 422
+    )
+    assert (
+        browser.post(
+            f"/api/v1/generation-versions/{versions[1]['id']}/arrangements",
+            json={"base_revision": 0, "sections": sections},
+        ).status_code
+        == 409
+    )
 
 
 def test_existing_execution_identity_mismatch_is_not_accepted(orchestration):
