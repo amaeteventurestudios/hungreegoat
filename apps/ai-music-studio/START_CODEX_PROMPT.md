@@ -1,6 +1,6 @@
-# Autonomous Build Prompt for Codex
+# Autonomous Build / Resume Prompt for Codex
 
-You are the principal engineer and orchestrator for Hungree Goat AI Music Studio.
+You are the principal coordinator for Hungree Goat AI Music Studio.
 
 Repository:
 `/home/aumanah/hungree-goat-src/hungreegoat-canonical`
@@ -8,28 +8,44 @@ Repository:
 Studio:
 `/home/aumanah/hungree-goat-src/hungreegoat-canonical/apps/ai-music-studio`
 
-Runtime:
-`/home/aumanah/hungree-goat`
-
-Production:
-`https://studio.hungreegoat.com`
-
 ## Mandatory Reading
-Read all Studio root Markdown files, AUTONOMOUS_EXECUTION.md, PHASES.md, and every phase document under docs/phases/.
+Read:
+- AGENTS.md
+- AUTONOMOUS_EXECUTION.md
+- MODEL_ROUTING.md
+- CODEX.md
+- PHASES.md
+- current phase document
+- current execution-plan records
+
+## Model Routing
+Follow `MODEL_ROUTING.md` exactly.
+
+Default coordinator: Sol Medium.
+Use Terra High for difficult implementation/debugging and the current interrupted Windmill/runtime recovery.
+Use Terra Medium for normal implementation.
+Use Luna Low/Medium for cheap mechanical work.
+Use Sol Low/Medium only when architecture-sensitive work or escalation is justified.
+Do not use Astra for routine work.
+
+When spawning children, explicitly set model and reasoning effort.
+
+## Resume Rule
+If repository work already exists, do not restart or redo completed work.
+
+First inspect:
+- git status
+- git diff
+- completed/active execution records
+- current phase status
+- background/running processes
+- relevant logs
+
+Reconstruct the exact interrupted task from disk/runtime state and continue from there.
 
 ## Mission
-Execute Phase 00 through Phase 14 continuously, in order, without routine owner approval.
-
-Use the strongest available orchestration model as architect/coordinator/reviewer. Delegate independent implementation tasks to capable subagents when supported. Parallelize independent work; serialize overlapping migrations, shared interfaces, and conflicting file ownership.
-
-You may inspect, research official docs, choose implementation details, install required Studio dependencies, create migrations, build services, configure Studio Caddy routing, run tests, run browser/visual verification, fix failures, retry, update docs, commit Studio-scoped work, and continue automatically.
-
-Do not interrupt the owner for normal technical decisions, package choices already covered by architecture, UI decisions covered by docs, tests, fixes, migrations, installs, phase transitions, or manual verification you can perform yourself.
-
-Only true external human blockers may remain unresolved. Record them in docs/HUMAN_BLOCKERS.md and continue all independent work.
-
-## Provider Configuration
-Build Settings → Integrations as a first-class product surface. Support ElevenLabs, OpenAI, OpenRouter, Anthropic/Claude, and future providers. Never hardcode credentials.
-
-## End State
-Do not stop after an intermediate phase. Continue through Phase 14. At the end produce one consolidated report covering completed phases, architecture, services, tests, production status, provider integrations, remaining human blockers, security/backup status, URLs, and health.
+Continue autonomously through Phase 14.
+Do not stop between phases.
+Do not ask for a next-phase prompt.
+Preserve unrelated repository changes.
+Only stop after Phase 14 is complete or every remaining independent task is blocked by a true human-only blocker.
