@@ -84,3 +84,19 @@ Development bootstrap generates credentials; it never overwrites an existing env
 The existing gateway has no Studio route and available SSH access is read-only.
 Production will use a dedicated route/tunnel when an administrator grants it;
 local deployment and verification proceed independently.
+
+## ADR-014 — Private Owner and Server-side Sessions
+Status: Accepted (2026-09-23)
+
+Bootstrap a single owner through a protected CLI; there is no public registration.
+Passwords use Argon2. Opaque sessions are hashed in PostgreSQL, time-limited,
+revocable, HttpOnly and SameSite=Lax; production additionally requires HTTPS and
+Secure __Host cookies. Unsafe browser requests require exact configured Origin;
+authenticated writes additionally require a session-bound CSRF token. Membership
+and workspace context come from the session, never client authorization claims.
+Account/source throttles and bounded hashing limit login resource usage.
+
+Workspace preferences use validated JSONB. Errors omit submitted values and
+provider/password bodies. The web proxy has a fixed server origin, rejects internal
+paths, preserves cookies and bounds request bodies. Development-only operator
+helpers keep generated credentials outside source with restricted permissions.

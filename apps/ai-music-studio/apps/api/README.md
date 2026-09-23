@@ -39,3 +39,38 @@ as UID 10001. The deployment owns persistent-directory creation and permissions.
 Upstream references used for foundation decisions:
 - https://fastapi.tiangolo.com/advanced/events/
 - https://docs.sqlalchemy.org/en/20/dialects/postgresql.html
+
+
+## Private owner and settings
+
+Run `alembic upgrade head`, then provision the first owner:
+
+```sh
+python -m studio_api.bootstrap --email owner@example.com \
+  --display-name Owner --workspace-name "My studio" \
+  --password-file /run/secrets/studio-owner-password
+```
+
+The password file must be a regular file without group/other permissions (0600).
+Omit `--password-file` to read stdin. Passwords require 12–128 characters. Bootstrap
+is transaction-locked and refuses to replace an existing owner. No public signup
+exists. The CLI never prints passwords.
+
+Set `STUDIO_PUBLIC_URL` to the exact browser origin (development default
+`http://localhost:3210`). Production requires HTTPS; development HTTP requires
+loopback. `STUDIO_SESSION_LIFETIME_SECONDS` defaults to 43200 (12 hours).
+
+The auth and settings routes follow `docs/AUTH_SETTINGS_CONTRACT.md`. Login
+throttling persists in PostgreSQL: five failed attempts per normalized email per
+15-minute window, plus 20 failed attempts per actual peer address (the private
+web proxy), without trusting forwarded IP headers. Argon2 hashing concurrency is
+bounded to two operations per process. Request bodies are limited to 1 MiB before
+JSON validation. Session cookie tokens are random and hashed in PostgreSQL.
+Authenticated writes require the session CSRF token and all unsafe browser calls
+require the configured Origin. Password changes revoke all sessions atomically.
+The active session workspace must still have a valid membership on every call.
+Provider configuration is implemented in the following phase.
+
+`GET /settings/system` reports tool availability in the API runtime; it does not
+claim a remote worker or audio engine has executed successfully. Storage reports
+filesystem totals only and never exposes server paths.

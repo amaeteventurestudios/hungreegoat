@@ -62,7 +62,11 @@ def test_database_failure_is_explicit_without_credentials() -> None:
 
 
 def test_production_does_not_publish_api_docs() -> None:
-    with TestClient(create_app(settings(env="production"), MagicMock())) as client:
+    with TestClient(
+        create_app(
+            settings(env="production", public_url="https://studio.example.test"), MagicMock()
+        )
+    ) as client:
         assert client.get("/api/docs").status_code == 404
         assert client.get("/api/openapi.json").status_code == 404
 
@@ -83,3 +87,15 @@ def test_readiness_rejects_unmigrated_database() -> None:
     )
     with TestClient(create_app(settings(), engine)) as client:
         assert client.get("/api/v1/health/ready").status_code == 503
+
+
+def test_framework_errors_have_normalized_envelope() -> None:
+    with TestClient(create_app(settings(), MagicMock())) as client:
+        missing = client.get("/api/v1/unknown")
+        assert missing.status_code == 404
+        assert missing.json()["error"]["code"] == "request_failed"
+        wrong_method = client.post(
+            "/api/v1/health/live", headers={"Origin": "http://localhost:3210"}
+        )
+        assert wrong_method.status_code == 405
+        assert wrong_method.json()["error"]["message"] == "Method Not Allowed"

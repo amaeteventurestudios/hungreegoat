@@ -5,14 +5,18 @@ from contextlib import asynccontextmanager
 from uuid import uuid4
 
 from fastapi import FastAPI, Request, Response
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import SQLAlchemyError
+from starlette.exceptions import HTTPException
 
+from studio_api.auth import router as auth_router
 from studio_api.config import Settings
 from studio_api.database import create_database_engine
 from studio_api.logging import configure_logging
+from studio_api.settings_routes import router as settings_router
 
 logger = logging.getLogger("studio.api")
 
@@ -48,6 +52,31 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         openapi_url="/api/openapi.json" if config.env != "production" else None,
     )
 
+    app.include_router(auth_router)
+    app.include_router(settings_router)
+
+    @app.exception_handler(HTTPException)
+    async def http_error(request: Request, error: HTTPException) -> JSONResponse:
+        detail = (
+            error.detail
+            if isinstance(error.detail, dict)
+            else {"code": "request_failed", "message": str(error.detail), "details": {}}
+        )
+        return JSONResponse(status_code=error.status_code, content={"error": detail})
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error(request: Request, error: RequestValidationError) -> JSONResponse:
+        return JSONResponse(
+            status_code=422,
+            content={
+                "error": {
+                    "code": "validation_error",
+                    "message": "Invalid request values",
+                    "details": {},
+                }
+            },
+        )
+
     @app.middleware("http")
     async def request_log(
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
@@ -56,7 +85,45 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         request.state.request_id = request_id
         started = time.monotonic()
         try:
-            response = await call_next(request)
+            if request.method not in {"GET", "HEAD", "OPTIONS"} and request.headers.get(
+                "origin"
+            ) != config.public_url.rstrip("/"):
+                response = JSONResponse(
+                    status_code=403,
+                    content={
+                        "error": {
+                            "code": "origin_invalid",
+                            "message": "Request origin is not allowed",
+                            "details": {},
+                        }
+                    },
+                )
+            else:
+                too_large = False
+                if request.method not in {"GET", "HEAD", "OPTIONS"}:
+                    chunks = []
+                    length = 0
+                    async for chunk in request.stream():
+                        length += len(chunk)
+                        if length > 1024 * 1024:
+                            too_large = True
+                            break
+                        chunks.append(chunk)
+                    if not too_large:
+                        request._body = b"".join(chunks)
+                if too_large:
+                    response = JSONResponse(
+                        status_code=413,
+                        content={
+                            "error": {
+                                "code": "request_too_large",
+                                "message": "Request exceeds size limit",
+                                "details": {},
+                            }
+                        },
+                    )
+                else:
+                    response = await call_next(request)
         except Exception as error:
             logger.error(
                 "Request failed",
@@ -64,9 +131,17 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
             )
             response = JSONResponse(
                 status_code=500,
-                content={"detail": "Internal server error", "request_id": request_id},
+                content={
+                    "error": {
+                        "code": "internal_error",
+                        "message": "Internal server error",
+                        "details": {"request_id": request_id},
+                    }
+                },
             )
         response.headers["X-Request-ID"] = request_id
+        if request.url.path.startswith(("/api/v1/auth", "/api/v1/settings")):
+            response.headers["Cache-Control"] = "no-store"
         logger.info(
             "Request completed",
             extra={

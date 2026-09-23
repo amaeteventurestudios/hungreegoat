@@ -25,6 +25,7 @@ services:
     environment: &api-environment
       STUDIO_ENV: ${STUDIO_ENV:-development}
       STUDIO_LOG_LEVEL: ${STUDIO_LOG_LEVEL:-INFO}
+      STUDIO_PUBLIC_URL: ${STUDIO_PUBLIC_URL:-http://localhost:3210}
       STUDIO_DATABASE_URL: postgresql+psycopg://studio:${STUDIO_DB_PASSWORD}@studio-postgres:5432/studio
       STUDIO_ASSET_ROOT: /var/lib/studio/assets
     command: [alembic, upgrade, head]

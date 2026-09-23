@@ -10,7 +10,10 @@ curl --fail http://127.0.0.1:8310/api/v1/health/ready
 curl --fail http://127.0.0.1:3210/api/v1/health/ready
 ```
 
-Open http://localhost:3210. The wrapper always selects the Studio Compose file
+On first startup, run `python3 scripts/provision-owner.py` after migrations. It
+creates the local owner once and stores credentials in
+`~/.local/share/hg-studio/dev/owner.json` (0600). Existing owners are never replaced.
+Open http://localhost:3210 and sign in with that private credential. The wrapper always selects the Studio Compose file
 and private `.env`. Bootstrap generates a random database password with mode 0600
 and assets outside source under `~/.local/share/hg-studio/dev/assets`. It preserves
 existing configuration. Check local listener availability before overriding ports.
@@ -24,7 +27,7 @@ bash scripts/compose.sh logs --tail 50 studio-api
 npm ci
 npm run typecheck
 npm run build
-npx playwright test --config tests/browser/playwright.config.ts
+python3 scripts/test-browser.py
 ```
 
 API setup and lint are documented in `apps/api/README.md`. After setting up its
@@ -37,3 +40,8 @@ for foundation checks.
 For shutdown use `bash scripts/compose.sh stop`. Never use Docker system prune,
 remove unrelated containers, or pass `down -v` against valuable Studio data.
 This development setup is not the public production deployment.
+
+`python3 scripts/check-recovery.py` verifies settings/session persistence by
+restarting only the local Studio PostgreSQL and API, then restores its temporary
+settings change. Run it outside an active browser test run. Provider keys are
+managed through Settings after the encrypted secret-store phase.

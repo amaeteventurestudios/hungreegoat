@@ -57,8 +57,10 @@ independent work.
   original containers still running. Existing public surfaces return HTTP 200.
 - 02: Verified — 12 routes, shared UI, responsive shell; lint/build/typecheck and
   80 browser checks pass. Visual defects fixed and screenshots inspected.
-- 03: In progress — authentication, private workspace, persisted settings.
-- 04–14: Pending dependency-ready checkpoints.
+- 03: Verified — secure sessions/settings, 16 API tests, 85 browser tests, real
+  PostgreSQL/API restart preserves session/workspace/settings.
+- 04: In progress — encrypted provider credentials, configuration and health.
+- 05–14: Pending dependency-ready checkpoints.
 
 ## Research
 - Compose project isolation: https://docs.docker.com/compose/how-tos/project-name/
@@ -140,3 +142,27 @@ Settings/Library layouts visually inspected. Boundary check still preserves all
 293 original outside-Studio files. Reusable API runner: 7 passed against a
 created-and-removed isolated test database. Phase 03 proceeds immediately using
 `docs/AUTH_SETTINGS_CONTRACT.md`; no public registration or hardcoded password.
+
+### Phase 03 implementation plan
+API owner implements migration 0002, Argon2 owner bootstrap, session/membership
+checks, Origin and CSRF controls, throttling, typed settings, normalized errors,
+and real PostgreSQL tests. Web owner implements login/session state, fixed-origin
+same-origin proxy, protected shell and persisted settings. Browser owner extends
+real service tests with isolated login/logout and serialized settings mutations.
+Coordinator owns Compose public-origin configuration and private owner/browser
+runner scripts. Bootstrap credentials are generated outside Git at mode 0600;
+no public registration and no existing owner replacement. Development browser
+origin is exactly http://localhost:3210. Provider credential operations remain
+Phase 04, with no key collection before secure storage exists.
+
+### Phase 03 acceptance
+`python3 scripts/test-api.py`: 16 passed against disposable PostgreSQL. Ruff,
+web build/lint/typecheck, diff/boundary checks pass. Migration 0002 applied;
+`alembic check` reports no new operations. Private owner bootstrap succeeded.
+`python3 scripts/test-browser.py`: 85 passed in 35.3s, login/logout/refresh at
+all four sizes, auth boundaries and persisted settings/dark appearance verified.
+Browser screenshots inspected; session artifact mode 0600 in mode 0700 directories,
+revoked and deleted on teardown. `python3 scripts/check-recovery.py` restarted
+only Studio PostgreSQL/API, confirmed persisted identity/settings, restored the
+original preferences and revoked its temporary session. 293 protected-file hashes
+remain unchanged. No provider keys were collected during this phase.

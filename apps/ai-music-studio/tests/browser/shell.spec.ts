@@ -47,7 +47,7 @@ test("navigation opens, follows a route, and closes the mobile sheet", async ({ 
     await expect(navigation).not.toBeVisible();
     await toggle.click();
     await expect(navigation).toBeVisible();
-    await page.screenshot({ path: testInfo.outputPath("navigation-sheet.png"), fullPage: true });
+    await page.screenshot({ path: testInfo.outputPath("navigation-sheet.png"), fullPage: false, animations: "disabled" });
     await page.keyboard.press("Escape");
     await expect(navigation).not.toBeVisible();
     await expect(toggle).toBeFocused();

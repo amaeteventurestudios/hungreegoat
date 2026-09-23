@@ -1,6 +1,8 @@
 # Browser verification
 
-Start the Studio web/API/database first. These tests deliberately use the running
+Start the Studio web/API/database and bootstrap a private test owner first. Set
+`STUDIO_TEST_EMAIL` and `STUDIO_TEST_PASSWORD` through the runner's environment;
+never put credentials in a command argument or committed file. These tests use the running
 services so a mocked health response cannot hide a broken same-origin API proxy.
 
 From the Studio root:
@@ -16,7 +18,13 @@ Ubuntu 24.04 browser build with
 The same environment variable can be used when running tests. This installs only
 the user-local browser cache; it does not change system packages.
 
-Set `STUDIO_TEST_BASE_URL` to override `http://127.0.0.1:3210`.
+Set `STUDIO_TEST_BASE_URL` to override `http://localhost:3210`. It must match the
+API's configured public origin. A global setup logs in once for shell tests,
+writes an ignored session file with mode 0600 inside mode 0700 artifact directories,
+revokes the session, and deletes the file after the suite. Failed server revocation
+is reported. Auth/settings tests run after the shell projects to
+avoid settings mutations racing screenshots. They disable traces and automatic
+screenshots; login screenshots are captured only with an empty password field.
 Each run covers 1440×900, 1280×800, 1024×768, and 390×844 viewports,
 checks horizontal overflow, captures a full-page screenshot, checks runtime
 errors, and verifies that a surfaced connection failure can recover by retrying.

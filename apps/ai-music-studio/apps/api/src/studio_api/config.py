@@ -1,7 +1,8 @@
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Self
+from urllib.parse import urlsplit
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
@@ -16,6 +17,8 @@ class Settings(BaseSettings):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     database_url: SecretStr
     asset_root: Path
+    public_url: str = "http://localhost:3210"
+    session_lifetime_seconds: int = Field(default=43200, ge=60, le=604800)
     database_connect_timeout: int = Field(default=3, ge=1, le=30)
 
     @field_validator("database_url")
@@ -38,3 +41,27 @@ class Settings(BaseSettings):
         if not value.is_absolute():
             raise ValueError("STUDIO_ASSET_ROOT must be an absolute path")
         return value
+
+    @model_validator(mode="after")
+    def validate_origin(self) -> Self:
+        origin = urlsplit(self.public_url)
+        if (
+            origin.scheme not in {"http", "https"}
+            or not origin.hostname
+            or origin.username
+            or origin.password
+            or origin.query
+            or origin.fragment
+            or origin.path not in {"", "/"}
+        ):
+            raise ValueError("STUDIO_PUBLIC_URL must be a complete HTTP origin")
+        if self.env == "production" and origin.scheme != "https":
+            raise ValueError("Production requires an HTTPS public origin")
+        if (
+            self.env == "development"
+            and origin.scheme == "http"
+            and origin.hostname not in {"localhost", "127.0.0.1", "::1"}
+        ):
+            raise ValueError("Development HTTP must use a loopback origin")
+        self.public_url = self.public_url.rstrip("/")
+        return self
