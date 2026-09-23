@@ -3,7 +3,9 @@
 ## Operating Mode
 This is an autonomous end-to-end build.
 
-Read `AUTONOMOUS_EXECUTION.md`. Execute Phase 00 through Phase 12 continuously. There is no phase-by-phase owner approval loop.
+Read `AUTONOMOUS_EXECUTION.md`. Execute Phase 00 through Phase 14 continuously. There is no phase-by-phase owner approval loop.
+
+Intermediate phase completion is internal state only. Do not return control to the owner merely because a phase completed. Do not ask for or recommend a next-phase prompt. Continue immediately until Phase 14 is complete or no independent work remains because of a true human-only blocker.
 
 ## Repository Context
 - Git root: `/home/aumanah/hungree-goat-src/hungreegoat-canonical`
@@ -50,12 +52,13 @@ Build an integrations dashboard early, before provider-dependent functionality.
 For each provider:
 - connection state
 - masked credential
-- update/replace credential
+- update/replace/delete credential
 - enable/disable
 - test connection
 - model/default selection
 - health status
 - last successful test
+- quota/usage information where available
 
 Store secrets server-side. Never return raw stored secrets to the browser.
 
@@ -73,7 +76,8 @@ For each phase:
 7. visually verify UI
 8. update docs
 9. commit Studio-scoped work when appropriate
-10. continue immediately to the next phase
+10. mark the phase checkpoint internally
+11. immediately start the next phase
 
 Do not pause for owner confirmation.
 
@@ -102,4 +106,4 @@ Stage intentionally. Do not reset unrelated work. Prefer Studio-scoped commits.
 ## Success Definition
 A user can open `https://studio.hungreegoat.com`, configure providers in the UI, create a project, generate and compare versions, transform tempo, separate stems, master, export, close the browser, return later, and recover the complete history.
 
-The run ends only after Phase 12 and a consolidated final report.
+The run ends only after Phase 14 and one consolidated final report.
