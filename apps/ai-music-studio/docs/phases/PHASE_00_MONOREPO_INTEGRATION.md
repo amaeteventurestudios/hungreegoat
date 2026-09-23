@@ -1,18 +1,18 @@
-# Phase 00 — Monorepo Reconnaissance & Integration
+# Phase 00 — Monorepo Integration and Ground Rules
 
 ## Objective
-Understand the actual environment and establish a safe autonomous build boundary.
+Establish the Studio safely inside the existing Hungree Goat monorepo.
 
 ## Work
-- inspect repository and runtime trees
-- inspect existing Docker/Caddy/network conventions
-- inspect available CPU/GPU/audio tooling
-- inspect existing modified/untracked files and protect them
-- verify Studio source/runtime paths
-- create the active autonomous execution plan
+- verify Studio lives in apps/ai-music-studio/
 - verify no nested Git repository
-- inventory ports and service-name collisions
-- record baseline health of existing Hungree Goat services
+- distinguish canonical source from runtime tree
+- protect apps/control, apps/player, apps/dj-studio
+- establish workspace conventions
+- establish environment/config conventions
+- establish execution-plan rules
+- establish commit/staging rules
+- baseline existing production service health
 
 ## Acceptance
-Codex performs all checks itself. When the phase passes, continue directly to Phase 01.
+The Studio has a clean, documented application boundary and existing Hungree Goat services remain untouched and healthy.

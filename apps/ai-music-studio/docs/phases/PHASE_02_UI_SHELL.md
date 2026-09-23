@@ -1,18 +1,37 @@
-# Phase 02 — Product Shell & Design System
+# Phase 02 — Design System and Full Studio Shell
 
 ## Objective
-Build the complete visual skeleton using shadcn before deep feature wiring.
+Build the complete visual shell before deep feature wiring.
 
 ## Work
-- design tokens
-- sidebar/topbar
-- page headers
-- cards/tables/forms/dialogs/sheets
-- progress/job components
-- mini-player shell
-- all product routes
-- responsive behavior
-- visual reference support under docs/ui-references/
+- sidebar
+- top navigation
+- page titles
+- cards
+- tables
+- tabs
+- sheets
+- dialogs
+- badges
+- progress components
+- forms
+- skeleton loaders
+- error states
+- mobile/tablet layouts
+
+## Primary Routes
+- Dashboard
+- Projects
+- New Song
+- AI Producer
+- Generation
+- Compare
+- Arrangement
+- Tempo / Remix
+- Stems
+- Mastering
+- Library
+- Settings
 
 ## Acceptance
-Codex performs automated/browser visual QA at required sizes, fixes defects, and continues automatically.
+Complete responsive shadcn-based visual skeleton with browser visual QA.

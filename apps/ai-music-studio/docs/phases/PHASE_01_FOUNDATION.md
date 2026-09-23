@@ -1,19 +1,29 @@
-# Phase 01 — Platform Foundation
+# Phase 01 — Application Foundation
 
 ## Objective
-Create the Studio service foundation without affecting existing Hungree Goat services.
+Build the base Studio platform.
 
-## Work
-- Next.js + React + TypeScript web app
-- shadcn/ui + Base UI + Tailwind
-- FastAPI API
+## Frontend
+- Next.js
+- React
+- TypeScript
+- shadcn/ui
+- Base UI
+- Tailwind
+
+## Backend
+- FastAPI
+- Pydantic
+- SQLAlchemy
+- Alembic
 - PostgreSQL
-- SQLAlchemy/Alembic
-- Docker Compose Studio services
+
+## Infrastructure
+- Docker Compose
+- base networking
+- health endpoints
 - configuration loader
 - structured logging
-- health endpoints
-- development/production service wiring
 
 ## Acceptance
-Codex verifies build, API→DB, migrations, web→API, Compose config, and service health, fixes failures, then continues to Phase 02.
+Browser loads Studio shell, API works, database works, migrations work, and services start without disrupting Hungree Goat.
