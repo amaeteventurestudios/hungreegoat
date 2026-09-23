@@ -16,47 +16,60 @@ Read:
 - USAGE_GUARD.md
 - CODEX.md
 - PHASES.md
+- docs/CODEX_HANDOFF.md
 - current phase document
 - current execution-plan records
 
+## Mandatory First Action
+Before doing implementation work, execute:
+
+```bash
+/home/aumanah/.local/bin/codex-usage-guard
+```
+
+Parse the JSON.
+
+If weekly usage is 80% or greater, do not resume implementation. Update the handoff and stop cleanly.
+
+If below 80%, continue according to the guard and model-routing policy.
+
+## Usage Monitoring Routine
+Run `/home/aumanah/.local/bin/codex-usage-guard`:
+- before every major work batch
+- after every meaningful work batch
+- before every phase transition
+- before costly worker delegation
+- after long debugging/research loops
+
+At 70–79%, conserve.
+At 80%+, mandatory checkpoint/handoff/stop.
+
+Do not wait until 90%, 95%, or zero.
+
 ## Model Routing
-Follow `MODEL_ROUTING.md` exactly.
+- current Phase 06 recovery: Terra High
+- normal implementation: Terra Medium
+- cheap/mechanical work: Luna Low/Medium
+- architecture-sensitive escalation/review: Sol Low/Medium
+- Astra only exceptionally
 
-Default coordinator: Sol Medium.
-Use Terra High for difficult implementation/debugging and interrupted Windmill/runtime recovery.
-Use Terra Medium for normal implementation.
-Use Luna Low/Medium for cheap mechanical work.
-Use Sol Low/Medium only when architecture-sensitive work or escalation is justified.
-Do not use Astra for routine work.
-
-When spawning children, explicitly set model and reasoning effort.
-
-## Usage Protection
-Follow `USAGE_GUARD.md` exactly.
-
-If current usage is visible to the runtime:
-- at 80% used: enter conservation mode
-- at 90% used: prepare handoff
-- at 95% used: stop starting new work, write a complete handoff, and stop cleanly before zero
-
-If current usage is not programmatically visible, maintain durable execution records and a resumable handoff so the build never depends on hidden session context. If the owner reports a usage percentage, immediately apply the matching threshold policy.
-
-The 95% usage guard overrides the normal instruction to continue between phases.
+Explicitly set child model and reasoning effort.
 
 ## Resume Rule
-If repository work already exists, do not restart or redo completed work.
+Do not restart or redo completed work.
 
-First inspect:
-- git status
-- git diff
-- completed/active execution records
+Inspect:
+- docs/CODEX_HANDOFF.md
+- git status/diff
+- execution records
 - current phase status
-- background/running processes
+- running/background processes
 - relevant logs
 
-Reconstruct the exact interrupted task from disk/runtime state and continue from there.
+Reconstruct the exact interrupted task and continue from there.
 
 ## Mission
-Continue autonomously through Phase 14.
-Do not stop between phases except for the mandatory 95% usage handoff or a true human-only blocker.
-Preserve unrelated repository changes.
+Continue autonomously through Phase 14 while the usage guard permits.
+Do not stop between phases for routine approval.
+The 80% weekly usage hard stop overrides the continuous-execution rule.
+Preserve all unrelated repository changes.

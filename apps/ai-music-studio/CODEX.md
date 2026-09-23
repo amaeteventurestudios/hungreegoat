@@ -1,70 +1,62 @@
 # CODEX.md — AI Music Studio Engineering Handbook
 
 ## Operating Mode
-This is an autonomous end-to-end build.
+Autonomous end-to-end build with enforced model routing and usage protection.
 
-Read:
+Read first:
 1. `AUTONOMOUS_EXECUTION.md`
 2. `MODEL_ROUTING.md`
-3. `PHASES.md`
+3. `USAGE_GUARD.md`
+4. `PHASES.md`
+5. current phase/execution records
 
-Execute Phase 00 through Phase 14 continuously.
+## Mandatory Usage Command
+Before any major batch or phase transition:
+
+```bash
+/home/aumanah/.local/bin/codex-usage-guard
+```
+
+Re-check after meaningful batches.
+
+At 80% weekly used or greater: checkpoint and stop. Do not continue toward 95% or 100%.
+
+Owner live display:
+
+```bash
+/home/aumanah/.local/bin/codex-usage-watch
+```
 
 ## Model Policy
-Default coordinator: **Sol Medium**.
+- Sol Medium: coordinator/reviewer
+- Terra High: difficult implementation/debugging and current Phase 06 recovery
+- Terra Medium: normal implementation
+- Luna Low/Medium: scans, repetitive/mechanical work
+- Sol Low/Medium: selective architecture-sensitive escalation
+- Astra: exceptional use only
 
-Route implementation work as follows:
-- Luna Low/Medium → scans, discovery, repetitive checks, mechanical edits
-- Terra Medium → normal React, FastAPI, PostgreSQL, Docker, tests
-- Terra High → complex implementation, Windmill/runtime work, difficult debugging, interrupted-work recovery
-- Sol Low/Medium → architecture-sensitive coding, review, integration, hard unresolved issues
-- Astra → exceptional architecture/reasoning escalation only
-
-Explicitly set child model + reasoning effort when delegating. Do not rely on inheritance.
-
-## Current Recovery State
-The previous run stopped because usage was exhausted during Windmill/worker runtime integration. If resuming that work, Terra High should first reconstruct state from git diff, execution records, running/background processes, and logs, then continue from the existing partial implementation.
-
-Do not restart the project and do not redo completed work.
+Set child model + reasoning effort explicitly.
 
 ## Repository Context
 - Git root: `/home/aumanah/hungree-goat-src/hungreegoat-canonical`
 - Studio root: `/home/aumanah/hungree-goat-src/hungreegoat-canonical/apps/ai-music-studio`
 - Runtime tree: `/home/aumanah/hungree-goat`
 - Production: `https://studio.hungreegoat.com`
-- GitHub: `amaeteventurestudios/hungreegoat`
 
-## Product Goal
-Create a production workstation, not a chatbot.
-
-## Principle
-Build the orchestration layer, not the engines.
-
-## Required Abstractions
-- `AIProducerProvider`
-- `MusicGenerationProvider`
-- `AudioAnalyzer`
-- `TempoProcessor`
-- `StemSeparator`
-- `MasteringProvider`
-- `StorageProvider`
-- `OrchestrationClient`
-- `SecretStore`
+## Current Recovery State
+Phase 06 Windmill/worker runtime work was interrupted by usage exhaustion. Resume from the current repository state and `docs/CODEX_HANDOFF.md`; do not redo completed phases.
 
 ## Execution Discipline
-For each phase:
-1. inspect state
-2. update execution plan
-3. delegate independent work to appropriately routed workers
+For each batch:
+1. check usage
+2. inspect state
+3. delegate appropriately
 4. implement
-5. test
-6. fix
-7. visually verify UI where relevant
-8. update docs
-9. commit Studio-scoped work when appropriate
-10. immediately continue
+5. test/fix
+6. verify
+7. document
+8. commit coherent Studio-scoped work when appropriate
+9. check usage again
+10. continue only when guard permits
 
-Do not pause for owner confirmation.
-
-## Success Definition
-The run ends only after Phase 14 and one consolidated final report, unless every remaining independent task is blocked by a true human-only blocker.
+Never reset/clean/stage unrelated repository work.
