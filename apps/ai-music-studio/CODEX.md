@@ -1,7 +1,7 @@
 # CODEX.md — AI Music Studio Engineering Handbook
 
 ## Operating Mode
-Autonomous end-to-end build with enforced model routing and usage protection.
+Autonomous end-to-end build with enforced model routing, usage protection, and an exhaust-automation-first blocker policy.
 
 Read first:
 1. `AUTONOMOUS_EXECUTION.md`
@@ -11,27 +11,34 @@ Read first:
 5. current phase/execution records
 
 ## Mandatory Usage Command
-Before any major batch or phase transition:
-
+Before major batches and phase transitions:
 ```bash
 /home/aumanah/.local/bin/codex-usage-guard
 ```
 
-Re-check after meaningful batches.
+At 80% weekly used or greater: checkpoint and stop.
 
-At 80% weekly used or greater: checkpoint and stop. Do not continue toward 95% or 100%.
+## Blocker Discipline
+A technical failure is not automatically a human blocker.
 
-Owner live display:
+Before marking a human blocker:
+- exhaust supported CLI/API/admin/configuration paths available to the session
+- research official upstream documentation
+- inspect upstream source/issues when observed behavior contradicts docs
+- test safe alternative supported designs
+- use available shell/container/admin access yourself
+- escalate model capability when appropriate
+- document concrete evidence
 
-```bash
-/home/aumanah/.local/bin/codex-usage-watch
-```
+Only escalate when there is a specific external action that Codex literally cannot perform.
+
+Never stop the overall build for a blocker that does not prevent other independent dependency-ready work.
 
 ## Model Policy
 - Sol Medium: coordinator/reviewer
-- Terra High: difficult implementation/debugging and current Phase 06 recovery
+- Terra High: difficult implementation/debugging
 - Terra Medium: normal implementation
-- Luna Low/Medium: scans, repetitive/mechanical work
+- Luna Low/Medium: scans and mechanical work
 - Sol Low/Medium: selective architecture-sensitive escalation
 - Astra: exceptional use only
 
@@ -43,20 +50,18 @@ Set child model + reasoning effort explicitly.
 - Runtime tree: `/home/aumanah/hungree-goat`
 - Production: `https://studio.hungreegoat.com`
 
-## Current Recovery State
-Phase 06 Windmill/worker runtime work was interrupted by usage exhaustion. Resume from the current repository state and `docs/CODEX_HANDOFF.md`; do not redo completed phases.
-
 ## Execution Discipline
 For each batch:
 1. check usage
 2. inspect state
-3. delegate appropriately
-4. implement
-5. test/fix
-6. verify
-7. document
-8. commit coherent Studio-scoped work when appropriate
-9. check usage again
-10. continue only when guard permits
+3. investigate failures autonomously
+4. delegate appropriately
+5. implement
+6. test/fix
+7. verify
+8. document
+9. commit coherent Studio-scoped work when appropriate
+10. check usage again
+11. continue if permitted
 
 Never reset/clean/stage unrelated repository work.

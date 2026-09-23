@@ -3,8 +3,6 @@
 ## Scope
 This file governs work inside `apps/ai-music-studio/`.
 
-AI Music Studio is a first-class application inside the existing Hungree Goat monorepo.
-
 - GitHub: `amaeteventurestudios/hungreegoat`
 - Canonical checkout: `/home/aumanah/hungree-goat-src/hungreegoat-canonical`
 - Studio source root: `/home/aumanah/hungree-goat-src/hungreegoat-canonical/apps/ai-music-studio`
@@ -12,22 +10,20 @@ AI Music Studio is a first-class application inside the existing Hungree Goat mo
 - Production URL: `https://studio.hungreegoat.com`
 
 ## Autonomous Mandate
-Read `AUTONOMOUS_EXECUTION.md` before doing work.
+Read `AUTONOMOUS_EXECUTION.md`, `MODEL_ROUTING.md`, and `USAGE_GUARD.md` before doing work.
 
-Codex is authorized to execute Phase 00 through Phase 14 continuously without routine owner confirmation. Research, decide, install, implement, test, repair, verify, document, and continue autonomously.
+Execute Phase 00 through Phase 14 continuously without routine owner confirmation, subject to the usage guard.
 
-Do not stop between phases. Intermediate phase completion is an internal checkpoint only.
+## No Premature Blockers
+Do not call something a human blocker just because the first path failed.
 
-Before Phase 14 is complete, do not:
-- return a phase-complete summary and wait
-- ask for a next-phase prompt
-- recommend a next-phase prompt
-- wait for owner approval to continue
-- stop after committing or writing an execution record
+Before escalation to the owner, exhaust safe documented automation paths: CLI, APIs, admin APIs already authorized, bootstrap/setup mechanisms, supported config, container/admin commands, official docs, upstream source/issues, alternate supported flows, architecture-compatible workarounds, and appropriate model escalation.
 
-Continue directly into the next dependency-ready phase.
+If you can perform the action with the tools/permissions available to you, it is not a human blocker.
 
-Only true human-only blockers may interrupt completion. Record those in `docs/HUMAN_BLOCKERS.md`, continue all independent work, and consolidate remaining owner actions into one final handoff.
+A human-only blocker requires proof of an external action you literally cannot perform. Record that proof in `docs/HUMAN_BLOCKERS.md`.
+
+A blocker affecting one subtask does not justify stopping unrelated independent work.
 
 ## Hard Boundary
 By default, do not modify:
@@ -35,119 +31,30 @@ By default, do not modify:
 - `apps/player/`
 - `apps/dj-studio/`
 - existing broadcast services
-- existing root deployment behavior
+- unrelated root deployment behavior
 
-Only touch sibling applications when an explicit cross-app integration requires it and the execution plan documents the exact impact.
-
-Do not create a nested `.git`. Studio belongs to the parent Hungree Goat repository.
+Never reset, clean, discard, stage, or commit unrelated work.
 
 ## Mission
-Build a self-hosted browser-based AI music production studio that orchestrates mature AI and audio engines instead of rebuilding them.
-
+Build:
 `Idea → AI Producer → Music Generation → Version Review → Arrangement → Tempo/Pitch → Stems → Mastering → Exports`
 
-## Read First
-1. `AUTONOMOUS_EXECUTION.md`
-2. `CODEX.md`
-3. `MONOREPO_LAYOUT.md`
-4. `ARCHITECTURE.md`
-5. `PRODUCT_SPEC.md`
-6. `PHASES.md`
-7. relevant subsystem docs
-8. current phase file
+## Core Architecture Laws
+- browser never executes server audio engines directly
+- UI calls Studio API
+- PostgreSQL is canonical domain truth
+- Windmill coordinates long jobs
+- providers/audio engines live behind adapters
+- assets are immutable and lineage-tracked
+- provider credentials are never hardcoded
+- missing provider credentials do not block unrelated work
+- active jobs recover after browser refresh/reconnect
 
-## Core Stack
-Frontend:
-- Next.js
-- React
-- TypeScript
-- shadcn/ui
-- Base UI
-- Tailwind CSS
-- Lucide
-- wavesurfer.js
+## UI
+Use shadcn/ui wherever suitable. Custom widgets are for domain-specific experiences such as waveform, comparison, timeline, stem mixer, tempo preview, energy curve, and mini-player.
 
-Control plane:
-- FastAPI
-- Pydantic
-- SQLAlchemy
-- Alembic
-- PostgreSQL
-
-Orchestration:
-- Windmill
-- tagged workers
-
-AI/music:
-- OpenAI adapter
-- OpenRouter adapter
-- Anthropic/Claude adapter
-- ElevenLabs Music adapter
-
-Audio:
-- FFmpeg
-- librosa
-- SoundFile
-- Rubber Band
-- Demucs behind `StemSeparator`
-- Matchering behind `MasteringProvider`
-
-Infrastructure:
-- Docker Compose
-- Caddy
-- structured logs
-- Uptime Kuma
-
-## Architecture Laws
-1. Browser code never executes server audio engines directly.
-2. UI calls the Studio API.
-3. API validates commands, persists domain intent, and creates jobs.
-4. Windmill coordinates long-running execution.
-5. PostgreSQL is canonical domain truth.
-6. Windmill execution state is operational state, not project truth.
-7. Providers are behind adapters.
-8. Audio engines are behind adapters.
-9. Never overwrite source or derived audio.
-10. Every transformation creates a new immutable asset and lineage record.
-11. Database records use logical asset IDs.
-12. Provider-specific data must not leak into shared contracts.
-13. Never construct shell commands from untrusted concatenated input.
-14. Active jobs recover after browser refresh/reconnect.
-15. Existing Hungree Goat apps are protected boundaries.
-16. Provider credentials are never hardcoded.
-17. Missing provider credentials do not block unrelated phases.
-
-## UI Law
-Use shadcn/ui wherever a suitable component exists. Custom components are reserved for waveform, A/B compare, arrangement timeline, stem mixer, tempo preview, energy curve, and mini-player.
-
-Use Grid/Flexbox, shared tokens, consistent typography, and responsive layouts. Avoid structural absolute positioning and arbitrary fixed heights.
-
-## Coding Rules
-- TypeScript strict mode.
-- Python type hints.
-- No provider calls from React components.
-- No business logic hidden in presentation components.
-- Alembic migrations for schema changes.
-- Long-running operations return job IDs.
-- Jobs expose progress and terminal state.
-- Prefer idempotent operations.
-- Persist and surface errors.
-- Do not silently swallow exceptions.
-
-## Testing Rules
-Codex owns verification. Run and fix:
-- unit tests
-- API tests
-- workflow/job tests
-- integration tests where possible
-- UI/E2E tests
-- visual QA
-- regression tests
-
-Do not ask the owner to manually verify anything Codex can verify itself.
-
-## Existing-Work Protection
-The checkout may contain unrelated modified/untracked files. Never reset, clean, discard, stage, or commit unrelated changes. Restrict work and staging to Studio paths unless a documented integration requires otherwise.
+## Testing
+Codex owns unit, API, workflow, integration, UI/E2E, visual QA, and regression verification. Do not ask the owner to manually verify something Codex can verify itself.
 
 ## Working Style
-Inspect, decide, implement, test, fix, document, continue. Prefer simple reversible decisions. Never claim an integration works without verification. Never stop for routine approval.
+Inspect, investigate, decide, implement, test, fix, document, and continue. Never stop for routine approval.

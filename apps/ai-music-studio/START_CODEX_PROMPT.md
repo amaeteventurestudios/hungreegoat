@@ -17,59 +17,47 @@ Read:
 - CODEX.md
 - PHASES.md
 - docs/CODEX_HANDOFF.md
-- current phase document
-- current execution-plan records
+- docs/HUMAN_BLOCKERS.md
+- current phase/execution records
 
-## Mandatory First Action
-Before doing implementation work, execute:
-
+## First Action
+Run:
 ```bash
 /home/aumanah/.local/bin/codex-usage-guard
 ```
 
-Parse the JSON.
+## Critical Blocker Rule
+Do not accept an existing `HUMAN_BLOCKERS.md` entry as proven merely because a previous agent wrote it.
 
-If weekly usage is 80% or greater, do not resume implementation. Update the handoff and stop cleanly.
+Re-evaluate technical blockers under the current exhaust-automation-first standard.
 
-If below 80%, continue according to the guard and model-routing policy.
+Before calling anything human-only:
+- exhaust safe official CLI/API/admin/config/bootstrap paths
+- use available shell/container/admin permissions yourself
+- research official docs
+- inspect upstream source/issues when behavior differs
+- try safe supported alternative designs
+- escalate technically difficult investigation to an appropriate model
+- identify the exact external action that Codex literally cannot perform
 
-## Usage Monitoring Routine
-Run `/home/aumanah/.local/bin/codex-usage-guard`:
-- before every major work batch
-- after every meaningful work batch
-- before every phase transition
-- before costly worker delegation
-- after long debugging/research loops
+If you can do it yourself, it is not a human blocker.
 
-At 70–79%, conserve.
-At 80%+, mandatory checkpoint/handoff/stop.
+If one subtask remains blocked, continue all other independent dependency-ready work.
 
-Do not wait until 90%, 95%, or zero.
+## Usage
+At 70–79% weekly used: wrap up/conserve.
+At 80%+: mandatory checkpoint/handoff/stop.
 
 ## Model Routing
-- current Phase 06 recovery: Terra High
-- normal implementation: Terra Medium
-- cheap/mechanical work: Luna Low/Medium
-- architecture-sensitive escalation/review: Sol Low/Medium
-- Astra only exceptionally
-
+Follow `MODEL_ROUTING.md`.
+Current difficult Phase 06 recovery: Terra High.
 Explicitly set child model and reasoning effort.
 
-## Resume Rule
-Do not restart or redo completed work.
-
-Inspect:
-- docs/CODEX_HANDOFF.md
-- git status/diff
-- execution records
-- current phase status
-- running/background processes
-- relevant logs
-
-Reconstruct the exact interrupted task and continue from there.
+## Resume
+Do not redo completed work. Reconstruct current state from Git, execution records, handoff, services, and logs.
 
 ## Mission
-Continue autonomously through Phase 14 while the usage guard permits.
+Continue autonomously through Phase 14 while usage permits.
 Do not stop between phases for routine approval.
-The 80% weekly usage hard stop overrides the continuous-execution rule.
-Preserve all unrelated repository changes.
+Do not stop for an unproven technical blocker.
+Preserve unrelated repository changes.

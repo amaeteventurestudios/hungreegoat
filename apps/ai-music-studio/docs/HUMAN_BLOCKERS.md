@@ -1,22 +1,38 @@
-# Human Blockers
+# HUMAN_BLOCKERS.md
 
-This file is the single collection point for actions that truly require the owner.
+## Standard
 
-Codex must not use this file for routine questions, design decisions, debugging, package choices, testing, or implementation uncertainty.
+This file contains only **proven human-only blockers**.
 
-## Current Blockers
-None recorded.
+A failed technical path, API error, admin operation, credential-related task, product-tier limitation, or undocumented behavior is not sufficient by itself.
 
-## Allowed Blocker Categories
-- provider account/API credential unavailable
-- payment/subscription
-- MFA/2FA
+Before adding an item here, Codex must have exhausted the safe supported automation paths available from the current environment and must document:
+
+- exact blocked requirement
+- automation paths attempted
+- relevant commands/endpoints and error summaries
+- official docs/source/issues consulted
+- alternative supported designs considered
+- why remaining alternatives are unsafe, unsupported, or unavailable
+- exact external human action required
+- why Codex cannot perform that action
+- independent work that can still continue
+
+If Codex has the necessary shell access, credentials, authorization, API access, container access, or tools to perform an action, the action is not human-only.
+
+A blocker to one subtask must not stop independent work elsewhere.
+
+## Valid Human-Only Examples
+
+- MFA/2FA approval on an inaccessible device
 - CAPTCHA
-- email verification
+- payment/purchase authorization
 - legal/terms acceptance
-- unavailable private reference asset
-- unavailable authorized DNS/registrar action
-- destructive production action outside Studio scope requiring owner authorization
+- inaccessible email verification
+- credential that does not exist and cannot be obtained programmatically
+- registrar/DNS action with no authorized interface
+- destructive external action requiring explicit owner authorization
 
-## Rule
-Continue all independent work before stopping. Consolidate human-only actions here and present them together at the end whenever possible.
+## Current Entries
+
+Existing entries must be re-evaluated against this standard before being treated as active human blockers.
