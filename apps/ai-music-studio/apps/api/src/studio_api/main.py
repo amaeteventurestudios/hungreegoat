@@ -1,4 +1,5 @@
 import logging
+import re
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
@@ -11,14 +12,19 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException
+from starlette.formparsers import MultiPartException
 
+from studio_api.auth import require_session
 from studio_api.auth import router as auth_router
 from studio_api.config import Settings
 from studio_api.database import create_database_engine
+from studio_api.domain_routes import router as domain_router
 from studio_api.logging import configure_logging
 from studio_api.provider_routes import router as provider_router
 from studio_api.settings_routes import router as settings_router
+from studio_api.storage import MAX_MULTIPART, UploadTooLarge
 
 logger = logging.getLogger("studio.api")
 
@@ -61,9 +67,21 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     app.include_router(auth_router)
     app.include_router(settings_router)
     app.include_router(provider_router)
+    app.include_router(domain_router)
 
     @app.exception_handler(HTTPException)
     async def http_error(request: Request, error: HTTPException) -> JSONResponse:
+        if getattr(request.state, "upload_too_large", False):
+            return JSONResponse(
+                status_code=413,
+                content={
+                    "error": {
+                        "code": "upload_too_large",
+                        "message": "Upload exceeds 100 MiB",
+                        "details": {},
+                    }
+                },
+            )
         detail = (
             error.detail
             if isinstance(error.detail, dict)
@@ -106,31 +124,66 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                     },
                 )
             else:
-                too_large = False
-                if request.method not in {"GET", "HEAD", "OPTIONS"}:
-                    chunks = []
-                    length = 0
-                    async for chunk in request.stream():
-                        length += len(chunk)
-                        if length > 1024 * 1024:
-                            too_large = True
-                            break
-                        chunks.append(chunk)
-                    if not too_large:
-                        request._body = b"".join(chunks)
-                if too_large:
-                    response = JSONResponse(
-                        status_code=413,
-                        content={
-                            "error": {
-                                "code": "request_too_large",
-                                "message": "Request exceeds size limit",
-                                "details": {},
-                            }
-                        },
-                    )
-                else:
+                upload = request.method == "POST" and re.fullmatch(
+                    r"/api/v1/projects/[^/]+/assets/upload", request.url.path
+                )
+                if upload:
+                    with Session(request.app.state.engine) as auth_db:
+                        require_session(request, auth_db)
+                    original_receive = request._receive
+                    received = 0
+
+                    async def bounded_receive():
+                        nonlocal received
+                        message = await original_receive()
+                        if message["type"] == "http.request":
+                            received += len(message.get("body", b""))
+                            if received > MAX_MULTIPART:
+                                request.state.upload_too_large = True
+                                raise MultiPartException("Upload exceeds size limit")
+                        return message
+
+                    request._receive = bounded_receive
                     response = await call_next(request)
+                else:
+                    too_large = False
+                    if request.method not in {"GET", "HEAD", "OPTIONS"}:
+                        chunks = []
+                        length = 0
+                        async for chunk in request.stream():
+                            length += len(chunk)
+                            if length > 1024 * 1024:
+                                too_large = True
+                                break
+                            chunks.append(chunk)
+                        if not too_large:
+                            request._body = b"".join(chunks)
+                    if too_large:
+                        response = JSONResponse(
+                            status_code=413,
+                            content={
+                                "error": {
+                                    "code": "request_too_large",
+                                    "message": "Request exceeds size limit",
+                                    "details": {},
+                                }
+                            },
+                        )
+                    else:
+                        response = await call_next(request)
+        except HTTPException as error:
+            response = await http_error(request, error)
+        except UploadTooLarge:
+            response = JSONResponse(
+                status_code=413,
+                content={
+                    "error": {
+                        "code": "upload_too_large",
+                        "message": "Upload exceeds 100 MiB",
+                        "details": {},
+                    }
+                },
+            )
         except Exception as error:
             logger.error(
                 "Request failed",

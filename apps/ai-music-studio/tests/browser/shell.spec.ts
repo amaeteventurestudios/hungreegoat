@@ -103,15 +103,26 @@ test("settings tabs and provider dialog are accessible", async ({ page }, testIn
   await page.screenshot({ path: testInfo.outputPath("settings-health.png"), fullPage: true });
 });
 
-test("song brief supports long text and accessible vocal selection", async ({ page }, testInfo) => {
+test("new song requires a project and supports a detailed musical brief", async ({ page, request }, testInfo) => {
   await page.goto("/songs/new");
-  const title = "A very long working title for a late-night instrumental that leaves room for changing direction ".repeat(2);
+  const projects = (await (await request.get("/api/v1/projects")).json()).items;
+  if (!projects.length) {
+    await expect(page.getByText("Create a project first to give this song a home.", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Create a project", exact: true })).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath("song-project-prerequisite.png"), fullPage: true });
+    return;
+  }
+  await page.getByRole("combobox", { name: "Project", exact: true }).click();
+  await page.getByRole("option", { name: projects[0].name, exact: true }).first().click();
+  const title = "A long working title for a late-night instrumental that leaves room for a brighter chorus and a final quiet moment";
   await page.getByRole("textbox", { name: "Song title", exact: true }).fill(title);
-  await page.getByRole("textbox", { name: "The idea", exact: true }).fill("Warm bass, soft percussion, a gradual lift into a bright chorus.");
+  const brief = "Warm bass, soft percussion, a gradual lift into a bright chorus, with vocals.";
+  await page.getByRole("textbox", { name: "The idea", exact: true }).fill(brief);
   await page.getByRole("spinbutton", { name: "Target BPM" }).fill("124");
-  await page.getByRole("combobox", { name: "Vocals" }).click();
+  await page.getByRole("combobox", { name: "Vocals", exact: true }).click();
   await page.getByRole("option", { name: "With vocals", exact: true }).click();
-  await expect(page.getByRole("combobox", { name: "Vocals" })).toContainText("With vocals");
+  await expect(page.getByRole("combobox", { name: "Vocals", exact: true })).toContainText("With vocals");
+  await expect(page.getByRole("textbox", { name: "The idea", exact: true })).toHaveValue(brief);
   await expect(page.getByRole("textbox", { name: "Song title", exact: true })).toHaveValue(title);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   await page.evaluate(() => window.scrollTo(0, 0));

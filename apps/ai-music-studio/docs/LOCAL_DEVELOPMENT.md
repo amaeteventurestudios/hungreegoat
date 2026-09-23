@@ -53,3 +53,17 @@ key. Keep both the database references and this directory in protected backups;
 losing the encryption key makes stored credentials unrecoverable. Raw keys are
 accepted once and never returned by the API. Test Connection and Load Models are
 explicit actions; saving a credential does not start generation or a paid call.
+
+Create a project in Projects, then create a song with its production brief. Song
+details preserve notes, tags, style and target audio settings. Upload an original
+audio file there or browse existing audio in Library. Uploads are limited to
+100 MiB and one hour, validated by FFprobe, and stored as immutable private
+objects. Playback and downloads require the workspace session. The browser
+restores the selected song when returning to a workstation tool.
+
+After browser domain tests, their generated project/song/asset IDs are recorded
+under ignored `test-results/domain-fixtures/` with mode 0600. Run
+`python3 scripts/check-recovery.py --project-id UUID` against that fixture to
+verify metadata and downloaded SHA256 before and after a Studio database/API
+restart. Run outside active browser tests. The generated audio fixture is an
+original quiet sine tone; it is not an AI generation or evidence of a provider call.

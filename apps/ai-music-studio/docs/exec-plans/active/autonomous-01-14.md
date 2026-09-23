@@ -61,8 +61,10 @@ independent work.
   PostgreSQL/API restart preserves session/workspace/settings.
 - 04: Verified — encrypted credentials, provider configuration/health/model lists,
   25 API tests, 87 browser tests and four-viewport visual review pass.
-- 05: In progress — core domain, projects, songs, immutable assets and jobs.
-- 06–14: Pending dependency-ready checkpoints.
+- 05: Verified — projects/songs/immutable assets, 33 API tests, 89 browser tests,
+  2 targeted post-polish checks and actual database/API recovery with audio SHA256.
+- 06: In progress — Windmill, durable dispatch/attempts, workers and recovery.
+- 07–14: Pending dependency-ready checkpoints.
 
 ## Research
 - Compose project isolation: https://docs.docker.com/compose/how-tos/project-name/
@@ -198,3 +200,26 @@ Coordinator integrates images, restart checks, boundary protection and checkpoin
 No long audio operations run inside API requests; durable execution starts in
 Phase 06. Windmill v1.817.0 source archive was inspected in /tmp for preparation;
 no orchestration service is yet running.
+
+### Phase 05 verification
+Migration 0004 creates relational project/song/audio/job/workflow entities with
+workspace/project foreign keys, version constraints, same-song plan references
+and one active plan per song. Source uploads use private exclusive object writes,
+strict FFprobe format/protocol limits, authenticated streamed multipart bounds,
+transactional cleanup and ranged authenticated downloads. API: 33 tests passed,
+including migration round trips, invalid/chunked uploads and fsync/commit failures.
+Deployed FFprobe is Debian 7.1.5; its actual license/version is recorded in inventory.
+Alembic drift check, Ruff, web lint/build/typecheck and diff check passed.
+
+Browser: 89 passed in 49.8s. Tested actual create/edit/search/revisit, full song
+brief fields, invalid upload, generated WAV playback/ranges/download SHA256,
+original lineage, library and restored song context. Four viewport screenshots
+reviewed; mobile upload control stacking and name maxlength alignment repaired.
+Initial test selector ambiguity was fixed without weakening upload assertions.
+`check-recovery.py --project-id 6996164a-459a-43af-b538-4191c2f96195` restarted
+only Studio PostgreSQL/API and confirmed identical project/song/asset metadata
+and downloaded checksums, while restoring settings and revoking its session.
+Generated fixtures are explicitly labeled, with private manifests under ignored
+test-results. Protected outside-Studio baseline still matches all 293 files.
+Final mobile upload/name-limit revision: two targeted domain cases passed in 7.4s,
+and its updated mobile screenshot was visually inspected.

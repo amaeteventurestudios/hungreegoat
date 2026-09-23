@@ -529,9 +529,19 @@ Versions from the locked API environment, including development tools.
 | Pygments | 2.21.0 | BSD-2-Clause | [PyPI](https://pypi.org/project/Pygments/2.21.0/) |
 | pytest | 9.1.1 | MIT | [PyPI](https://pypi.org/project/pytest/9.1.1/) |
 | python-dotenv | 1.2.3 | BSD-3-Clause | [PyPI](https://pypi.org/project/python-dotenv/1.2.3/) |
+| python-multipart | 0.0.32 | Apache-2.0 | [PyPI](https://pypi.org/project/python-multipart/0.0.32/) |
 | ruff | 0.16.8 | MIT | [PyPI](https://pypi.org/project/ruff/0.16.8/) |
 | SQLAlchemy | 2.0.54 | MIT | [PyPI](https://pypi.org/project/SQLAlchemy/2.0.54/) |
 | starlette | 1.7.0 | BSD-3-Clause | [PyPI](https://pypi.org/project/starlette/1.7.0/) |
 | typing-inspection | 0.4.4 | MIT | [PyPI](https://pypi.org/project/typing-inspection/0.4.4/) |
 | typing_extensions | 4.16.0 | PSF-2.0 | [PyPI](https://pypi.org/project/typing_extensions/4.16.0/) |
 | uvicorn | 0.53.0 | BSD-3-Clause | [PyPI](https://pypi.org/project/uvicorn/0.53.0/) |
+
+## Audio tools
+
+| Tool | Verified runtime version | License | Source |
+|---|---|---|---|
+| FFmpeg / FFprobe | Debian 7.1.5-0+deb13u1 | GPL-2.0-or-later (this enabled-GPL build) | [FFmpeg](https://ffmpeg.org/download.html) |
+
+Version and license verified inside the API image with `ffprobe -version` and
+`ffmpeg -L`. Debian retains package copyright notices under `/usr/share/doc/`.

@@ -32,6 +32,16 @@ fixture in cleanup. Model selection replays the real credential-less catalog in
 the browser so the fixture is never sent to an external provider. No generation
 or provider health call with that fixture is made. Only masked provider cards are
 captured, and browser storage/response checks reject raw fixture values.
+
+The domain project runs after authentication/provider checks. It creates a uniquely
+named project and song, then uploads a generated original one-second 220 Hz WAV.
+It verifies metadata, playback, byte ranges, download SHA-256, source lineage,
+library visibility, selected-song restoration, and four viewport layouts. It
+retains this fixture for the separate database/API restart check and writes exact
+IDs plus the expected audio digest to mode 0600 files in ignored
+`test-results/domain-fixtures/`. No existing project is edited or deleted.
+When there are no projects yet, shell checks assert the explicit new-song
+prerequisite; the subsequent domain journey exercises the actual creation form.
 Each run covers 1440×900, 1280×800, 1024×768, and 390×844 viewports,
 checks horizontal overflow, captures a full-page screenshot, checks runtime
 errors, and verifies that a surfaced connection failure can recover by retrying.

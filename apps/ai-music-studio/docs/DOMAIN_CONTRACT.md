@@ -10,8 +10,10 @@ pagination. Mutations retain Origin/CSRF protection.
 - `GET /projects`, `POST /projects`, `GET/PATCH /projects/{id}`.
 - Project fields: id, name, description, tags, created_at, updated_at.
 - `GET/POST /projects/{id}/songs`, `GET/PATCH /songs/{id}`.
-- Song fields: id, project_id, title, brief, notes, tags, bpm, musical_key,
-  created_at, updated_at. BPM is nullable or 30–300.
+- Song fields: id, project_id, title, brief, notes, tags, bpm, musical_key, style,
+  vocal_mode, target_duration_seconds, created_at, updated_at. BPM is nullable or
+  30–300. Vocal mode is auto/instrumental/vocals; target duration is nullable or
+  3–600 seconds. These preserve the initial brief for later production planning.
 - Creation requires name/title. Text and tag sizes are bounded. Blank names are
   invalid. Updates preserve omitted fields. No destructive deletion in Phase 05.
 

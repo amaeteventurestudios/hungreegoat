@@ -1,6 +1,6 @@
 from alembic import context
 
-from studio_api import models  # noqa: F401
+from studio_api import domain_models, models  # noqa: F401
 from studio_api.config import Settings
 from studio_api.database import Base, create_database_engine
 

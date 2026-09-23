@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Verify local session/settings recovery after restarting only Studio API and DB."""
+import argparse
+import hashlib
 import http.cookiejar
 import json
 from pathlib import Path
@@ -7,6 +9,11 @@ import subprocess
 import time
 import urllib.error
 import urllib.request
+from uuid import UUID
+
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--project-id', type=UUID, help='Also verify an existing test project and its assets')
+arguments = parser.parse_args()
 
 root = Path(__file__).resolve().parents[1]
 environment = dict(line.split('=', 1) for line in (root / '.env').read_text().splitlines()
@@ -30,7 +37,29 @@ def call(path: str, method: str = 'GET', payload: object = None) -> dict:
 session = call('/auth/login', 'POST', owner)
 csrf = session['csrf_token']
 original = call('/settings')
+
+
+def project_snapshot() -> dict:
+    if arguments.project_id is None:
+        return {}
+    identifier = str(arguments.project_id)
+    project = call('/projects/' + identifier)
+    songs = call('/projects/' + identifier + '/songs')
+    assets = call('/projects/' + identifier + '/assets')
+    checksums = {}
+    for asset in assets['items']:
+        request = urllib.request.Request(origin + '/api/v1/assets/' + asset['id'] + '/download')
+        digest = hashlib.sha256()
+        with client.open(request, timeout=10) as response:
+            while chunk := response.read(1024 * 1024):
+                digest.update(chunk)
+        checksums[asset['id']] = digest.hexdigest()
+        assert checksums[asset['id']] == asset['sha256']
+    return {'project': project, 'songs': songs, 'assets': assets, 'checksums': checksums}
+
+
 try:
+    before = project_snapshot()
     call('/settings', 'PATCH', {'workspace': {'name': 'Recovery verification'}})
     subprocess.run(['bash', str(root / 'scripts/compose.sh'), 'restart', 'studio-postgres', 'studio-api'], check=True)
     for attempt in range(30):
@@ -45,7 +74,10 @@ try:
     assert restored_session['authenticated']
     assert restored_session['active_workspace_id'] == session['active_workspace_id']
     assert call('/settings')['workspace']['name'] == 'Recovery verification'
+    assert project_snapshot() == before
     print('PASS: PostgreSQL/API restart preserves the session, workspace and settings.')
+    if arguments.project_id:
+        print('PASS: Project, songs, asset metadata and downloaded byte checksums survive restart.')
 finally:
     call('/settings', 'PATCH', original)
     call('/auth/logout', 'POST')

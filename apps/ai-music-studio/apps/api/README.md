@@ -123,3 +123,38 @@ Verified upstream references (2026-09-23):
 - https://openrouter.ai/api/v1/models
 - https://elevenlabs.io/docs/api-reference/user/subscription/get
 - https://elevenlabs.io/docs/api-reference/music/compose-detailed
+
+## Projects, songs, and immutable audio
+
+Migration `0004_domain` establishes projects, songs, audio assets, lineage, durable
+jobs/events and the relational foundations for plans, generations, arrangements,
+analysis, tempo variants, stems, mixes, masters and exports. Composite foreign
+keys enforce project/workspace boundaries. Generation plans must belong to the
+same song, and a partial unique index permits one active plan per song.
+
+Project/song APIs support bounded pagination and optional `q` search. Song
+metadata includes style, vocal mode (`auto` by default), and optional target
+duration (3–600 seconds). Domain read/write contracts live in
+`docs/DOMAIN_CONTRACT.md`; later execution commands are not enabled by this phase.
+
+Uploads accept one multipart `file` and optional `song_id`. The API authenticates
+and checks CSRF before parsing multipart data. It limits the actual streamed
+request to 100 MiB plus 64 KiB overhead and the file itself to 100 MiB. Ordinary
+JSON requests retain their 1 MiB limit. Source media must have one audio stream,
+0–3600 seconds (exclusive zero), 8–192 kHz sample rate, and 1–8 channels. WAV,
+MP3, FLAC, OGG, M4A/MP4 audio, AAC and AIFF are supported. Mixed audio/video and
+playlist formats are rejected. FFprobe is installed in the image, runs with a
+10-second timeout, format allowlist and `file,pipe` protocol whitelist; supplied
+filenames and MIME types are not trusted.
+
+`StorageProvider` writes private 0600 objects under the configured external asset
+root. Publication uses an exclusive hard link, so an existing object cannot be
+replaced. Failed validation, database commit, or directory fsync removes the new
+object. Re-uploading identical audio creates a distinct immutable asset. Public
+metadata excludes storage keys and paths. Authenticated stream/download endpoints
+support byte ranges and sanitized attachment filenames.
+
+The API suite generates real WAV audio and verifies FFprobe probing, invalid
+media rejection, byte ranges, download hashes, file permissions, restart
+persistence, workspace isolation, foreign-key enforcement, partial plan uniqueness,
+failed-commit cleanup and injected fsync failure cleanup.

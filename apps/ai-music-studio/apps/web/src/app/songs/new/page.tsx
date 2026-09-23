@@ -1,2 +1,2 @@
-import { NewSong } from "@/components/workstation";
-export default NewSong;
+import { NewSongPage } from "@/components/domain/song-pages";
+export default NewSongPage;

@@ -17,9 +17,6 @@ from studio_api.database import create_database_engine
 from studio_api.main import create_app
 from studio_api.models import (
     AuthSession,
-    LoginThrottle,
-    Membership,
-    ProviderConfig,
     User,
     Workspace,
     WorkspaceSettings,
@@ -43,16 +40,11 @@ def configured(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     config = Settings()
     engine = create_database_engine(config)
     with Session(engine) as db:
-        for model in [
-            ProviderConfig,
-            AuthSession,
-            WorkspaceSettings,
-            Membership,
-            User,
-            Workspace,
-            LoginThrottle,
-        ]:
-            db.execute(delete(model))
+        from studio_api.database import Base
+
+        for table in reversed(Base.metadata.sorted_tables):
+            if table.name != "alembic_version":
+                db.execute(delete(table))
         db.commit()
         bootstrap_owner(db, "owner@example.test", PASSWORD, "Owner", "Studio one")
     yield config, engine

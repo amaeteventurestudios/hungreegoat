@@ -1,2 +1,2 @@
-import { Projects } from "@/components/workstation";
-export default Projects;
+import { ProjectsPage } from "@/components/domain/project-pages";
+export default ProjectsPage;

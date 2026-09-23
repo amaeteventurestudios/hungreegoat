@@ -27,12 +27,17 @@ export default defineConfig({
   },
   projects: [...sizes.map(({ name, width, height }) => ({
     name,
-    testIgnore: "auth.spec.ts",
+    testIgnore: ["auth.spec.ts", "domain.spec.ts"],
     use: { browserName: "chromium", viewport: { width, height } },
   })), {
     name: "auth-settings",
     testMatch: "auth.spec.ts",
     dependencies: sizes.map(({ name }) => name),
+    use: { browserName: "chromium", viewport: { width: 1440, height: 900 } },
+  }, {
+    name: "domain",
+    testMatch: "domain.spec.ts",
+    dependencies: ["auth-settings"],
     use: { browserName: "chromium", viewport: { width: 1440, height: 900 } },
   }],
 });
