@@ -20,6 +20,23 @@ are disabled, so Codex cannot safely create the required normal account through 
 supported API. Do not use the temporary `SUPERADMIN_SECRET` as a runtime identity:
 it remains a superadmin principal even when a token has scopes.
 
+Verified 2026-09-23 against the running source-built v1.817.0 server: the pinned
+official CLI was installed outside the repository and invoked as
+`wmill --base-url <local-server> --workspace studio --token <redacted> user add
+<generated-local-email> <redacted> --name "Studio runtime worker"`. It exited 1.
+The CLI calls `POST /api/users/create`; that endpoint returned HTTP 500 with
+`Internal: User creation is not implemented in the open-source version.` The
+server logged the same error at `users_oss.rs:40:9`. The Instance Settings
+"Add user to instance" UI calls the identical generated API client endpoint, so
+interactive use of that UI cannot bypass the failure. The attempted account was
+not created.
+
+`POST /api/users/tokens/impersonate` is not an alternative runtime-identity
+provisioner. It is a superadmin-only endpoint whose insert omits the requested
+scopes and `workspace_id`; later scope updates may only be performed by the token
+owner. It therefore cannot produce the required workspace-bound, path-scoped
+normal-user token and must not be used as a workaround.
+
 Owner action: establish or supply a normal Windmill account through a supported
 identity lifecycle, grant it access to workspace `studio`, and create an expiring
 token scoped exactly to `jobs:run:scripts:f/studio/execute` with

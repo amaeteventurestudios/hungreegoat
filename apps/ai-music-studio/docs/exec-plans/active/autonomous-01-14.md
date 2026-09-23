@@ -66,7 +66,9 @@ independent work.
 - 06: Awaiting normal-account Windmill runtime identity provisioning — durable
   dispatch/attempts/workers are implemented and locally verified; a scoped normal
   user token (not a service account) meets least privilege, and the live gate
-  must validate it before worker/dispatcher startup.
+  must validate it before worker/dispatcher startup. The documented v1.817.0 CLI
+  and Instance Settings paths have been tested against this OSS deployment and
+  both resolve to the disabled `POST /api/users/create` endpoint.
 - 07–14: Pending the Phase 06 live orchestration dependency.
 
 ## Research
@@ -264,3 +266,20 @@ is applied to the rebuilt API; 41 API tests, 5 worker tests, lint, typecheck,
 build and boundary verification pass. The remaining live diagnostic,
 worker/dispatcher recovery and browser gate await a normal-account token scoped
 to `jobs:run:scripts:f/studio/execute`, recorded in `docs/HUMAN_BLOCKERS.md`.
+
+### Phase 06 documented identity-path validation
+The current Windmill documentation advertises `wmill user add` and the Instance
+Settings user form. To test the documented CLI rather than infer its behavior,
+the official pinned `windmill-cli@1.817.0` was installed outside the repository
+and executed against the running source-built server with an ephemeral authenticated
+session. Its exact shape was `wmill --base-url <local-server> --workspace studio
+--token <redacted> user add <generated-local-email> <redacted> --name "Studio
+runtime worker"`. It exited 1 after `POST /api/users/create` returned HTTP 500:
+`Internal: User creation is not implemented in the open-source version.` Windmill
+logged the same error from `users_oss.rs:40:9`, and the database still contains
+only the seeded superadmin. Source inspection confirms the Instance Settings
+form uses the same generated `createUserGlobally` endpoint. Superadmin token
+impersonation cannot substitute for a normal identity because its token insert
+omits requested scopes and `workspace_id`. The live acceptance gate remains
+blocked by an externally established normal account, not by service-account
+availability.

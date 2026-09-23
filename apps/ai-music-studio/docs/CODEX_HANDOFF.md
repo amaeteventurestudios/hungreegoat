@@ -14,7 +14,13 @@
 > gates need that normal, non-superadmin Windmill account token in the private
 > 0600 `windmill-token` file. This deployment has no configured external
 > identity lifecycle and the OSS user/password APIs are unavailable, which is
-> the remaining setup dependency. `script-hash` is populated;
+> the remaining setup dependency. On 2026-09-23, the official pinned v1.817.0
+> `wmill user add` command was run against the live server with an ephemeral
+> superadmin session: it invoked `POST /api/users/create`, exited 1, and received
+> `Internal: User creation is not implemented in the open-source version.` The
+> matching Instance Settings UI calls the same endpoint. See
+> `docs/HUMAN_BLOCKERS.md` for the sanitized command, server log, and rejected
+> impersonation alternative. `script-hash` is populated;
 > `windmill-token` remains empty. See `docs/HUMAN_BLOCKERS.md`. Resume with Terra
 > High after the token exists, verify permitted exact-script/own-job polling and
 > denied list/other-script access without printing the token, then run the live
