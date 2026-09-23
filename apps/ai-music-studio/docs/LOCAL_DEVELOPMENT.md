@@ -27,8 +27,10 @@ npm run build
 npx playwright test --config tests/browser/playwright.config.ts
 ```
 
-API unit/lint and disposable PostgreSQL migration checks are documented in
-`apps/api/README.md`. Browser tests use the running Studio stack; install Chromium
+API setup and lint are documented in `apps/api/README.md`. After setting up its
+`.venv`, run `python3 scripts/test-api.py` from Studio: it creates a uniquely named
+test database in the development cluster, runs all API checks, and drops only
+that test database in a finally block. It refuses non-development configuration. Browser tests use the running Studio stack; install Chromium
 with `npx playwright install chromium` if absent. No paid provider is required
 for foundation checks.
 

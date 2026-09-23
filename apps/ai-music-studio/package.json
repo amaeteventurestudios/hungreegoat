@@ -11,9 +11,12 @@
   "scripts": {
     "dev": "npm run dev -w @hungreegoat/studio-web",
     "build": "npm run build -w @hungreegoat/studio-web",
-    "typecheck": "npm run typecheck -w @hungreegoat/studio-web"
+    "typecheck": "npm run typecheck -w @hungreegoat/studio-web",
+    "lint": "eslint --config apps/web/eslint.config.mjs apps/web/src packages/ui/src packages/contracts/src"
   },
   "devDependencies": {
-    "@playwright/test": "1.55.1"
+    "@playwright/test": "1.55.1",
+    "eslint": "9.39.5",
+    "eslint-config-next": "16.3.6"
   }
 }

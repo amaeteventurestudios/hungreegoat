@@ -1,5 +1,8 @@
 @import "tw-animate-css";
 @theme inline {
+  --color-sidebar: var(--card); --color-sidebar-foreground: var(--foreground);
+  --color-sidebar-accent: var(--accent); --color-sidebar-accent-foreground: var(--foreground);
+  --color-sidebar-border: var(--border); --color-sidebar-ring: var(--ring);
   --color-background: var(--background); --color-foreground: var(--foreground);
   --color-card: var(--card); --color-card-foreground: var(--foreground);
   --color-primary: var(--primary); --color-primary-foreground: var(--primary-foreground);

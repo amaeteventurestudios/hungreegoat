@@ -8,7 +8,7 @@ test("workspace loads, connects to the real API, and fits its viewport", async (
   expect(await ready.json()).toMatchObject({ status: "ok", service: "studio-api", database: "ok" });
 
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "An idea is just the beginning." })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   await expect(page.getByText("Studio connected", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Check connection" }).click();
   await expect(page.getByText("Studio connected", { exact: true })).toBeVisible();
@@ -20,10 +20,11 @@ test("workspace loads, connects to the real API, and fits its viewport", async (
   }));
   expect(geometry.content).toBeLessThanOrEqual(geometry.width);
   expect(errors).toEqual([]);
+  await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: testInfo.outputPath("workspace.png"), fullPage: true });
 });
 
-test("connection failure is visible and retry recovers", async ({ page }) => {
+test("connection failure is visible and retry recovers", async ({ page }, testInfo) => {
   let unavailable = true;
   await page.route("**/api/v1/health/ready", async (route) => {
     if (unavailable) {
@@ -34,6 +35,7 @@ test("connection failure is visible and retry recovers", async ({ page }) => {
   });
   await page.goto("/");
   await expect(page.getByText("Studio API unavailable", { exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("connection-error.png"), fullPage: true });
   unavailable = false;
   await page.getByRole("button", { name: "Check connection" }).click();
   await expect(page.getByText("Studio connected", { exact: true })).toBeVisible();

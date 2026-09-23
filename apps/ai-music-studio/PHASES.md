@@ -59,6 +59,6 @@ Raw secrets must never be returned to the browser after storage.
 The build is complete after Phase 14 when production is deployed and verified, or every technically possible task is complete and only documented external human-only blockers remain.
 
 ## Execution status (2026-09-23)
-Phase 00 complete. Phase 01 verified. Phase 02 in progress. Phases 03–14 pending.
+Phases 00–02 verified. Phase 03 in progress. Phases 04–14 pending.
 See `docs/exec-plans/active/autonomous-01-14.md` for acceptance evidence and
 `docs/HUMAN_BLOCKERS.md` for the confirmed public gateway access blocker.

@@ -1,21 +1,9 @@
-import { AudioLines, Sparkles, Layers3, Disc3, ArrowRight } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@hungreegoat/studio-ui/components/card";
-import { Badge } from "@hungreegoat/studio-ui/components/badge";
+import Link from "next/link";
+import { Plus, ArrowRight, Music2, AudioLines, Disc3, Sparkles, FolderOpen } from "lucide-react";
+import { Button } from "@hungreegoat/studio-ui/components/button";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@hungreegoat/studio-ui/components/card";
+import { PageHeading, EmptyPanel } from "@/components/page-primitives";
 import { HealthStatus } from "@/components/health-status";
-export default function Home() {
-  return <div className="min-h-screen">
-    <header className="border-b bg-card"><div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-5">
-      <div className="flex items-center gap-3"><div className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground"><AudioLines /></div><div><p className="text-base font-semibold tracking-tight">HUNGREE GOAT</p><p className="text-xs text-muted-foreground">AI MUSIC STUDIO</p></div></div>
-      <Badge variant="secondary">Your independent workspace</Badge>
-    </div></header>
-    <main className="mx-auto grid max-w-6xl gap-10 px-6 py-12 md:py-20">
-      <section className="max-w-2xl space-y-5"><p className="text-xs font-semibold tracking-widest text-muted-foreground">MAKE SOMETHING THAT MOVES YOU</p><h1 className="text-4xl font-semibold tracking-tight md:text-6xl">An idea is just<br />the beginning.</h1><p className="max-w-xl text-lg leading-relaxed text-muted-foreground">A dedicated space to shape your sound, explore versions, and take your next track from a first spark to a final master.</p></section>
-      <div className="grid gap-5 md:grid-cols-3">{[
-        { icon: Sparkles, title: "Find your sound", text: "Turn a creative brief into a production plan and explore new musical directions." },
-        { icon: Layers3, title: "Make it your own", text: "Compare versions, shape the arrangement, and bring every layer into focus." },
-        { icon: Disc3, title: "Finish with intention", text: "Refine your mix, master your track, and keep every version in one place." },
-      ].map(({ icon: Icon, title, text }) => <Card key={title}><CardHeader><Icon className="mb-3 size-6 text-amber-700" /><CardTitle>{title}</CardTitle><CardDescription className="leading-relaxed">{text}</CardDescription></CardHeader><CardContent><ArrowRight className="size-4 text-muted-foreground" aria-hidden="true" /></CardContent></Card>)}</div>
-      <footer className="flex flex-col gap-4 border-t pt-6"><HealthStatus /><p className="text-xs text-muted-foreground">Every idea deserves room to grow. Every version stays yours.</p></footer>
-    </main>
-  </div>;
+export default function Dashboard() {
+  return <><PageHeading eyebrow="A LITTLE SPACE. A LOT OF POSSIBILITY." title="Welcome to your studio" description="Pick up where inspiration left off, or start something entirely new."><Button render={<Link href="/songs/new" />} nativeButton={false}><Plus /> New song</Button></PageHeading><div className="mb-8 grid gap-4 sm:grid-cols-3">{[{ label: "Projects", icon: Music2, hint: "Your ideas, organized" }, { label: "Active jobs", icon: AudioLines, hint: "Production in motion" }, { label: "Final masters", icon: Disc3, hint: "Ready for the world" }].map(({ label, icon: Icon, hint }) => <Card key={label}><CardHeader className="flex-row items-center justify-between"><CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle><Icon className="size-4 text-muted-foreground" /></CardHeader><CardContent><p className="text-3xl font-semibold">—</p><p className="mt-2 text-xs text-muted-foreground">{hint}</p></CardContent></Card>)}</div><div className="grid gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]"><section className="space-y-4"><div className="flex items-center justify-between"><h2 className="text-lg font-semibold">Recent projects</h2><Link href="/projects" className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">View all <ArrowRight className="size-3" /></Link></div><EmptyPanel icon={FolderOpen} title="Your next track starts here" description="Create a project to collect your songs, explore versions, and keep the whole story of your sound together." href="/songs/new" action="Start your first song" /></section><section className="space-y-4"><h2 className="text-lg font-semibold">A spark to get you started</h2><Card className="bg-accent/40"><CardHeader><Sparkles className="mb-3 size-6 text-amber-800" /><CardTitle>Give your idea a direction.</CardTitle><CardDescription className="leading-relaxed">Describe the feeling, the energy, the sound in your head. Your AI Producer helps shape it into a plan.</CardDescription></CardHeader><CardContent><Button variant="outline" render={<Link href="/producer" />} nativeButton={false}>Explore AI Producer <ArrowRight /></Button></CardContent></Card><Card><CardHeader><CardTitle className="text-sm">Studio connection</CardTitle></CardHeader><CardContent><HealthStatus /></CardContent></Card></section></div></>;
 }

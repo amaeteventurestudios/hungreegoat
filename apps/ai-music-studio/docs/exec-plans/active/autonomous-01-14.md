@@ -55,8 +55,10 @@ independent work.
   lint/typecheck/build, 8 browser checks with four viewport screenshots, external
   assets writable as non-root, 293 protected-file hashes unchanged and all nine
   original containers still running. Existing public surfaces return HTTP 200.
-- 02: In progress — complete responsive product shell.
-- 03–14: Pending dependency-ready checkpoints.
+- 02: Verified — 12 routes, shared UI, responsive shell; lint/build/typecheck and
+  80 browser checks pass. Visual defects fixed and screenshots inspected.
+- 03: In progress — authentication, private workspace, persisted settings.
+- 04–14: Pending dependency-ready checkpoints.
 
 ## Research
 - Compose project isolation: https://docs.docker.com/compose/how-tos/project-name/
@@ -82,3 +84,59 @@ Append real command outcomes and checkpoint evidence as work progresses.
   as expected for a one-shot service; checked Alembic through running API instead.
 - Chromium install workaround: official downloaded archive extracted into user
   cache when Node26 installer stalled; no system browser/library changes.
+
+### Provider research preparation
+Official structured-output docs reviewed for the eventual server-side producer
+adapters (no paid calls made):
+- https://developers.openai.com/api/docs/guides/structured-outputs
+- https://openrouter.ai/docs/guides/features/structured-outputs
+- https://platform.claude.com/docs/en/build-with-claude/structured-outputs
+- https://elevenlabs.io/docs/api-reference/music/compose-detailed
+No provider API credentials are present in the current process environment.
+Provider Settings will provide credential entry without source edits; fixture
+verification must stay visibly separate from real provider integration evidence.
+
+### Phase 02 scope and acceptance
+Extend shared shadcn/Base UI primitives and create Dashboard, Projects, New Song,
+Producer, Generation, Compare, Arrangement, Tempo, Stems, Mastering, Library and
+Settings routes. Domain-dependent actions show explicit prerequisite states;
+no generated music or provider connection is fabricated. Shared responsive sidebar,
+mobile sheet, workspace/song context, loading skeletons and error recovery are
+verified with real Chromium. Settings initially presents provider/engine/storage/
+audio/export/workspace/appearance categories; persistence follows in Phase 03/04.
+Source ownership remains web/packages agent; browser suite remains audit agent.
+Coordinator adds reusable isolated API checks and locked dependency inventory.
+
+### Windmill preparation (read-only)
+Pinned upstream candidate: v1.817.0. Its versioned LICENSE distinguishes the
+AGPL source from the published binary's additional terms. Prefer a minimal
+source build with Python execution and without proprietary features; compile
+and runtime verification are still pending Phase 06. Avoid the upstream full
+frontend/DuckDB build on this shared 12GB host. Use bounded Cargo concurrency.
+Sources: https://github.com/windmill-labs/windmill/blob/v1.817.0/LICENSE and
+https://github.com/windmill-labs/windmill/blob/v1.817.0/backend/Cargo.toml .
+Planned execution: workers run packaged Python handlers; API handles only bounded
+claim/progress/finalize operations. Persist execution IDs before dispatch and
+reconcile ambiguous submission/recovery; never execute audio inside API requests.
+
+### Phase 02 QA findings and repairs
+Browser/visual review caught actual shared-component defects: dropdown label lacked
+its required group; Select needed an items-to-label mapping; Tabs registry variants
+did not match Base UI orientation attributes; wrapped Settings tabs inherited a
+fixed height; Library empty table copy inherited nowrap. Fixes and regression
+geometry assertions are applied before acceptance. A 404 test initially assumed
+an anchor role instead of Base UI's button role; its locator was corrected.
+Real loading skeleton timing was not captured on instantaneous static routes;
+only the loading component source and health-check pending/recovery path are
+claimed here. No test-only production routes were introduced.
+
+### Phase 02 acceptance
+`npm run build`, `npm run typecheck`, `npm run lint`, `git diff --check`: pass.
+Rebuilt Studio web image and deployed only Studio web with `up -d --no-deps`.
+Final `PLAYWRIGHT_HOST_PLATFORM_OVERRIDE=ubuntu24.04-x64 npx playwright test
+--config tests/browser/playwright.config.ts`: 80 passed in 32.5s. Desktop, tablet,
+mobile routes, focus/dialog/sheet behavior, retry, empty states and corrected
+Settings/Library layouts visually inspected. Boundary check still preserves all
+293 original outside-Studio files. Reusable API runner: 7 passed against a
+created-and-removed isolated test database. Phase 03 proceeds immediately using
+`docs/AUTH_SETTINGS_CONTRACT.md`; no public registration or hardcoded password.
