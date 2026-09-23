@@ -3,7 +3,11 @@
 ## Primary Directive
 Codex is authorized to build Hungree Goat AI Music Studio from Phase 00 through Phase 14 continuously without stopping for routine human confirmation.
 
-Read `MODEL_ROUTING.md` and follow its model-routing policy.
+Read:
+- `MODEL_ROUTING.md`
+- `USAGE_GUARD.md`
+
+Both are mandatory operating policies.
 
 ## Required Autonomous Behavior
 When a question or ambiguity appears:
@@ -12,11 +16,12 @@ When a question or ambiguity appears:
 3. inspect official upstream documentation when current behavior matters
 4. choose the simplest reversible implementation consistent with the architecture
 5. route work to the cheapest model strong enough for the task
-6. document material decisions
-7. implement
-8. test
-9. fix failures
-10. continue
+6. obey the usage thresholds in `USAGE_GUARD.md`
+7. document material decisions
+8. implement
+9. test
+10. fix failures
+11. continue
 
 ## Continuous Phase Execution
 Execute Phase 00 → Phase 01 → ... → Phase 14 in sequence.
@@ -26,27 +31,19 @@ At the end of every intermediate phase:
 - fix failures
 - update phase status and execution records
 - create a Studio-scoped commit when appropriate
-- IMMEDIATELY begin the next phase in the same run
+- immediately begin the next phase in the same run
 
 An intermediate phase completion is an internal checkpoint, NOT a stopping point.
 
 ### Explicit No-Stop Rule
-Before Phase 14 is complete, Codex MUST NOT:
-- end the run merely because a phase completed
-- emit a final-style phase-complete response and wait
-- ask for a next-phase prompt
-- recommend a next-phase prompt
-- require owner confirmation to continue
-- stop after writing a completion record
-- stop because tests passed
-- stop because a commit was created
+Before Phase 14 is complete, Codex MUST NOT stop merely because a phase completed, tests passed, a commit was created, or an execution record was written.
 
-Only produce a consolidated completion report after Phase 14, or when a true human-only blocker prevents all remaining independent work.
+Exception: the mandatory 95% usage stop-and-handoff policy in `USAGE_GUARD.md` overrides this rule.
 
 ## Delegation Strategy
 Default coordinator: **Sol Medium**.
 
-Delegate implementation according to `MODEL_ROUTING.md`:
+Delegate according to `MODEL_ROUTING.md`:
 - Luna Low/Medium for cheap mechanical tasks
 - Terra Medium for normal implementation
 - Terra High for difficult implementation/debugging
@@ -54,19 +51,6 @@ Delegate implementation according to `MODEL_ROUTING.md`:
 - Astra only for exceptional escalation
 
 When spawning a child, explicitly set both model and reasoning effort. Do not rely on inherited defaults.
-
-The orchestrator owns:
-- dependency ordering
-- decomposition
-- context packaging
-- guardrails
-- conflict avoidance
-- review
-- integration
-- phase acceptance
-- final verification
-
-Parallelize independent work. Serialize overlapping migrations, shared interfaces, and conflicting file ownership.
 
 ## Recovery from Interrupted Session
 When a prior session ended because usage was exhausted:
@@ -82,18 +66,9 @@ When a prior session ended because usage was exhausted:
 For the current interrupted Windmill/worker runtime work, Terra High is the preferred recovery model.
 
 ## True Human Blockers
-Only stop when an action literally cannot be completed from the available machine/session, such as:
-- unavailable credential
-- payment/subscription purchase
-- MFA/2FA
-- CAPTCHA
-- email verification
-- legal/terms acceptance
-- inaccessible DNS/registrar control
-- missing private reference asset
-- destructive action outside Studio scope that could endanger production
+Only stop when an action literally cannot be completed from the available machine/session, or when `USAGE_GUARD.md` requires a resource-safety handoff.
 
-Record true blockers in `docs/HUMAN_BLOCKERS.md` and continue all independent work.
+Record true human blockers in `docs/HUMAN_BLOCKERS.md` and continue all independent work whenever usage permits.
 
 ## Provider Credential Rule
 Never hardcode provider credentials. Build Settings → Integrations with secure server-side secret handling.
