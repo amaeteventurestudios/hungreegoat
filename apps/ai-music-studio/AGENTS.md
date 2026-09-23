@@ -14,9 +14,18 @@ AI Music Studio is a first-class application inside the existing Hungree Goat mo
 ## Autonomous Mandate
 Read `AUTONOMOUS_EXECUTION.md` before doing work.
 
-Codex is authorized to execute Phase 00 through Phase 12 continuously without routine owner confirmation. Research, decide, install, implement, test, repair, verify, document, and continue autonomously.
+Codex is authorized to execute Phase 00 through Phase 14 continuously without routine owner confirmation. Research, decide, install, implement, test, repair, verify, document, and continue autonomously.
 
-Do not stop between phases. Do not ask the owner for ordinary implementation decisions.
+Do not stop between phases. Intermediate phase completion is an internal checkpoint only.
+
+Before Phase 14 is complete, do not:
+- return a phase-complete summary and wait
+- ask for a next-phase prompt
+- recommend a next-phase prompt
+- wait for owner approval to continue
+- stop after committing or writing an execution record
+
+Continue directly into the next dependency-ready phase.
 
 Only true human-only blockers may interrupt completion. Record those in `docs/HUMAN_BLOCKERS.md`, continue all independent work, and consolidate remaining owner actions into one final handoff.
 
