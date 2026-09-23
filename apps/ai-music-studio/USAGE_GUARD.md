@@ -1,113 +1,85 @@
-# USAGE_GUARD.md — Codex Usage Protection and Handoff
-
-## Purpose
-Prevent an autonomous run from exhausting the weekly Work/Codex allowance.
-
-This guard is now backed by a verified machine-readable monitor on the Beelink.
+# USAGE_GUARD.md — Mandatory Codex Allowance Guard
 
 ## Installed Monitor
 
-Tool:
-- `codex-limit-watch 0.2.0`
-- license: MIT
-- installed at: `/home/aumanah/.local/share/codex-limit-watch`
+Verified on the Beelink:
 
-Commands:
+- tool: `codex-limit-watch 0.2.0`
+- license: MIT
+- install: `/home/aumanah/.local/share/codex-limit-watch`
 - raw JSON: `/home/aumanah/.local/bin/codex-usage --json`
 - normalized guard: `/home/aumanah/.local/bin/codex-usage-guard`
-- live owner display: `/home/aumanah/.local/bin/codex-usage-watch`
+- live terminal watcher: `/home/aumanah/.local/bin/codex-usage-watch`
 
-The normalized guard is read-only, non-interactive, safe for repeated execution, and has been verified against Codex `account/rateLimits/read`.
+The normalized guard is read-only, non-interactive, and verified against Codex `account/rateLimits/read`.
 
-Current environment note: this account currently exposes the weekly 10,080-minute window but not the 5-hour window. Missing 5-hour fields are returned as `null`. If Codex exposes the 5-hour window later, the wrapper will evaluate it automatically.
+The account currently exposes the weekly window. Five-hour fields may be `null`; if they appear later, evaluate them too.
 
-## Mandatory Agent Check
+## Mandatory Checks
 
-Before starting any major work batch, run:
+Run the guard:
+- at session start
+- before every major work batch
+- after every meaningful work batch
+- before phase transitions
+- before expensive delegation
+- after long research/debug loops
 
-```bash
-/home/aumanah/.local/bin/codex-usage-guard
-```
+Print a visible line in the same Codex terminal:
 
-Run it again:
-- after each meaningful work batch
-- before starting a new phase
-- before spawning a costly worker
-- after a long debugging/research loop
-- whenever usage state may have materially changed
+`[USAGE] Weekly: X% used / Y% remaining | Guard: CONTINUE|WRAP-UP|STOP`
 
-The result is authoritative for autonomous routing/stop decisions.
+If five-hour usage is available, include it.
 
-## Weekly Hard Stop Policy
+## Thresholds
 
-The owner requires a large reserve. Therefore:
+### <70% weekly used — CONTINUE
+Normal autonomous execution.
 
-### Below 70% used
-- continue normally
-- follow `MODEL_ROUTING.md`
-
-### 70% through 79% used
-Enter conservation mode:
-- no Astra
-- avoid unnecessary Sol
+### 70–79% — WRAP-UP
+Land the plane:
+- start no large new phase/workstream
+- avoid Astra
+- minimize Sol
 - prefer Luna/Terra
-- keep child context narrow
 - finish current coherent task
-- update execution records and handoff continuously
+- run essential tests
+- commit coherent Studio work
+- continuously update `docs/CODEX_HANDOFF.md`
+- check usage more frequently
 
-### 80% used or greater
-**MANDATORY STOP-AND-HANDOFF.**
-
-At 80% weekly used:
-- DO NOT start new implementation
-- DO NOT start another phase
-- DO NOT launch expensive exploratory work
-- finish only the smallest safe in-flight operation required to leave the repo coherent
-- run essential verification only
-- commit verified Studio-scoped work when safe
+### >=80% — HARD STOP
+- start no new implementation
+- start no new phase
+- spawn no new workers
+- finish only the minimum safe in-flight operation
+- run essential verification
+- commit safe coherent Studio work
+- fully update handoff
 - preserve unrelated changes
-- fully update `docs/CODEX_HANDOFF.md`
-- include current phase/task, completed work, uncommitted work, tests, failures, processes, logs, blockers, exact resume commands, and recommended next model
-- stop cleanly with approximately 20% weekly allowance reserved
+- print final usage
+- stop cleanly
 
-This 80% hard stop overrides every instruction to continue automatically through phases.
+This rule overrides every continuous-execution instruction.
+
+## Guard Failure
+
+If the normalized guard fails or cannot report weekly usage:
+- do not start a large new batch
+- checkpoint coherent work
+- record the monitoring problem
+- stop safely rather than risk exhausting allowance
 
 ## Five-Hour Window
 
-When the 5-hour window is available, obey the normalized guard's most conservative action.
+When available, obey the more conservative result between weekly and five-hour limits.
 
-If weekly usage would permit work but the 5-hour window requires checkpoint/stop, obey the 5-hour result.
+Never invent unavailable values.
 
-If the 5-hour fields are `null`, do not invent values.
+## Owner Visibility
 
-## Guard Output
-
-Agents must parse the normalized JSON and respect its `action` field.
-
-If this document's 80% owner policy is stricter than an older installed wrapper threshold, apply the stricter rule manually from `weekly_used_percent` until the wrapper is updated to match.
-
-## Live Owner View
-
-The owner can monitor usage in another terminal or tmux pane with:
+The agent must print usage checks into its own terminal stream. The optional separate watcher is:
 
 ```bash
 /home/aumanah/.local/bin/codex-usage-watch
 ```
-
-Default refresh interval: 30 seconds.
-Ctrl-C exits cleanly.
-
-## Handoff File
-
-Use:
-`apps/ai-music-studio/docs/CODEX_HANDOFF.md`
-
-Keep it sufficiently current that a fresh Codex session can recover without hidden chat context.
-
-## Failure Rule
-
-If `codex-usage-guard` fails, returns malformed output, or cannot obtain weekly usage:
-- do not begin a new large work batch
-- checkpoint current coherent work
-- record the monitoring failure
-- stop safely rather than risk exhausting the allowance

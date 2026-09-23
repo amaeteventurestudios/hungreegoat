@@ -1,118 +1,169 @@
-# Autonomous Execution Contract
+# AUTONOMOUS_EXECUTION.md — Owner-Independent Engineering Contract
 
 ## Primary Directive
-Codex is authorized to build Hungree Goat AI Music Studio from Phase 00 through Phase 14 continuously without routine human confirmation, subject to the mandatory usage safety policy.
 
-Read:
-- `MODEL_ROUTING.md`
-- `USAGE_GUARD.md`
+Build Hungree Goat AI Music Studio autonomously through Phase 14.
 
-Both are mandatory.
+The owner does **not** want routine engineering questions.
 
-## Mandatory Usage Check
-Before every major work batch, before every new phase, and before costly delegation, execute:
+Within the Studio boundary, Codex has standing authority to make and execute technical decisions. The default response to a technical obstacle is **solve it**, not **ask the owner**.
+
+## Decision Rights
+
+Without asking the owner, Codex may:
+- create/delete/edit/refactor Studio source
+- install/remove/update/downgrade dependencies
+- modify Studio-specific runtime/container configuration
+- create/run migrations and Studio data structures
+- create/reconfigure/restart/recreate Studio-specific services
+- create/configure authorized local users/tokens/identities
+- research and test upstream-supported alternatives
+- replace a broken component or integration behind an abstraction
+- change implementation details and internal architecture
+- choose models/workers according to `MODEL_ROUTING.md`
+- run diagnostics/tests/builds/browser automation
+- commit coherent Studio-scoped work
+- continue to the next dependency-ready task or phase
+
+No owner confirmation is required for those actions.
+
+## Mandatory Usage Safety
+
+Before major work batches, phase transitions, costly delegation, and after meaningful work batches, run:
 
 ```bash
 /home/aumanah/.local/bin/codex-usage-guard
 ```
 
-At 80% weekly usage or greater, stop new implementation, checkpoint, write the handoff, and stop cleanly.
+Print a short visible usage line when checked.
 
-## Required Autonomous Behavior
-When a question, failure, or ambiguity appears:
-1. check usage
-2. read project docs
-3. inspect repository/runtime state
-4. consult official upstream docs when needed
-5. investigate safe supported alternatives
-6. choose the simplest reversible implementation
-7. route work to the cheapest model strong enough
-8. implement
-9. test/fix/verify
-10. document
-11. re-check usage
-12. continue if permitted
+- <70% weekly used: continue normally
+- 70–79%: wrap up/conserve
+- >=80%: mandatory checkpoint + handoff + stop
 
-## Human-Blocker Standard — Exhaust Automation First
+The 80% usage stop overrides the continuous-execution rule.
 
-A failed implementation path is NOT a human blocker.
+## Autonomous Problem-Solving Ladder
 
-Codex MUST NOT classify a problem as human-only merely because:
-- an API endpoint returns an error
-- a preferred API/CLI path is unavailable
-- an administrative action is required
-- credentials or identities are involved
-- the current implementation approach failed
-- a feature is unavailable in one product tier
-- documentation is ambiguous
-- a service reports an unexpected limitation
+When anything fails:
 
-Before declaring a human-only blocker, Codex must exhaust all safe, relevant, supported paths available from the current machine/session, including where applicable:
-- official CLI commands
-- official APIs
-- authenticated admin APIs already available
-- documented bootstrap/setup mechanisms
-- supported local configuration
-- container exec/admin commands
-- service/database configuration that is supported and safe
-- upstream official documentation
-- upstream source code and issue tracker when behavior differs from docs
-- alternative supported authentication/identity flows
-- safe architecture-compatible workarounds
-- delegation to a more capable model when the issue is technically difficult
+1. inspect the actual error/state;
+2. reproduce if useful;
+3. inspect logs/config/version/runtime;
+4. consult official docs;
+5. inspect upstream source/issues when docs and behavior disagree;
+6. try supported CLI/API/admin/config/bootstrap paths available to the session;
+7. use container/service/database tooling when safe;
+8. test compatible version changes;
+9. test alternate supported auth/configuration paths;
+10. use existing provider/engine abstractions to substitute components when appropriate;
+11. delegate difficult research/debugging to the appropriate model;
+12. implement the safest architecture-preserving solution;
+13. verify it;
+14. document it;
+15. continue.
 
-If Codex has the shell access, credentials, permissions, or tooling needed to perform an action itself, that action is NOT a human-only blocker.
+Do not stop at step 1, 3, 5, or the first failed path.
 
-Examples that are NOT human blockers:
-- "someone must run this CLI command" when Codex can run it
-- "an admin must call this API" when Codex has authorized admin access
-- "a container must be inspected/reconfigured" when Codex can safely do so
-- "the first endpoint failed" before alternatives were investigated
-- "service accounts are Enterprise-only" when a supported normal-user/token design can satisfy the requirement
+## Architecture-Preserving Substitution Is Pre-Approved
 
-## Human-Blocker Proof Requirement
+A dependency/feature/path being broken, missing, edition-gated, unsupported, or incompatible does not create an approval gate.
 
-A blocker may be labeled human-only only when Codex can identify the exact external human action that it literally cannot perform.
+Codex may autonomously:
+- upgrade/downgrade compatible versions
+- switch supported auth/identity flows
+- change internal service configuration
+- replace an engine/provider implementation behind an adapter
+- redesign an internal workflow
+- use a different mature OSS component when necessary
 
-Before stopping, record:
-1. the exact blocked requirement
-2. every safe automation path attempted
-3. commands/endpoints and relevant error summaries
-4. official documentation/source evidence consulted
-5. why remaining alternatives are unsafe, unsupported, or unavailable
-6. the exact human action required
-7. why Codex cannot perform that action itself
-8. all independent work that was completed despite the blocker
+Conditions:
+- preserve product behavior/contracts
+- preserve or improve security
+- preserve data integrity
+- remain within the Studio boundary
+- avoid new paid obligations unless already authorized
+- document material changes in `DECISIONS.md`
 
-Valid examples include:
-- MFA/2FA approval on a device Codex cannot access
+## Human-Only Blocker — Very High Bar
+
+A human-only blocker exists only when an external action is literally impossible for Codex to perform with available tools/permissions.
+
+Valid examples:
+- MFA/2FA on an inaccessible device
 - CAPTCHA
-- payment/purchase authorization
-- legal/terms acceptance requiring the owner
-- email verification unavailable to the session
-- unavailable credential that cannot be programmatically obtained
-- registrar/DNS action when no authorized interface exists
-- destructive external action requiring explicit owner authorization
+- payment or purchase authorization
+- legal/terms acceptance
+- inaccessible email verification
+- credential that does not exist and cannot be obtained programmatically
+- external control plane with no authorized interface
+- destructive action outside the Studio boundary that would materially risk unrelated production and cannot be safely isolated
 
-When a blocker affects only one subtask, record it and continue every other independent task. Do not stop the overall build unless all remaining dependency-ready work is blocked.
+Not human blockers:
+- API 4xx/5xx
+- unsupported endpoint
+- broken documentation
+- admin action Codex can perform
+- CLI failure
+- OSS edition limitation when alternatives exist
+- service-account limitation
+- version mismatch
+- migration work
+- package installation
+- container recreation
+- local credential/token/user creation when authorized
+- architecture change
+- need to research
+- need to choose between technical options
 
-## Continuous Phase Execution
-Execute Phase 00 → Phase 01 → ... → Phase 14 while usage remains below the hard-stop threshold.
+## Proof Required Before Human Escalation
 
-Intermediate phase completion is an internal checkpoint, not a reason to ask for approval.
+Before writing a human blocker, record:
+1. exact blocked requirement;
+2. evidence of the failure;
+3. automation paths attempted;
+4. docs/source/issues consulted;
+5. alternatives considered;
+6. why each remaining safe alternative is unavailable;
+7. exact human action required;
+8. why Codex cannot perform that action;
+9. independent work that remains possible.
 
-## Delegation Strategy
-Default coordinator: Sol Medium.
+If independent work remains, continue it. Do not stop the overall run.
 
-Follow `MODEL_ROUTING.md`. Explicitly set child model and reasoning effort.
+## Continuous Execution
+
+Phase completion is an internal checkpoint.
+
+At each checkpoint:
+`test → fix → verify → document → commit → usage check → continue`
+
+Do not:
+- announce a phase completion and wait
+- ask for a next-phase prompt
+- ask whether to continue
+- ask the owner to choose a technical solution
+- stop because a planned mechanism changed
+
+Proceed to the next dependency-ready task automatically.
 
 ## Recovery
-When resuming interrupted work:
-- inspect `docs/CODEX_HANDOFF.md`
+
+On a fresh/resumed session:
+- read `README.md` first
+- read the instruction hierarchy
+- read `docs/CODEX_HANDOFF.md`
 - inspect git status/diff
 - inspect execution records
-- inspect relevant processes/logs
-- continue from disk/runtime state rather than restarting completed work
+- inspect services/processes/logs
+- reconstruct state from disk/runtime
+- continue without redoing completed work
 
-## Completion
-The run ends only after Phase 14, the mandatory usage stop, or a PROVEN human-only blocker prevents every remaining independent dependency-ready task.
+## End Conditions
+
+Stop only when:
+1. Phase 14 is complete and final verification/reporting is done;
+2. usage guard reaches its mandatory stop threshold; or
+3. a **proven** human-only blocker prevents every remaining dependency-ready task.
+
+Anything else: solve, substitute, verify, continue.

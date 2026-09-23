@@ -1,56 +1,99 @@
-# MODEL_ROUTING.md — Codex Model Routing Policy
+# MODEL_ROUTING.md — Cost-Aware Multi-Agent Routing
 
-## Purpose
-Use the cheapest model that is strong enough while preserving engineering quality and weekly allowance.
+## Goal
 
-## Mandatory Usage Gate
-Before spawning any costly worker, run:
+Use the least expensive model that can reliably complete the task. The coordinator delegates aggressively instead of doing all implementation itself.
+
+Before costly delegation:
 
 ```bash
 /home/aumanah/.local/bin/codex-usage-guard
 ```
 
-At 70–79% weekly used, conserve aggressively.
-At 80%+ weekly used, do not spawn new workers; checkpoint and stop.
+## Default Coordinator
 
-## Primary Orchestrator
 **Sol Medium**
-- architecture
 - decomposition
 - dependency ordering
-- integration review
+- architecture oversight
+- conflict avoidance
+- review/integration
 - phase acceptance
 - final verification
 
-## Heavy Implementation / Difficult Debugging
-**Terra High**
-Use for interrupted complex recovery, Windmill/runtime integration, hard build failures, and complex cross-layer debugging.
+The coordinator should not consume premium reasoning on routine implementation that a cheaper worker can do.
 
-## Normal Implementation
-**Terra Medium**
-Use for React/shadcn, FastAPI CRUD, PostgreSQL models/migrations, Docker/Compose, tests, and ordinary integrations.
+## Workers
 
-## Cheap / Mechanical Work
-**Luna Low or Luna Medium**
-Use for repository scans, file discovery, repetitive checks, documentation cleanup, mechanical refactors, simple UI edits, and straightforward validation.
+### Luna Low
+Use for:
+- repo/file discovery
+- deterministic scans
+- repetitive checks
+- lint/test enumeration
+- documentation cleanup
+- simple metadata changes
 
-## Selective Escalation
-**Sol Low / Sol Medium**
-Use only for architecture-sensitive code, tricky state/concurrency, difficult audio edge cases, integration review, or unresolved Terra failures.
+### Luna Medium
+Use for:
+- straightforward mechanical refactors
+- simple low-risk UI changes
+- clearly specified repetitive implementation
 
-## Astra
-Do not use for routine implementation. Reserve for exceptional architecture/reasoning escalation only.
+### Terra Medium
+Default implementation worker:
+- React/shadcn
+- FastAPI
+- PostgreSQL models/migrations
+- routine APIs
+- normal tests
+- Docker/Compose
+- provider plumbing
 
-## Explicit Child Routing
-Always set both model and reasoning effort for children; do not rely on inheritance.
+### Terra High
+Use for:
+- difficult multi-file implementation
+- runtime/integration recovery
+- Windmill/orchestration debugging
+- hard build/runtime failures
+- complex cross-layer work
 
-Verified explicit child routing in this environment:
-- Luna Low
-- Terra Medium
-- Sol Low
+### Sol Low / Medium
+Use selectively for:
+- architecture-sensitive code
+- difficult state/concurrency
+- hard audio-pipeline edge cases
+- integration review
+- failures unresolved after Terra attempts
 
-## Failure / Retry Rule
-Retry procedural failures at the same tier first. Escalate one tier only when complexity justifies it. Do not jump directly to Astra.
+### Astra
+Exceptional escalation only.
+Do not use Astra for routine implementation or continuous autonomous execution.
 
-## Current Recovery Rule
-Use Terra High for the interrupted Phase 06 Windmill/worker runtime recovery. After stabilization, return to the standard routing policy.
+## Child Routing Rules
+
+Always specify both:
+- model
+- reasoning effort
+
+Do not rely on inherited parent defaults.
+
+This environment has verified explicit child routing for Luna Low, Terra Medium, and Sol Low.
+
+## Failure Escalation
+
+1. diagnose;
+2. retry same tier if procedural;
+3. use an alternative implementation;
+4. escalate one model tier if reasoning complexity warrants it;
+5. do not jump directly to Astra.
+
+## Usage-Aware Routing
+
+- <70% used: normal routing
+- 70–79%: no Astra; minimize Sol; prefer Luna/Terra; finish current coherent work
+- >=80%: spawn no new workers; checkpoint/handoff/stop
+
+## Autonomy
+
+A worker or coordinator does not need owner approval to select a model, spawn an agent, change implementation approach, or escalate/de-escalate within this policy.

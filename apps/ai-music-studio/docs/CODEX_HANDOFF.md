@@ -1,23 +1,25 @@
-# Codex Handoff
+# CODEX_HANDOFF.md — Durable Resume State
 
-This file is maintained during long-running autonomous work and must be finalized before a usage-safety stop.
+Maintain this file so a fresh session can recover from disk without relying on hidden conversation context.
 
 ## Current State
 - Timestamp:
 - Current model / reasoning:
+- Weekly usage:
 - Current phase:
 - Current task:
-- Last good commit:
+- Last good Studio commit:
 
 ## Completed
 - Completed phases:
 - Completed tasks in current phase:
+- Material architecture substitutions:
 
 ## In Progress
 - Active implementation:
-- Uncommitted files:
-- Background processes:
-- Relevant logs:
+- Uncommitted Studio files:
+- Background processes/services:
+- Relevant logs/errors:
 
 ## Verification
 - Tests run:
@@ -25,18 +27,24 @@ This file is maintained during long-running autonomous work and must be finalize
 - Failing:
 - Remaining checks:
 
-## Decisions
-- Architecture decisions:
-- Provider/model decisions:
+## Technical Issues
+For each issue:
+- exact symptom
+- evidence
+- paths already attempted
+- next autonomous paths to try
+- recommended model/effort
 
-## Blockers
-- Human-only blockers:
-- Technical blockers:
+Do not label a technical issue human-only unless `HUMAN_BLOCKERS.md` proof requirements are satisfied.
+
+## Proven Human-Only Blockers
+- none unless fully proven
 
 ## Protected Unrelated Work
-- Files/paths that must not be reset, cleaned, staged, or committed:
+- files/paths that must not be reset/cleaned/staged/committed
 
 ## Resume
-- Recommended next model / effort:
-- Exact next commands:
-- Exact resume prompt:
+- exact next commands
+- exact resume task
+- recommended next model/effort
+- current usage action

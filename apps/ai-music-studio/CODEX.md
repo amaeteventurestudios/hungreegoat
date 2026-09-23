@@ -1,67 +1,69 @@
 # CODEX.md — AI Music Studio Engineering Handbook
 
 ## Operating Mode
-Autonomous end-to-end build with enforced model routing, usage protection, and an exhaust-automation-first blocker policy.
 
-Read first:
-1. `AUTONOMOUS_EXECUTION.md`
-2. `MODEL_ROUTING.md`
-3. `USAGE_GUARD.md`
-4. `PHASES.md`
-5. current phase/execution records
+Owner-independent autonomous engineering.
 
-## Mandatory Usage Command
-Before major batches and phase transitions:
+Read in this order:
+1. `README.md`
+2. `AGENTS.md`
+3. `AUTONOMOUS_EXECUTION.md`
+4. `MODEL_ROUTING.md`
+5. `USAGE_GUARD.md`
+6. `PHASES.md`
+7. `docs/CODEX_HANDOFF.md`
+8. `docs/HUMAN_BLOCKERS.md`
+9. current phase/execution plan
+
+## One-Line Rule
+
+**If Codex can safely do it itself, Codex does it itself. Do not ask Amaete.**
+
+## Engineering Authority
+
+Within the Studio boundary, Codex may create/delete/refactor files, alter internal architecture, install/remove/update/downgrade dependencies, change Studio containers/services/config, run migrations, create authorized local identities/tokens, restart/recreate Studio services, research, test, debug, substitute components, and commit Studio-scoped work.
+
+Material technical substitutions are documented, not escalated for approval.
+
+## Failure Handling
+
+A technical failure is a problem to solve, not a permission request.
+
+Use the autonomous problem-solving ladder in `AUTONOMOUS_EXECUTION.md`. Exhaust supported automation paths and architecture-preserving alternatives before even considering human escalation.
+
+Do not trust an older "human blocker" entry automatically. Re-evaluate it under the current standard.
+
+## Usage
+
+Run:
+
 ```bash
 /home/aumanah/.local/bin/codex-usage-guard
 ```
 
-At 80% weekly used or greater: checkpoint and stop.
+before/after major batches and at phase transitions.
 
-## Blocker Discipline
-A technical failure is not automatically a human blocker.
+- 70–79%: land the plane
+- >=80%: checkpoint/handoff/stop
 
-Before marking a human blocker:
-- exhaust supported CLI/API/admin/configuration paths available to the session
-- research official upstream documentation
-- inspect upstream source/issues when observed behavior contradicts docs
-- test safe alternative supported designs
-- use available shell/container/admin access yourself
-- escalate model capability when appropriate
-- document concrete evidence
+## Model Routing
 
-Only escalate when there is a specific external action that Codex literally cannot perform.
+Follow `MODEL_ROUTING.md`.
+Explicitly set child model and reasoning effort.
 
-Never stop the overall build for a blocker that does not prevent other independent dependency-ready work.
+## Repository
 
-## Model Policy
-- Sol Medium: coordinator/reviewer
-- Terra High: difficult implementation/debugging
-- Terra Medium: normal implementation
-- Luna Low/Medium: scans and mechanical work
-- Sol Low/Medium: selective architecture-sensitive escalation
-- Astra: exceptional use only
+- root: `/home/aumanah/hungree-goat-src/hungreegoat-canonical`
+- Studio: `/home/aumanah/hungree-goat-src/hungreegoat-canonical/apps/ai-music-studio`
+- runtime: `/home/aumanah/hungree-goat`
+- production: `https://studio.hungreegoat.com`
 
-Set child model + reasoning effort explicitly.
+## Protected Work
 
-## Repository Context
-- Git root: `/home/aumanah/hungree-goat-src/hungreegoat-canonical`
-- Studio root: `/home/aumanah/hungree-goat-src/hungreegoat-canonical/apps/ai-music-studio`
-- Runtime tree: `/home/aumanah/hungree-goat`
-- Production: `https://studio.hungreegoat.com`
+Never reset/clean/discard/stage/commit unrelated changes. Protect sibling apps and the broadcast stack.
 
-## Execution Discipline
-For each batch:
-1. check usage
-2. inspect state
-3. investigate failures autonomously
-4. delegate appropriately
-5. implement
-6. test/fix
-7. verify
-8. document
-9. commit coherent Studio-scoped work when appropriate
-10. check usage again
-11. continue if permitted
+## Execution Loop
 
-Never reset/clean/stage unrelated repository work.
+`usage check → inspect → decide → delegate → implement → test → fix → substitute if needed → verify → document → commit → usage check → continue`
+
+Do not return control merely because a phase, test suite, commit, or technical investigation completed.
