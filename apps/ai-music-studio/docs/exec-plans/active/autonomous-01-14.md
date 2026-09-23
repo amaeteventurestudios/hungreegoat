@@ -63,9 +63,10 @@ independent work.
   25 API tests, 87 browser tests and four-viewport visual review pass.
 - 05: Verified — projects/songs/immutable assets, 33 API tests, 89 browser tests,
   2 targeted post-polish checks and actual database/API recovery with audio SHA256.
-- 06: Blocked only on normal-account Windmill runtime token — durable
-  dispatch/attempts/workers are implemented and locally verified; the live gate
-  must validate the scoped token before worker/dispatcher startup.
+- 06: Awaiting normal-account Windmill runtime identity provisioning — durable
+  dispatch/attempts/workers are implemented and locally verified; a scoped normal
+  user token (not a service account) meets least privilege, and the live gate
+  must validate it before worker/dispatcher startup.
 - 07–14: Pending the Phase 06 live orchestration dependency.
 
 ## Research
@@ -256,8 +257,10 @@ Pinned OSS v1.817.0 does not support ordinary-user or service-account
 provisioning. The recovered provisioner was corrected to create only the existing
 `studio` workspace and fixed script, persist its script hash, and remove the
 bootstrap secret. It explicitly refuses to use the reserved superadmin identity
-as the dispatcher credential. `0005_orchestration` is applied to the rebuilt API;
-41 API tests, 5 worker tests, lint, typecheck, build and boundary verification
-pass. The remaining live diagnostic, worker/dispatcher recovery and browser gate
-are blocked only on a normal-account token scoped to
-`jobs:run:scripts:f/studio/execute`, recorded in `docs/HUMAN_BLOCKERS.md`.
+as the dispatcher credential. A scoped ordinary-user token is the supported
+least-privilege credential and does not depend on service-account support; this
+deployment lacks a configured supported lifecycle to create that user. `0005_orchestration`
+is applied to the rebuilt API; 41 API tests, 5 worker tests, lint, typecheck,
+build and boundary verification pass. The remaining live diagnostic,
+worker/dispatcher recovery and browser gate await a normal-account token scoped
+to `jobs:run:scripts:f/studio/execute`, recorded in `docs/HUMAN_BLOCKERS.md`.

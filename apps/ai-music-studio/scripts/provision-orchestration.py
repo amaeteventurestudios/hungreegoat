@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Bootstrap the local Windmill workspace and fixed Studio script.
 
-Windmill OSS cannot create ordinary users or service accounts. A normal account
-must therefore mint and place the restricted runtime token before this helper can
-finish. The temporary bootstrap superadmin is never used as that runtime identity.
+Windmill OSS cannot create ordinary users or service accounts in this deployment.
+A normal, non-superadmin user token is nevertheless the supported least-privilege
+runtime credential; it must be minted through an established identity lifecycle
+and placed before this helper can finish. The temporary bootstrap superadmin is
+never used as that runtime identity.
 """
 
 import json

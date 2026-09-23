@@ -101,5 +101,7 @@ own expiring token with `workspace_id=studio` and the exact scope
 `jobs:run:scripts:f/studio/execute`. Store that token only in the pre-created
 0600 `windmill-token` private file. That scope permits exact-script execution and
 polling its own execution by ID; it deliberately excludes workspace-wide job
-enumeration and script mutation. Verify allowed exact-script dispatch and denied
-script/list access against the source-built server before starting the dispatcher.
+enumeration and script mutation. This is the supported OSS least-privilege
+runtime identity; a service account is unnecessary. Verify allowed exact-script
+dispatch and denied script/list access against the source-built server before
+starting the dispatcher.

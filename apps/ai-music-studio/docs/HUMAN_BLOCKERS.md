@@ -7,10 +7,18 @@ Codex must not use this file for routine questions, design decisions, debugging,
 ## Current Blockers
 ## Windmill OSS runtime identity (confirmed 2026-09-23)
 Pinned Windmill OSS v1.817.0 does not support ordinary-user creation or service
-account provisioning. The local `studio` workspace and fixed execution script
-can be bootstrapped safely, but an externally established normal, non-superadmin
-Windmill account is required to mint the dispatcher token. Do not use the
-temporary `SUPERADMIN_SECRET` as a runtime identity.
+account provisioning. Service accounts being unavailable is not a blocker to the
+least-privilege design: an ordinary non-superadmin user token, bound to
+`workspace_id=studio` and scoped exactly to
+`jobs:run:scripts:f/studio/execute`, is sufficient. Windmill confines that token
+to starting the fixed script and following only its own jobs; it cannot enumerate
+workspace jobs or mutate scripts.
+
+This deployment currently has only its seeded superadmin and no configured
+external identity lifecycle. Its OSS `users/create` and password-setting handlers
+are disabled, so Codex cannot safely create the required normal account through a
+supported API. Do not use the temporary `SUPERADMIN_SECRET` as a runtime identity:
+it remains a superadmin principal even when a token has scopes.
 
 Owner action: establish or supply a normal Windmill account through a supported
 identity lifecycle, grant it access to workspace `studio`, and create an expiring
