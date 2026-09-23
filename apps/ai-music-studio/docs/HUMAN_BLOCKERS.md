@@ -18,7 +18,14 @@ Studio Caddy 8410). Phase 14 will provide concrete configuration/install artifac
 No DNS change is currently needed. Local deployment, tests, backups, audio engine
 verification, and hardening remain independent and continue.
 
-Provider credential availability has not yet been established.
+## Provider credentials (confirmed 2026-09-23)
+The Studio has no configured provider credentials, and this session has no
+OpenAI, OpenRouter, Anthropic or ElevenLabs API key environment variables.
+An owner with the relevant accounts must add keys in Settings → Integrations
+and verify account permissions/quota. A credential from an unrelated application
+is not assumed available for this Studio. Adapter contract tests and all local
+audio workflows continue independently; paid provider success cannot be claimed
+until valid credentials permit a real invocation.
 
 
 ## Allowed Blocker Categories

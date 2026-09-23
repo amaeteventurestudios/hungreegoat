@@ -89,11 +89,12 @@ test("project dialog fits the viewport and restores focus", async ({ page, viewp
 
 test("settings tabs and provider dialog are accessible", async ({ page }, testInfo) => {
   await page.goto("/settings");
-  await page.getByRole("button", { name: "Configure OpenAI", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "Connect OpenAI" });
+  await page.getByRole("button", { name: "Add OpenAI API key", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Add OpenAI API key" });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole("textbox")).toHaveCount(0);
-  await dialog.getByRole("button", { name: "Got it" }).click();
+  await expect(dialog.getByLabel("API key", { exact: true })).toHaveAttribute("type", "password");
+  await expect(dialog.getByLabel("API key", { exact: true })).toHaveValue("");
+  await dialog.getByRole("button", { name: "Cancel" }).click();
   await expect(dialog).not.toBeVisible();
   await page.getByRole("tab", { name: "Health", exact: true }).click();
   await expect(page.getByRole("tab", { name: "Health", exact: true })).toHaveAttribute("aria-selected", "true");

@@ -19,6 +19,7 @@ from studio_api.models import (
     AuthSession,
     LoginThrottle,
     Membership,
+    ProviderConfig,
     User,
     Workspace,
     WorkspaceSettings,
@@ -42,7 +43,15 @@ def configured(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     config = Settings()
     engine = create_database_engine(config)
     with Session(engine) as db:
-        for model in [AuthSession, WorkspaceSettings, Membership, User, Workspace, LoginThrottle]:
+        for model in [
+            ProviderConfig,
+            AuthSession,
+            WorkspaceSettings,
+            Membership,
+            User,
+            Workspace,
+            LoginThrottle,
+        ]:
             db.execute(delete(model))
         db.commit()
         bootstrap_owner(db, "owner@example.test", PASSWORD, "Owner", "Studio one")

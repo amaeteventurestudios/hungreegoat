@@ -18,3 +18,21 @@ export interface SystemHealth {
   storage: { available: boolean; total_bytes: number | null; free_bytes: number | null };
   engines: { id: string; name: string; available: boolean; status: "available" | "not_installed" }[];
 }
+export interface ProviderConfig {
+  provider: string;
+  category: string;
+  enabled: boolean;
+  credential_present: boolean;
+  masked_secret: string | null;
+  connection_status: "not_configured" | "unverified" | "connected" | "error";
+  default_model: string | null;
+  capabilities: string[];
+  health_status: "unknown" | "healthy" | "degraded" | "unavailable";
+  last_health_check_at: string | null;
+  last_successful_health_check_at: string | null;
+  updated_at: string | null;
+  usage: { available: boolean; [key: string]: unknown };
+}
+export interface ProviderModels { items: { id: string; label: string }[]; source: string }
+
+export interface ProviderHealthResult { ok:boolean; provider:string; health_status:ProviderConfig["health_status"]; checked_at:string; error_code:string|null; message:string }

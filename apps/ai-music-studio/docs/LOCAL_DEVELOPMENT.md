@@ -4,6 +4,7 @@ Run from `apps/ai-music-studio`:
 
 ```sh
 python3 scripts/bootstrap.py
+python3 scripts/bootstrap-secrets.py
 bash scripts/compose.sh config --quiet
 bash scripts/compose.sh up -d --build
 curl --fail http://127.0.0.1:8310/api/v1/health/ready
@@ -43,5 +44,12 @@ This development setup is not the public production deployment.
 
 `python3 scripts/check-recovery.py` verifies settings/session persistence by
 restarting only the local Studio PostgreSQL and API, then restores its temporary
-settings change. Run it outside an active browser test run. Provider keys are
-managed through Settings after the encrypted secret-store phase.
+settings change. Run it outside an active browser test run.
+
+Provider keys are managed through Settings → Integrations. Secret bootstrap
+creates a private `~/.local/share/hg-studio/dev/secrets` directory with encrypted
+values and a separate 0600 encryption key. Re-running it preserves the existing
+key. Keep both the database references and this directory in protected backups;
+losing the encryption key makes stored credentials unrecoverable. Raw keys are
+accepted once and never returned by the API. Test Connection and Load Models are
+explicit actions; saving a credential does not start generation or a paid call.

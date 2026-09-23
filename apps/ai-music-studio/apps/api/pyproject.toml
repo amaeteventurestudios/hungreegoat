@@ -8,6 +8,8 @@ version = "0.1.0"
 description = "AI Music Studio control plane"
 requires-python = ">=3.12,<3.15"
 dependencies = [
+  "cryptography>=46,<51",
+  "httpx>=0.28,<1",
   "argon2-cffi>=25.1,<26",
   "fastapi>=0.115,<1",
   "uvicorn>=0.34,<1",

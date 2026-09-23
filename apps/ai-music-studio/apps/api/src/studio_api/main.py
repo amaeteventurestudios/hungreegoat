@@ -4,6 +4,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from uuid import uuid4
 
+import httpx
 from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -16,6 +17,7 @@ from studio_api.auth import router as auth_router
 from studio_api.config import Settings
 from studio_api.database import create_database_engine
 from studio_api.logging import configure_logging
+from studio_api.provider_routes import router as provider_router
 from studio_api.settings_routes import router as settings_router
 
 logger = logging.getLogger("studio.api")
@@ -35,10 +37,14 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         application.state.engine = engine or create_database_engine(config)
         application.state.settings = config
+        application.state.provider_client = httpx.Client(
+            timeout=8, follow_redirects=False, trust_env=False
+        )
         logger.info("Studio API started")
         try:
             yield
         finally:
+            application.state.provider_client.close()
             if engine is None:
                 application.state.engine.dispose()
             logger.info("Studio API stopped")
@@ -54,6 +60,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
 
     app.include_router(auth_router)
     app.include_router(settings_router)
+    app.include_router(provider_router)
 
     @app.exception_handler(HTTPException)
     async def http_error(request: Request, error: HTTPException) -> JSONResponse:

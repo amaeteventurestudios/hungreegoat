@@ -17,7 +17,7 @@ test("anonymous visitors cannot read workspace settings or enter the workspace",
 });
 
 test("invalid credentials remain anonymous and foreign origins cannot log in", async ({ request }) => {
-  const credentials = { email: "missing-owner@studio.local", password: "incorrect-password-never-real-123!" };
+  const credentials = { email: `missing-owner-${crypto.randomUUID()}@studio.local`, password: "incorrect-password-never-real-123!" };
   const invalid = await request.post("/api/v1/auth/login", { data: credentials, headers: { Origin: baseURL } });
   expect(invalid.status()).toBe(401);
   const payload = await invalid.text();
@@ -119,4 +119,134 @@ test("authenticated settings reject missing CSRF and foreign origins", async ({ 
   } finally {
     await request.dispose();
   }
+});
+
+test.describe("provider configuration", () => {
+  test.use({ storageState: authStatePath });
+
+  test("provider metadata stays private and missing credentials produce a normalized health error", async ({ request, playwright }) => {
+    const anonymous = await playwright.request.newContext({ baseURL, storageState: { cookies: [], origins: [] } });
+    try {
+      expect((await anonymous.get("/api/v1/settings/providers")).status()).toBe(401);
+    } finally {
+      await anonymous.dispose();
+    }
+    const list = await request.get("/api/v1/settings/providers");
+    expect(list.status()).toBe(200);
+    const { items } = await list.json();
+    expect(items.map((item: { provider: string }) => item.provider).sort()).toEqual(["anthropic", "elevenlabs", "openai", "openrouter"]);
+    const provider = items.find((item: { provider: string }) => item.provider === "openai");
+    expect(provider.credential_present, "Provider lifecycle tests require an empty OpenAI integration.").toBe(false);
+    expect(provider).not.toHaveProperty("secret_reference");
+    const session = await (await request.get("/api/v1/auth/session")).json();
+    const health = await request.post("/api/v1/settings/providers/openai/health-check", {
+      headers: { Origin: baseURL, "X-CSRF-Token": session.csrf_token },
+    });
+    expect(health.status()).toBe(409);
+    expect(await health.json()).toMatchObject({ error: { code: "provider_not_configured" } });
+    const models = await request.get("/api/v1/settings/providers/openai/models");
+    expect(models.status()).toBe(200);
+    expect(await models.json()).toMatchObject({ source: "catalog" });
+  });
+
+  test("provider credentials rotate safely and settings persist across refresh", async ({ page, request }, testInfo) => {
+    const endpoint = "/api/v1/settings/providers/openai";
+    const originalSettings = await (await request.get("/api/v1/settings")).json();
+    const originalItems = (await (await request.get("/api/v1/settings/providers")).json()).items;
+    const original = originalItems.find((item: { provider: string }) => item.provider === "openai");
+    expect(original.credential_present, "Refusing to replace an existing provider credential.").toBe(false);
+    const session = await (await request.get("/api/v1/auth/session")).json();
+    const headers = { Origin: baseURL, "X-CSRF-Token": session.csrf_token };
+    const catalog = await (await request.get(`${endpoint}/models`)).json();
+    expect(catalog.items.length).toBeGreaterThan(0);
+    // Preserve the real credential-less catalog; never send a nonreal key upstream.
+    await page.route(`**${endpoint}/models`, (route) => route.fulfill({ json: catalog }));
+    const marker = crypto.randomUUID();
+    const firstKey = `studio-nonreal-e2e-${marker}-A111`;
+    const secondKey = `studio-nonreal-e2e-${marker}-B222`;
+    const hasKey = (value: string) => value.includes(firstKey) || value.includes(secondKey);
+    const card = page.locator('[aria-label="OpenAI integration"]');
+    async function storeKey(action: "Add" | "Replace", key: string) {
+      await page.getByRole("button", { name: `${action} OpenAI API key`, exact: true }).click();
+      const dialog = page.getByRole("dialog", { name: `${action} OpenAI API key`, exact: true });
+      const input = dialog.getByLabel("API key", { exact: true });
+      expect((await input.inputValue()) === "").toBe(true);
+      await input.evaluate((element, value) => {
+        const input = element as HTMLInputElement;
+        input.value = value;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      }, key);
+      const responsePromise = page.waitForResponse((response) => response.url().endsWith(`${endpoint}/credential`) && response.request().method() === "PUT");
+      await dialog.getByRole("button", { name: "Save key", exact: true }).click();
+      const response = await responsePromise;
+      expect(response.status()).toBe(200);
+      expect(hasKey(await response.text())).toBe(false);
+      await expect(dialog).not.toBeVisible();
+    }
+    try {
+      await page.goto("/settings");
+      await expect(card.getByRole("button", { name: "Test connection", exact: true })).toBeDisabled();
+      await expect(card.getByRole("switch", { name: "Provider enabled" })).toBeDisabled();
+      await page.getByRole("button", { name: "Add OpenAI API key", exact: true }).click();
+      const draftDialog = page.getByRole("dialog", { name: "Add OpenAI API key", exact: true });
+      await draftDialog.getByLabel("API key", { exact: true }).evaluate((element, value) => {
+        (element as HTMLInputElement).value = value;
+      }, firstKey);
+      await draftDialog.getByRole("button", { name: "Cancel", exact: true }).click();
+      await storeKey("Add", firstKey);
+      await expect(card.getByText("••••A111", { exact: true })).toBeVisible();
+      await card.getByRole("switch", { name: "Provider enabled" }).click();
+      await expect(card.getByRole("switch", { name: "Provider enabled" })).toBeChecked();
+      await card.getByRole("button", { name: "Load models", exact: true }).click();
+      await card.getByRole("combobox", { name: "Default model", exact: true }).click();
+      await page.getByRole("option", { name: catalog.items[0].label, exact: true }).click();
+      await expect(card.getByRole("status")).toContainText("Default model saved.");
+      await page.getByRole("combobox", { name: "Default AI producer", exact: true }).click();
+      await page.getByRole("option", { name: "OpenAI", exact: true }).click();
+      await page.getByRole("button", { name: "Save provider defaults", exact: true }).click();
+      await expect(page.getByText("Provider defaults saved.", { exact: true })).toBeVisible();
+      await page.reload();
+      await expect(card.getByText("••••A111", { exact: true })).toBeVisible();
+      await expect(page.getByRole("combobox", { name: "Default AI producer", exact: true })).toContainText("OpenAI");
+      const persisted = (await (await request.get("/api/v1/settings/providers")).json()).items.find((item: { provider: string }) => item.provider === "openai");
+      expect(persisted.default_model).toBe(catalog.items[0].id);
+      await storeKey("Replace", secondKey);
+      await expect(card.getByText("••••B222", { exact: true })).toBeVisible();
+      await expect(card.getByText("••••A111", { exact: true })).toHaveCount(0);
+      await card.getByRole("switch", { name: "Provider enabled" }).click();
+      await expect(card.getByRole("switch", { name: "Provider enabled" })).not.toBeChecked();
+      await expect(page.getByRole("combobox", { name: "Default AI producer", exact: true })).toContainText("Not selected");
+      await page.reload();
+      await expect(card.getByRole("switch", { name: "Provider enabled" })).not.toBeChecked();
+      await card.getByRole("switch", { name: "Provider enabled" }).click();
+      await expect(card.getByRole("switch", { name: "Provider enabled" })).toBeChecked();
+      await page.getByRole("combobox", { name: "Default AI producer", exact: true }).click();
+      await page.getByRole("option", { name: "OpenAI", exact: true }).click();
+      await page.getByRole("button", { name: "Save provider defaults", exact: true }).click();
+      await expect(page.getByText("Provider defaults saved.", { exact: true })).toBeVisible();
+      const browserValues = await page.evaluate(() => JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage }, html: document.body.innerHTML }));
+      expect(hasKey(browserValues)).toBe(false);
+      expect(hasKey(await (await request.get("/api/v1/settings/providers")).text())).toBe(false);
+      for (const [width, height] of [[1440, 900], [1280, 800], [1024, 768], [390, 844]]) {
+        await page.setViewportSize({ width, height });
+        await page.evaluate(() => window.scrollTo(0, 0));
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+        await page.screenshot({ path: testInfo.outputPath(`provider-cards-${width}.png`), fullPage: true, animations: "disabled" });
+      }
+      await page.getByRole("button", { name: "Delete OpenAI API key", exact: true }).click();
+      const deleteDialog = page.getByRole("dialog", { name: "Delete OpenAI API key?", exact: true });
+      await deleteDialog.getByRole("button", { name: "Delete key", exact: true }).click();
+      await expect(deleteDialog).not.toBeVisible();
+      await expect(page.getByRole("button", { name: "Add OpenAI API key", exact: true })).toBeVisible();
+      await expect(page.getByRole("combobox", { name: "Default AI producer", exact: true })).toContainText("Not selected");
+      await page.reload();
+      await expect(card.getByRole("switch", { name: "Provider enabled" })).toBeDisabled();
+      const removed = (await (await request.get("/api/v1/settings/providers")).json()).items.find((item: { provider: string }) => item.provider === "openai");
+      expect(removed).toMatchObject({ credential_present: false, enabled: false, masked_secret: null });
+    } finally {
+      expect((await request.delete(`${endpoint}/credential`, { headers })).ok()).toBe(true);
+      expect((await request.patch(endpoint, { headers, data: { enabled: original.enabled, default_model: original.default_model } })).ok()).toBe(true);
+      expect((await request.patch("/api/v1/settings", { headers, data: originalSettings })).ok()).toBe(true);
+    }
+  });
 });

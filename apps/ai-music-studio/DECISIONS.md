@@ -100,3 +100,20 @@ Workspace preferences use validated JSONB. Errors omit submitted values and
 provider/password bodies. The web proxy has a fixed server origin, rejects internal
 paths, preserves cookies and bounds request bodies. Development-only operator
 helpers keep generated credentials outside source with restricted permissions.
+
+## ADR-015 — Encrypted Provider Credentials
+Status: Accepted (2026-09-23)
+
+Implement SecretStore with authenticated Fernet encryption and opaque UUID file
+references. The private encryption key is separate from ciphertext values and
+outside source/assets. PostgreSQL stores references and masked hints only. Rotate
+by writing a new private file, committing the new reference, then removing the
+retired value; failed commits clean up new files. Cleanup failures are surfaced.
+Protected backups must preserve both database references and encrypted storage.
+
+Provider requests use fixed endpoints, bounded responses/timeouts and normalized
+errors. UI actions explicitly trigger health/model requests. Saved credentials
+start unverified; a healthy account endpoint does not prove paid generation
+entitlement. Model catalogs are labeled fallback data, and quota units retain
+their actual meaning (ElevenLabs subscription characters are not music quota).
+Provider enablement and model/default selection remain explicit owner choices.

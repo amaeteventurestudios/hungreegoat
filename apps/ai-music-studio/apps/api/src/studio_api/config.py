@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     database_url: SecretStr
     asset_root: Path
+    secret_root: Path | None = None
+    secret_key_file: Path | None = None
     public_url: str = "http://localhost:3210"
     session_lifetime_seconds: int = Field(default=43200, ge=60, le=604800)
     database_connect_timeout: int = Field(default=3, ge=1, le=30)

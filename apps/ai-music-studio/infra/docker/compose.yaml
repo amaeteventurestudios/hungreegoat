@@ -19,6 +19,7 @@ services:
     cpus: 1.0
 
   studio-migrate:
+    user: "${STUDIO_UID:-1000}:${STUDIO_GID:-1000}"
     build:
       context: ../../apps/api
     image: hg-studio-api:local
@@ -26,9 +27,13 @@ services:
       STUDIO_ENV: ${STUDIO_ENV:-development}
       STUDIO_LOG_LEVEL: ${STUDIO_LOG_LEVEL:-INFO}
       STUDIO_PUBLIC_URL: ${STUDIO_PUBLIC_URL:-http://localhost:3210}
+      STUDIO_SECRET_ROOT: /var/lib/studio/secrets/values
+      STUDIO_SECRET_KEY_FILE: /var/lib/studio/secrets/fernet.key
       STUDIO_DATABASE_URL: postgresql+psycopg://studio:${STUDIO_DB_PASSWORD}@studio-postgres:5432/studio
       STUDIO_ASSET_ROOT: /var/lib/studio/assets
     command: [alembic, upgrade, head]
+    volumes:
+      - ${STUDIO_SECRET_DIRECTORY:?Run scripts/bootstrap-secrets.py first}:/var/lib/studio/secrets:ro
     depends_on:
       studio-postgres:
         condition: service_healthy
@@ -43,6 +48,7 @@ services:
     environment: *api-environment
     volumes:
       - ${STUDIO_ASSET_ROOT:?Run scripts/bootstrap.py first}:/var/lib/studio/assets
+      - ${STUDIO_SECRET_DIRECTORY:?Run scripts/bootstrap-secrets.py first}:/var/lib/studio/secrets
     ports:
       - "127.0.0.1:${STUDIO_API_PORT:-8310}:8000"
     depends_on:

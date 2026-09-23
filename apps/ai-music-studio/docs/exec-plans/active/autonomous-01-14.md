@@ -59,8 +59,10 @@ independent work.
   80 browser checks pass. Visual defects fixed and screenshots inspected.
 - 03: Verified — secure sessions/settings, 16 API tests, 85 browser tests, real
   PostgreSQL/API restart preserves session/workspace/settings.
-- 04: In progress — encrypted provider credentials, configuration and health.
-- 05–14: Pending dependency-ready checkpoints.
+- 04: Verified — encrypted credentials, provider configuration/health/model lists,
+  25 API tests, 87 browser tests and four-viewport visual review pass.
+- 05: In progress — core domain, projects, songs, immutable assets and jobs.
+- 06–14: Pending dependency-ready checkpoints.
 
 ## Research
 - Compose project isolation: https://docs.docker.com/compose/how-tos/project-name/
@@ -166,3 +168,33 @@ revoked and deleted on teardown. `python3 scripts/check-recovery.py` restarted
 only Studio PostgreSQL/API, confirmed persisted identity/settings, restored the
 original preferences and revoked its temporary session. 293 protected-file hashes
 remain unchanged. No provider keys were collected during this phase.
+
+### Phase 04 implementation and review
+Migration 0003 adds workspace provider configurations. Server-only SecretStore
+encrypts private UUID files with Fernet; rotation/rollback/deletion and symlink
+rejection are tested. Four provider adapters expose normalized read-only health,
+quota and live/catalog model lists. Dashboard credentials are never returned.
+UI supports add/replace/delete, enablement, health, model selection and defaults.
+Review repaired stale cleared defaults, cancelled-key field lifetime, and a
+component remount that discarded successful save feedback. Browser tests wait for
+server-controlled switches rather than assuming synchronous state changes.
+
+API: 25 tests passed with real disposable PostgreSQL and mocked provider HTTP;
+Ruff and migration drift check passed. Local migration and new web/API images
+deployed. Existing public service health checks remain HTTP 200. Keys are absent,
+so actual paid provider invocation remains explicitly unverified and recorded in
+HUMAN_BLOCKERS. Source catalogs link exact upstream references in API README.
+Final browser gate: 87 passed in 40.4s; screenshots at all four viewports reviewed.
+Test credential and provider/default changes were removed/restored. Browser model
+requests replay a real catalog response to avoid sending fake keys to providers.
+
+### Phase 05 implementation plan
+Use docs/DOMAIN_CONTRACT.md for project/song/asset/job interfaces. API agent owns
+relational migrations, workspace authorization, StorageProvider, bounded upload
+and FFprobe validation, range streaming and API tests. Web agent owns real project
+and song forms/details, asset library/upload/player and shared song selection.
+Browser agent owns real persistence/upload/privacy regressions and visual QA.
+Coordinator integrates images, restart checks, boundary protection and checkpoint.
+No long audio operations run inside API requests; durable execution starts in
+Phase 06. Windmill v1.817.0 source archive was inspected in /tmp for preparation;
+no orchestration service is yet running.

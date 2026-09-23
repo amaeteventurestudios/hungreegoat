@@ -493,20 +493,45 @@ licenses are added when integrated. No distribution model change is made.
 | zod | 4.6.5 | MIT | [registry source](https://registry.npmjs.org/zod/-/zod-4.6.5.tgz) |
 | zod-validation-error | 4.0.2 | MIT | [registry source](https://registry.npmjs.org/zod-validation-error/-/zod-validation-error-4.0.2.tgz) |
 
-## Python foundation
+## Python API dependencies
 
-Versions from `apps/api/uv.lock` installed environment.
+Versions from the locked API environment, including development tools.
 
 | Package | Version | Declared license | Source |
 |---|---|---|---|
-| fastapi | 0.141.1 | MIT | [PyPI](https://pypi.org/project/fastapi/0.141.1/) |
-| uvicorn | 0.53.0 | BSD-3-Clause | [PyPI](https://pypi.org/project/uvicorn/0.53.0/) |
-| pydantic | 2.13.5 | MIT | [PyPI](https://pypi.org/project/pydantic/2.13.5/) |
-| pydantic-settings | 2.15.0 | MIT | [PyPI](https://pypi.org/project/pydantic-settings/2.15.0/) |
-| sqlalchemy | 2.0.54 | MIT | [PyPI](https://pypi.org/project/sqlalchemy/2.0.54/) |
 | alembic | 1.20.0 | MIT | [PyPI](https://pypi.org/project/alembic/1.20.0/) |
+| annotated-doc | 0.0.5 | MIT | [PyPI](https://pypi.org/project/annotated-doc/0.0.5/) |
+| annotated-types | 0.8.0 | MIT | [PyPI](https://pypi.org/project/annotated-types/0.8.0/) |
+| anyio | 4.15.1 | MIT | [PyPI](https://pypi.org/project/anyio/4.15.1/) |
+| argon2-cffi | 25.1.0 | MIT | [PyPI](https://pypi.org/project/argon2-cffi/25.1.0/) |
+| argon2-cffi-bindings | 26.1.0 | MIT | [PyPI](https://pypi.org/project/argon2-cffi-bindings/26.1.0/) |
+| certifi | 2026.7.22 | MPL-2.0 | [PyPI](https://pypi.org/project/certifi/2026.7.22/) |
+| cffi | 2.1.1 | MIT-0 | [PyPI](https://pypi.org/project/cffi/2.1.1/) |
+| click | 8.5.0 | BSD-3-Clause | [PyPI](https://pypi.org/project/click/8.5.0/) |
+| cryptography | 50.0.1 | Apache-2.0 OR BSD-3-Clause | [PyPI](https://pypi.org/project/cryptography/50.0.1/) |
+| fastapi | 0.141.1 | MIT | [PyPI](https://pypi.org/project/fastapi/0.141.1/) |
+| greenlet | 3.5.6 | MIT AND PSF-2.0 | [PyPI](https://pypi.org/project/greenlet/3.5.6/) |
+| h11 | 0.16.0 | MIT | [PyPI](https://pypi.org/project/h11/0.16.0/) |
+| httpcore | 1.0.9 | BSD-3-Clause | [PyPI](https://pypi.org/project/httpcore/1.0.9/) |
+| httpx | 0.28.1 | BSD-3-Clause | [PyPI](https://pypi.org/project/httpx/0.28.1/) |
+| idna | 3.20 | BSD-3-Clause | [PyPI](https://pypi.org/project/idna/3.20/) |
+| iniconfig | 2.3.0 | MIT | [PyPI](https://pypi.org/project/iniconfig/2.3.0/) |
+| Mako | 1.4.3 | MIT | [PyPI](https://pypi.org/project/Mako/1.4.3/) |
+| MarkupSafe | 3.0.3 | BSD-3-Clause | [PyPI](https://pypi.org/project/MarkupSafe/3.0.3/) |
+| packaging | 26.3 | Apache-2.0 OR BSD-2-Clause | [PyPI](https://pypi.org/project/packaging/26.3/) |
+| pluggy | 1.6.0 | MIT | [PyPI](https://pypi.org/project/pluggy/1.6.0/) |
 | psycopg | 3.3.6 | LGPL-3.0-only | [PyPI](https://pypi.org/project/psycopg/3.3.6/) |
 | psycopg-binary | 3.3.6 | LGPL-3.0-only | [PyPI](https://pypi.org/project/psycopg-binary/3.3.6/) |
+| pycparser | 3.0 | BSD-3-Clause | [PyPI](https://pypi.org/project/pycparser/3.0/) |
+| pydantic | 2.13.5 | MIT | [PyPI](https://pypi.org/project/pydantic/2.13.5/) |
+| pydantic-settings | 2.15.0 | MIT | [PyPI](https://pypi.org/project/pydantic-settings/2.15.0/) |
+| pydantic_core | 2.46.5 | MIT | [PyPI](https://pypi.org/project/pydantic_core/2.46.5/) |
+| Pygments | 2.21.0 | BSD-2-Clause | [PyPI](https://pypi.org/project/Pygments/2.21.0/) |
 | pytest | 9.1.1 | MIT | [PyPI](https://pypi.org/project/pytest/9.1.1/) |
-| httpx | 0.28.1 | BSD-3-Clause | [PyPI](https://pypi.org/project/httpx/0.28.1/) |
+| python-dotenv | 1.2.3 | BSD-3-Clause | [PyPI](https://pypi.org/project/python-dotenv/1.2.3/) |
 | ruff | 0.16.8 | MIT | [PyPI](https://pypi.org/project/ruff/0.16.8/) |
+| SQLAlchemy | 2.0.54 | MIT | [PyPI](https://pypi.org/project/SQLAlchemy/2.0.54/) |
+| starlette | 1.7.0 | BSD-3-Clause | [PyPI](https://pypi.org/project/starlette/1.7.0/) |
+| typing-inspection | 0.4.4 | MIT | [PyPI](https://pypi.org/project/typing-inspection/0.4.4/) |
+| typing_extensions | 4.16.0 | PSF-2.0 | [PyPI](https://pypi.org/project/typing_extensions/4.16.0/) |
+| uvicorn | 0.53.0 | BSD-3-Clause | [PyPI](https://pypi.org/project/uvicorn/0.53.0/) |

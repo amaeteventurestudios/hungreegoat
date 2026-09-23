@@ -34,7 +34,7 @@ def test_config_requires_database_and_absolute_storage(monkeypatch: pytest.Monke
     with pytest.raises(ValidationError) as error:
         settings(database_url="sqlite:///secret.db")
     assert "secret.db" not in str(error.value)
-    assert "secret" not in repr(settings())
+    assert "studio:secret@" not in repr(settings())
 
 
 def test_live_and_ready_contract() -> None:

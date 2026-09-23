@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String
+from sqlalchemy import DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -55,3 +55,25 @@ class LoginThrottle(Base):
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     window_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ProviderConfig(Base):
+    __tablename__ = "provider_configs"
+    __table_args__ = (UniqueConstraint("workspace_id", "provider"),)
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    workspace_id: Mapped[UUID] = mapped_column(ForeignKey("workspaces.id"), index=True)
+    provider: Mapped[str] = mapped_column(String(32))
+    enabled: Mapped[bool] = mapped_column(default=False)
+    secret_reference: Mapped[str | None] = mapped_column(String(36))
+    masked_secret: Mapped[str | None] = mapped_column(String(16))
+    default_model: Mapped[str | None] = mapped_column(String(160))
+    nonsecret_options: Mapped[dict] = mapped_column(JSONB, default=dict)
+    capabilities: Mapped[list] = mapped_column(JSONB, default=list)
+    health_status: Mapped[str] = mapped_column(String(20), default="unknown")
+    last_health_check_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_successful_health_check_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    usage: Mapped[dict] = mapped_column(JSONB, default=lambda: {"available": False})
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

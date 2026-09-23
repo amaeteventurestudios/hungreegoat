@@ -25,6 +25,13 @@ revokes the session, and deletes the file after the suite. Failed server revocat
 is reported. Auth/settings tests run after the shell projects to
 avoid settings mutations racing screenshots. They disable traces and automatic
 screenshots; login screenshots are captured only with an empty password field.
+Provider lifecycle tests require the test workspace's OpenAI integration to have
+no existing credential. They use an unmistakably nonreal, unique fixture, exercise
+encrypted credential CRUD and configuration through the real API, and delete the
+fixture in cleanup. Model selection replays the real credential-less catalog in
+the browser so the fixture is never sent to an external provider. No generation
+or provider health call with that fixture is made. Only masked provider cards are
+captured, and browser storage/response checks reject raw fixture values.
 Each run covers 1440×900, 1280×800, 1024×768, and 390×844 viewports,
 checks horizontal overflow, captures a full-page screenshot, checks runtime
 errors, and verifies that a surfaced connection failure can recover by retrying.

@@ -35,6 +35,17 @@ def update_settings(
         document = SettingsDocument.model_validate(merged)
     except ValidationError:
         raise fail(422, "validation_error", "Invalid settings values") from None
+    from studio_api.provider_routes import config_row
+
+    for provider in document.providers.model_dump().values():
+        if provider is not None:
+            configured = config_row(db, session.workspace_id, provider)
+            if configured is None or not configured.enabled or not configured.secret_reference:
+                raise fail(
+                    422,
+                    "provider_not_configured",
+                    "Default provider must be configured and enabled",
+                )
     row.document = document.model_dump()
     db.get(Workspace, session.workspace_id).name = document.workspace.name
     db.commit()
