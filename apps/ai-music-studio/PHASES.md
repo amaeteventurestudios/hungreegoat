@@ -34,10 +34,12 @@ Missing provider credentials block only the live provider call requiring them. B
 
 ## Current Status
 
-Phases 00–07 are verified. Phase 06 uses a restricted local OSS runtime identity;
-Phase 07 has provider-neutral structured-plan adapters and deterministic fixture
-coverage. Live provider calls remain separately dependent on configured credentials.
-Phase 08 is the next dependency-ready checkpoint. See the active execution record
+Phases 00–08 are verified. Phase 06 uses a restricted local OSS runtime identity;
+Phase 07 has provider-neutral structured-plan adapters; and Phase 08 has a
+provider-neutral durable generation contract, ElevenLabs worker adapter, bounded
+leased audio intake, immutable generated assets and responsive Version A–D UI.
+Fixture coverage verifies the paid-provider path without issuing a paid request.
+Phase 09 is the next dependency-ready checkpoint. See the active execution record
 for current evidence.
 
 ## Completion

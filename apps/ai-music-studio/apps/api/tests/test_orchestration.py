@@ -1,5 +1,7 @@
 import hashlib
+import io
 import os
+import wave
 from datetime import timedelta
 from uuid import UUID, uuid4
 
@@ -11,10 +13,16 @@ from sqlalchemy.orm import Session
 from test_auth_settings import ORIGIN, configured, login  # noqa:F401
 
 from studio_api.dispatcher import dispatch_once, reconcile_once
-from studio_api.domain_models import Job, JobEvent, ProductionPlan
-from studio_api.job_service import DiagnosticInput, create_diagnostic, create_producer
+from studio_api.domain_models import Generation, GenerationVersion, Job, JobEvent, ProductionPlan
+from studio_api.job_service import (
+    DiagnosticInput,
+    create_diagnostic,
+    create_music_generation,
+    create_producer,
+)
 from studio_api.main import create_app
 from studio_api.models import utcnow
+from studio_api.music import MusicGenerationJobInput
 from studio_api.orchestration_client import OrchestrationError, WindmillClient
 from studio_api.orchestration_models import JobAttempt, JobOutbox
 from studio_api.producer import ProducerJobInput
@@ -89,6 +97,16 @@ def production_plan(style="warm electronic"):
         "production_notes": "Keep transients rounded and the low end focused.",
         "provider_request_id": "provider-request-1",
     }
+
+
+def wav_bytes():
+    data = io.BytesIO()
+    with wave.open(data, "wb") as stream:
+        stream.setnchannels(1)
+        stream.setsampwidth(2)
+        stream.setframerate(22050)
+        stream.writeframes(b"\x00\x00" * 22050)
+    return data.getvalue()
 
 
 def claim(browser, id, execution, number=1):
@@ -391,6 +409,113 @@ def test_producer_completion_versions_immutable_plans(orchestration):
             .order_by(ProductionPlan.version)
         ).all()
         assert [(plan.version, plan.active) for plan in plans] == [(1, False), (2, True)]
+
+
+def test_music_outputs_are_lease_bound_immutable_and_reconciled(orchestration):
+    browser, config, engine, diagnostic_id, execution = orchestration
+    project_id = browser.get(f"/api/v1/jobs/{diagnostic_id}").json()["project_id"]
+    song_response = browser.post(
+        f"/api/v1/projects/{project_id}/songs", json={"title": "Generated song"}
+    )
+    song_id = UUID(song_response.json()["id"])
+    with Session(engine) as db:
+        original = db.get(Job, diagnostic_id)
+        plan = ProductionPlan(
+            workspace_id=original.workspace_id,
+            project_id=original.project_id,
+            song_id=song_id,
+            version=1,
+            provider="openai",
+            model="gpt-6-luna",
+            plan=production_plan(),
+            active=True,
+        )
+        db.add(plan)
+        db.flush()
+        generation, job = create_music_generation(
+            db,
+            original.workspace_id,
+            original.project_id,
+            song_id,
+            plan.id,
+            uuid4(),
+            MusicGenerationJobInput(
+                generation_id=UUID(int=0),
+                provider="elevenlabs",
+                model="music_v2",
+                version_count=2,
+                duration_seconds=60,
+                prompt="Warm instrumental groove",
+                force_instrumental=True,
+                composition_plan=plan.plan,
+            ),
+        )
+        generation_id = generation.id
+        attempt = db.scalar(select(JobAttempt).where(JobAttempt.job_id == job.id))
+    lease = claim(browser, job.id, attempt.execution_id)
+    base = f"/api/v1/internal/jobs/{job.id}/attempts/1"
+    browser.headers.pop("Origin")
+    audio = wav_bytes()
+    first = browser.put(
+        base + "/outputs/1",
+        content=audio,
+        headers={
+            **worker_headers(lease),
+            "Content-Type": "audio/wav",
+            "X-Provider-Request-ID": "eleven-song-1",
+        },
+    )
+    assert first.status_code == 200, first.text
+    duplicate = browser.put(
+        base + "/outputs/1",
+        content=b"not audio",
+        headers={**worker_headers(lease), "Content-Type": "audio/wav"},
+    )
+    assert duplicate.json()["already_present"] is True
+    second = browser.put(
+        base + "/outputs/2",
+        content=audio,
+        headers={**worker_headers(lease), "Content-Type": "audio/wav"},
+    )
+    assert second.status_code == 200, second.text
+    complete = browser.post(
+        base + "/complete",
+        headers=worker_headers(lease),
+        json={
+            "outputs": [],
+            "result": {
+                "generation_id": str(generation_id),
+                "outputs": [
+                    {
+                        "version": 1,
+                        "asset_id": first.json()["asset_id"],
+                        "provider_request_id": "eleven-song-1",
+                    },
+                    {
+                        "version": 2,
+                        "asset_id": second.json()["asset_id"],
+                        "provider_request_id": None,
+                    },
+                ],
+            },
+        },
+    )
+    assert complete.status_code == 200 and complete.json()["state"] == "succeeded"
+    with Session(engine) as db:
+        rows = db.scalars(
+            select(GenerationVersion)
+            .where(GenerationVersion.generation_id == generation_id)
+            .order_by(GenerationVersion.version)
+        ).all()
+        assert [row.version for row in rows] == [1, 2]
+        assert rows[0].provider_request_id == "eleven-song-1"
+        assert rows[0].generation_metadata == {
+            "provider": "elevenlabs",
+            "model": "music_v2",
+            "version": 1,
+        }
+        assert db.get(Generation, generation_id).settings["version_count"] == 2
+    assert browser.get(f"/api/v1/assets/{first.json()['asset_id']}/stream").content == audio
 
 
 def test_existing_execution_identity_mismatch_is_not_accepted(orchestration):

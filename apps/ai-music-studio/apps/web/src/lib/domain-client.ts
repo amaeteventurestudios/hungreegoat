@@ -1,4 +1,4 @@
-import type { StudioProject, StudioSong, AudioAsset, AssetLineage, ProductionPlan } from "@hungreegoat/studio-contracts";
+import type { StudioProject, StudioSong, AudioAsset, AssetLineage, GenerationVersion, MusicGeneration, ProductionPlan } from "@hungreegoat/studio-contracts";
 import { apiRequest, ApiError } from "@/lib/api-client";
 export const domain = {
  projects:(query="",offset=0)=>apiRequest<{items:StudioProject[]}>(`/projects?${new URLSearchParams({limit:"100",q:query,offset:String(offset)})}`),
@@ -11,6 +11,9 @@ export const domain = {
  saveSong:(id:string|null,project:string,body:Pick<StudioSong,"title"|"brief"|"style"|"vocal_mode"|"target_duration_seconds"|"notes"|"tags"|"bpm"|"musical_key">,csrf:string|null)=>apiRequest<StudioSong>(id?`/songs/${id}`:`/projects/${project}/songs`,{method:id?"PATCH":"POST",body,csrf}),
  plans:(song:string)=>apiRequest<{items:ProductionPlan[]}>(`/songs/${encodeURIComponent(song)}/production-plans?limit=100`),
  createPlan:(song:string,body:{idempotency_key:string;instructions:string},csrf:string|null)=>apiRequest<{job_id:string;state:string}>(`/songs/${encodeURIComponent(song)}/production-plans`,{method:"POST",body,csrf}),
+ generations:(song:string)=>apiRequest<{items:MusicGeneration[]}>(`/songs/${encodeURIComponent(song)}/generations?limit=100`),
+ generationVersions:(generation:string)=>apiRequest<{items:GenerationVersion[]}>(`/generations/${encodeURIComponent(generation)}/versions?limit=100`),
+ createGeneration:(song:string,body:{idempotency_key:string;version_count:number;duration_seconds?:number;prompt:string},csrf:string|null)=>apiRequest<{generation_id:string;job_id:string;state:string}>(`/songs/${encodeURIComponent(song)}/generations`,{method:"POST",body,csrf}),
 };
 export async function uploadAudio(project:string,song:string|null,file:File,csrf:string|null):Promise<AudioAsset> {
  if(file.size>100*1024*1024)throw new Error("Choose an audio file smaller than 100 MiB.");

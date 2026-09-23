@@ -239,6 +239,8 @@ class GenerationVersion(Identity, ProjectScope, Base):
     approved: Mapped[bool] = mapped_column(default=False)
     favorite: Mapped[bool] = mapped_column(default=False)
     notes: Mapped[str] = mapped_column(String(8000), default="")
+    provider_request_id: Mapped[str | None] = mapped_column(String(200))
+    generation_metadata: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)
 
 
 class Arrangement(Identity, ProjectScope, Base):

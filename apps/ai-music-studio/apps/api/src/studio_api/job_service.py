@@ -7,8 +7,9 @@ from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from studio_api.auth import fail
-from studio_api.domain_models import Job, JobEvent
+from studio_api.domain_models import Generation, Job, JobEvent
 from studio_api.models import utcnow
+from studio_api.music import MusicGenerationJobInput
 from studio_api.orchestration_models import JobAttempt, JobOutbox
 from studio_api.producer import ProducerJobInput
 from studio_api.schemas import StrictModel
@@ -112,6 +113,68 @@ def create_producer(
     event(db, job, "Production plan queued")
     db.commit()
     return job
+
+
+def create_music_generation(
+    db: Session,
+    workspace_id: UUID,
+    project_id: UUID,
+    song_id: UUID,
+    plan_id: UUID,
+    idempotency_key: UUID,
+    inputs: MusicGenerationJobInput,
+) -> tuple[Generation, Job]:
+    db.execute(text("SELECT pg_advisory_xact_lock(hashtext(:key))"), {"key": str(idempotency_key)})
+    existing = db.scalar(
+        select(Job).where(Job.workspace_id == workspace_id, Job.idempotency_key == idempotency_key)
+    )
+    if existing:
+        generation_id = existing.parameters.get("generation_id")
+        generation = db.get(Generation, generation_id) if generation_id else None
+        comparable = inputs.model_dump(mode="json", exclude={"generation_id"})
+        stored = dict(existing.parameters)
+        stored.pop("generation_id", None)
+        if (
+            existing.project_id != project_id
+            or existing.song_id != song_id
+            or existing.kind != "music.generate"
+            or stored != comparable
+            or generation is None
+        ):
+            raise ValueError("Idempotency key already belongs to another request")
+        return generation, existing
+    generation = Generation(
+        workspace_id=workspace_id,
+        project_id=project_id,
+        song_id=song_id,
+        plan_id=plan_id,
+        provider=inputs.provider,
+        model=inputs.model,
+        settings={
+            "version_count": inputs.version_count,
+            "duration_seconds": inputs.duration_seconds,
+            "force_instrumental": inputs.force_instrumental,
+            "prompt": inputs.prompt,
+            "composition_plan": inputs.composition_plan,
+        },
+    )
+    db.add(generation)
+    db.flush()
+    payload = inputs.model_copy(update={"generation_id": generation.id}).model_dump(mode="json")
+    job = Job(
+        workspace_id=workspace_id,
+        project_id=project_id,
+        song_id=song_id,
+        kind="music.generate",
+        parameters=payload,
+        idempotency_key=idempotency_key,
+    )
+    db.add(job)
+    db.flush()
+    add_attempt(db, job)
+    event(db, job, "Music generation queued")
+    db.commit()
+    return generation, job
 
 
 def locked_job(db: Session, job_id: UUID, workspace_id: UUID | None = None) -> Job:

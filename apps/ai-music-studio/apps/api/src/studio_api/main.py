@@ -24,6 +24,7 @@ from studio_api.domain_routes import router as domain_router
 from studio_api.job_routes import router as job_router
 from studio_api.job_routes import service_auth
 from studio_api.logging import configure_logging
+from studio_api.music_routes import router as music_router
 from studio_api.producer_routes import router as producer_router
 from studio_api.provider_routes import router as provider_router
 from studio_api.settings_routes import router as settings_router
@@ -71,6 +72,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     app.include_router(settings_router)
     app.include_router(provider_router)
     app.include_router(producer_router)
+    app.include_router(music_router)
     app.include_router(domain_router)
     app.include_router(job_router)
 
@@ -137,9 +139,14 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 upload = request.method == "POST" and re.fullmatch(
                     r"/api/v1/projects/[^/]+/assets/upload", request.url.path
                 )
-                if upload:
-                    with Session(request.app.state.engine) as auth_db:
-                        require_session(request, auth_db)
+                worker_output = request.method == "PUT" and re.fullmatch(
+                    r"/api/v1/internal/jobs/[^/]+/attempts/[1-9][0-9]*/outputs/[1-4]",
+                    request.url.path,
+                )
+                if upload or worker_output:
+                    if upload:
+                        with Session(request.app.state.engine) as auth_db:
+                            require_session(request, auth_db)
                     original_receive = request._receive
                     received = 0
 

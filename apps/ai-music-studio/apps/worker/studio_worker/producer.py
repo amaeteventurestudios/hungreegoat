@@ -1,4 +1,5 @@
 """Provider-neutral structured production-plan calls from the isolated worker."""
+
 from __future__ import annotations
 
 import json
@@ -25,15 +26,25 @@ PLAN_SCHEMA: dict[str, Any] = {
         "provider_request_id": {"type": ["string", "null"]},
     },
     "required": [
-        "style", "bpm", "musical_key", "instrumentation", "structure", "energy_curve",
-        "vocal_direction", "arrangement_guidance", "negative_instructions", "production_notes",
+        "style",
+        "bpm",
+        "musical_key",
+        "instrumentation",
+        "structure",
+        "energy_curve",
+        "vocal_direction",
+        "arrangement_guidance",
+        "negative_instructions",
+        "production_notes",
         "provider_request_id",
     ],
 }
 
 
 def prompt(inputs: dict[str, Any]) -> str:
-    context = {key: value for key, value in inputs.items() if key not in {"provider", "model"}}
+    context = {
+        key: value for key, value in inputs.items() if key not in {"provider", "model"}
+    }
     return (
         "Create a practical music production plan. Return only the requested JSON object. "
         "Use the song context below. Do not include copyrighted lyrics or claims about audio that "
@@ -42,7 +53,9 @@ def prompt(inputs: dict[str, Any]) -> str:
     )
 
 
-def request_json(url: str, headers: dict[str, str], payload: dict[str, Any]) -> tuple[dict, str | None]:
+def request_json(
+    url: str, headers: dict[str, str], payload: dict[str, Any]
+) -> tuple[dict, str | None]:
     request = urllib.request.Request(
         url,
         method="POST",
@@ -53,36 +66,56 @@ def request_json(url: str, headers: dict[str, str], payload: dict[str, Any]) -> 
         with urllib.request.urlopen(request, timeout=45) as response:  # nosec B310: fixed HTTPS URLs
             body = response.read(1024 * 1024 + 1)
             if len(body) > 1024 * 1024:
-                raise WorkerFailure("provider_invalid_response", "Provider response exceeded the limit")
+                raise WorkerFailure(
+                    "provider_invalid_response", "Provider response exceeded the limit"
+                )
             data = json.loads(body)
             if not isinstance(data, dict):
-                raise ValueError
+                raise TypeError
             return data, response.headers.get("x-request-id")
     except urllib.error.HTTPError as error:
         if error.code in {401, 403}:
-            raise WorkerFailure("provider_auth_failed", "Provider credential or permission was rejected") from None
+            raise WorkerFailure(
+                "provider_auth_failed", "Provider credential or permission was rejected"
+            ) from None
         if error.code == 429:
-            raise WorkerFailure("provider_rate_limited", "Provider rate limit reached", True) from None
-        raise WorkerFailure("provider_unavailable", "Provider request failed", error.code >= 500) from None
+            raise WorkerFailure(
+                "provider_rate_limited", "Provider rate limit reached", True
+            ) from None
+        raise WorkerFailure(
+            "provider_unavailable", "Provider request failed", error.code >= 500
+        ) from None
     except (urllib.error.URLError, TimeoutError, OSError):
-        raise WorkerFailure("provider_unavailable", "Provider request was unavailable", True) from None
-    except (ValueError, UnicodeError):
-        raise WorkerFailure("provider_invalid_response", "Provider returned invalid JSON") from None
+        raise WorkerFailure(
+            "provider_unavailable", "Provider request was unavailable", True
+        ) from None
+    except (TypeError, ValueError, UnicodeError):
+        raise WorkerFailure(
+            "provider_invalid_response", "Provider returned invalid JSON"
+        ) from None
 
 
 def parse_json(value: object) -> dict[str, Any]:
     if not isinstance(value, str):
-        raise WorkerFailure("provider_invalid_response", "Provider omitted the production plan")
+        raise WorkerFailure(
+            "provider_invalid_response", "Provider omitted the production plan"
+        )
     try:
         plan = json.loads(value)
     except ValueError:
-        raise WorkerFailure("provider_invalid_response", "Provider returned invalid production JSON") from None
+        raise WorkerFailure(
+            "provider_invalid_response", "Provider returned invalid production JSON"
+        ) from None
     if not isinstance(plan, dict):
-        raise WorkerFailure("provider_invalid_response", "Provider returned an invalid production plan")
+        raise WorkerFailure(
+            "provider_invalid_response", "Provider returned an invalid production plan"
+        )
     return plan
 
 
-def create_plan(provider: str, model: str, api_key: str, inputs: dict[str, Any]) -> dict[str, Any]:
+def create_plan(
+    provider: str, model: str, api_key: str, inputs: dict[str, Any]
+) -> dict[str, Any]:
     text = prompt(inputs)
     response_schema = {"name": "production_plan", "strict": True, "schema": PLAN_SCHEMA}
     if provider == "openai":
@@ -91,7 +124,9 @@ def create_plan(provider: str, model: str, api_key: str, inputs: dict[str, Any])
             {"Authorization": "Bearer " + api_key},
             {
                 "model": model,
-                "input": [{"role": "user", "content": [{"type": "input_text", "text": text}]}],
+                "input": [
+                    {"role": "user", "content": [{"type": "input_text", "text": text}]}
+                ],
                 "text": {"format": {"type": "json_schema", **response_schema}},
             },
         )
@@ -104,11 +139,18 @@ def create_plan(provider: str, model: str, api_key: str, inputs: dict[str, Any])
             {
                 "model": model,
                 "messages": [{"role": "user", "content": text}],
-                "response_format": {"type": "json_schema", "json_schema": response_schema},
+                "response_format": {
+                    "type": "json_schema",
+                    "json_schema": response_schema,
+                },
             },
         )
         choices = data.get("choices")
-        content = choices[0].get("message", {}).get("content") if isinstance(choices, list) and choices else None
+        content = (
+            choices[0].get("message", {}).get("content")
+            if isinstance(choices, list) and choices
+            else None
+        )
         plan = parse_json(content)
         request_id = request_id or data.get("id")
     elif provider == "anthropic":
@@ -119,15 +161,21 @@ def create_plan(provider: str, model: str, api_key: str, inputs: dict[str, Any])
                 "model": model,
                 "max_tokens": 1600,
                 "messages": [{"role": "user", "content": text}],
-                "output_config": {"format": {"type": "json_schema", "schema": PLAN_SCHEMA}},
+                "output_config": {
+                    "format": {"type": "json_schema", "schema": PLAN_SCHEMA}
+                },
             },
         )
         content = data.get("content")
-        text_value = content[0].get("text") if isinstance(content, list) and content else None
+        text_value = (
+            content[0].get("text") if isinstance(content, list) and content else None
+        )
         plan = parse_json(text_value)
         request_id = request_id or data.get("id")
     else:
-        raise WorkerFailure("provider_unsupported", "Selected AI producer is unsupported")
+        raise WorkerFailure(
+            "provider_unsupported", "Selected AI producer is unsupported"
+        )
     if isinstance(request_id, str) and len(request_id) <= 200:
         plan["provider_request_id"] = request_id
     else:

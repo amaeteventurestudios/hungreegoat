@@ -3,9 +3,9 @@
 ## Current State
 
 - Model / effort: Terra High.
-- Usage: weekly 9% used / 91% remaining; guard `CONTINUE`; no five-hour value.
-- Current phase: 08 — Music Generation.
-- Last committed Studio checkpoint: `feat(studio): harden restricted orchestration runtime`.
+- Usage: weekly 11% used / 89% remaining; guard `CONTINUE`; no five-hour value.
+- Current phase: 09 — Listening, Waveforms & A/B.
+- Last committed Studio checkpoint: `a242209 feat(studio): add durable AI producer plans`.
 
 ## Completed
 
@@ -16,6 +16,7 @@
 - Real restricted-identity diagnostics succeeded through the tagged worker. An active worker was then force-killed in the local Studio stack; its expired lease reconciled safely to retryable `worker_lease_expired` without duplicate dispatch. The normal Compose restart path was also verified to preserve a graceful in-flight diagnostic.
 - Final Phase 06 gates: API 43 tests, worker 5 tests, full browser regression 92 tests, lint, typecheck, production build, Compose validation, API/PostgreSQL restart recovery, and boundary check all pass.
 - Phase 07 is complete: `producer.plan` is durable and idempotent; its worker adapters use provider-specific structured-output requests while the Studio validates one canonical schema and atomically versions plans. The Producer UI creates plans from selected-song context and displays the active plan. Fixture validation: API 45 tests, worker 8 tests, production build, and a live no-credential browser flow pass. No paid provider request was attempted.
+- Phase 08 is complete: `music.generate` creates a durable provider-neutral Generation with one to four immutable `GenerationVersion` outputs. The ElevenLabs adapter runs only in the leased worker, saves validated audio through a bounded authenticated intake endpoint, and records provider request IDs without exposing credentials. Ambiguous provider outcomes are non-retryable; ordinary safe retries resume committed outputs. Local migration `0006_music_generation` applied successfully. Verification: API 46 tests, worker 10 tests, lint/typecheck/build, and the 100-test responsive browser regression. No paid provider request was made.
 
 ## Runtime
 
@@ -25,7 +26,7 @@
 
 ## Current Technical Position
 
-Pinned Windmill OSS v1.817.0 rejects ordinary-user creation through its documented CLI/UI endpoint. This is resolved by the narrowly scoped local database bootstrap described above. Phase 08 may now proceed using the durable orchestration contract; live paid-provider generation remains separately dependent on configured provider credentials.
+Pinned Windmill OSS v1.817.0 rejects ordinary-user creation through its documented CLI/UI endpoint. This is resolved by the narrowly scoped local database bootstrap described above. Phase 09 can use Phase 08's durable generation/version records; live paid-provider generation remains separately dependent on configured provider credentials.
 
 ## Protected Unrelated Work
 
@@ -36,5 +37,5 @@ Pinned Windmill OSS v1.817.0 rejects ordinary-user creation through its document
 ## Resume
 
 1. Run `/home/aumanah/.local/bin/codex-usage-guard` and print the normalized usage line.
-2. Read `docs/phases/PHASE_08_MUSIC_GENERATION.md` and current execution-plan records.
-3. Implement the next dependency-ready Phase 08 slice; use deterministic fixtures where a live provider credential is unavailable.
+2. Read `docs/phases/PHASE_09_LISTEN_COMPARE.md` and current execution-plan records.
+3. Implement the next dependency-ready Phase 09 slice; use deterministic fixtures where external engines are unavailable.

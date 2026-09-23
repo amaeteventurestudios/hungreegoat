@@ -99,3 +99,8 @@ The Studio attempt lease is the authoritative liveness signal when a Windmill wo
 Status: Accepted (Phase 07)
 
 Production plans are validated against one Studio-owned schema and persisted as immutable versions. A lease-bound worker adapter translates that schema to each provider's supported structured-output request shape; raw credentials and provider responses never reach the browser. Settings selects the enabled provider and model, while any later regeneration preserves prior plan history.
+
+## ADR-021 — Leased Worker Audio Intake for Music Generation
+Status: Accepted (Phase 08)
+
+ElevenLabs Music responses are fetched only by the leased Studio worker and sent to a bounded, authenticated internal intake endpoint. The API independently validates the audio, writes an immutable asset, and records a generic `GenerationVersion` with provider request metadata. A lost provider response is outcome-unknown and cannot be blindly retried; safe retries resume already committed versions without duplicate generation.

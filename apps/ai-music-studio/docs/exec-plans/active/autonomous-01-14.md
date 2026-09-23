@@ -69,7 +69,12 @@ independent work.
 - 07: Verified — durable provider-neutral production plans, immutable versioning,
   worker structured-output adapters, selected-song Producer UI and fixture/browser
   verification pass. Live provider calls remain credential-dependent.
-- 08–14: Pending their dependency-ready implementation.
+- 08: Verified — provider-neutral durable `music.generate`, ElevenLabs worker
+  adapter, generic immutable generated versions, bounded leased audio intake,
+  provider request metadata, safe retry semantics, and responsive Generation UI.
+  API 46 tests, worker 10 tests, lint/typecheck/build and 100 browser checks pass;
+  no paid provider request was issued.
+- 09–14: Pending their dependency-ready implementation.
 
 ## Research
 - Compose project isolation: https://docs.docker.com/compose/how-tos/project-name/

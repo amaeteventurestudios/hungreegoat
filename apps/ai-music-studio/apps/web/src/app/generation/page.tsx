@@ -1,2 +1,2 @@
-import { Workstation } from "@/components/workstation";
-export default function Page() { return <Workstation page="generation" />; }
+import { GenerationWorkspace } from "@/components/generation-workspace";
+export default function Page() { return <GenerationWorkspace />; }
