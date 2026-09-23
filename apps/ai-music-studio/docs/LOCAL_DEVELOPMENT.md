@@ -67,3 +67,19 @@ under ignored `test-results/domain-fixtures/` with mode 0600. Run
 verify metadata and downloaded SHA256 before and after a Studio database/API
 restart. Run outside active browser tests. The generated audio fixture is an
 original quiet sine tone; it is not an AI generation or evidence of a provider call.
+
+### Windmill orchestration (Phase 06)
+
+```sh
+python3 scripts/bootstrap-orchestration.py
+python3 scripts/provision-orchestration.py
+```
+
+The provisioner bootstraps only the local `studio` workspace and fixed
+`f/studio/execute` script. Pinned Windmill OSS cannot create ordinary users or
+service accounts. Before starting `studio-worker` or `studio-dispatcher`, a normal
+non-superadmin Windmill account must be granted access to `studio` and privately
+place an expiring token with `workspace_id=studio` and exact scope
+`jobs:run:scripts:f/studio/execute` in the 0600 `windmill-token` file. Never use
+the temporary bootstrap-superadmin identity as the runtime token. See
+`docs/HUMAN_BLOCKERS.md` for the owner action.

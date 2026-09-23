@@ -362,16 +362,20 @@ def asset_lineage(
 
 @router.get("/jobs/{job_id}")
 def get_job(job_id: UUID, auth: Auth, db: DB) -> dict:
-    return public(scoped(db, Job, job_id, auth.workspace_id), JOB_FIELDS)
+    from studio_api.job_routes import job_public
+
+    return job_public(scoped(db, Job, job_id, auth.workspace_id))
 
 
 @router.get("/projects/{project_id}/jobs")
 def list_jobs(project_id: UUID, auth: Auth, db: DB, limit: Limit = 50, offset: Offset = 0) -> dict:
+    from studio_api.job_routes import job_public
+
     scoped(db, Project, project_id, auth.workspace_id)
     query = select(Job).where(Job.project_id == project_id, Job.workspace_id == auth.workspace_id)
     return {
         "items": [
-            public(row, JOB_FIELDS)
+            job_public(row)
             for row in db.scalars(
                 query.order_by(Job.created_at.desc(), Job.id).limit(limit).offset(offset)
             )

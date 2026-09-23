@@ -248,3 +248,14 @@ or script hash. No diagnostic execution, worker restart/recovery, or browser
 orchestration tests have passed. The implementation remains uncommitted until
 that OSS-compatible credential/provisioning design is corrected and verified.
 See `docs/CODEX_HANDOFF.md` for exact runtime state and resume commands.
+
+### Phase 06 OSS provisioning correction
+Pinned OSS v1.817.0 does not support ordinary-user or service-account
+provisioning. The recovered provisioner was corrected to create only the existing
+`studio` workspace and fixed script, persist its script hash, and remove the
+bootstrap secret. It explicitly refuses to use the reserved superadmin identity
+as the dispatcher credential. `0005_orchestration` is applied to the rebuilt API;
+41 API tests, 5 worker tests, lint, typecheck, build and boundary verification
+pass. The remaining live diagnostic, worker/dispatcher recovery and browser gate
+are blocked only on a normal-account token scoped to
+`jobs:run:scripts:f/studio/execute`, recorded in `docs/HUMAN_BLOCKERS.md`.

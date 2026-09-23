@@ -131,6 +131,7 @@ class Job(Identity, ProjectScope, Base):
     __tablename__ = "jobs"
     __table_args__ = (
         project_scope(),
+        UniqueConstraint("workspace_id", "idempotency_key", name="uq_jobs_idempotency"),
         song_scope(),
         asset_scope("result_asset_id"),
         UniqueConstraint("id", "project_id", "workspace_id"),
@@ -142,6 +143,11 @@ class Job(Identity, ProjectScope, Base):
             "progress_percent >= 0 AND progress_percent <= 100", name="job_progress_range"
         ),
     )
+    attempt: Mapped[int] = mapped_column(default=1, server_default="1")
+    cancel_requested: Mapped[bool] = mapped_column(default=False, server_default="false")
+    retry_eligible: Mapped[bool] = mapped_column(default=False, server_default="false")
+    outcome_unknown: Mapped[bool] = mapped_column(default=False, server_default="false")
+    idempotency_key: Mapped[UUID | None]
     song_id: Mapped[UUID | None]
     kind: Mapped[str] = mapped_column(String(64))
     state: Mapped[str] = mapped_column(String(20), default="pending")

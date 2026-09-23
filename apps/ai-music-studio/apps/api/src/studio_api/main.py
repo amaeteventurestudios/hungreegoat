@@ -21,6 +21,8 @@ from studio_api.auth import router as auth_router
 from studio_api.config import Settings
 from studio_api.database import create_database_engine
 from studio_api.domain_routes import router as domain_router
+from studio_api.job_routes import router as job_router
+from studio_api.job_routes import service_auth
 from studio_api.logging import configure_logging
 from studio_api.provider_routes import router as provider_router
 from studio_api.settings_routes import router as settings_router
@@ -68,6 +70,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     app.include_router(settings_router)
     app.include_router(provider_router)
     app.include_router(domain_router)
+    app.include_router(job_router)
 
     @app.exception_handler(HTTPException)
     async def http_error(request: Request, error: HTTPException) -> JSONResponse:
@@ -110,9 +113,14 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
         request.state.request_id = request_id
         started = time.monotonic()
         try:
-            if request.method not in {"GET", "HEAD", "OPTIONS"} and request.headers.get(
-                "origin"
-            ) != config.public_url.rstrip("/"):
+            internal = request.url.path.startswith("/api/v1/internal/")
+            if internal:
+                service_auth(request)
+            if (
+                not internal
+                and request.method not in {"GET", "HEAD", "OPTIONS"}
+                and request.headers.get("origin") != config.public_url.rstrip("/")
+            ):
                 response = JSONResponse(
                     status_code=403,
                     content={
@@ -200,7 +208,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 },
             )
         response.headers["X-Request-ID"] = request_id
-        if request.url.path.startswith(("/api/v1/auth", "/api/v1/settings")):
+        if request.url.path.startswith(("/api/v1/auth", "/api/v1/settings", "/api/v1/internal")):
             response.headers["Cache-Control"] = "no-store"
         logger.info(
             "Request completed",

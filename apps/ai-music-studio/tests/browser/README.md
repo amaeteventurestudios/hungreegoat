@@ -40,6 +40,14 @@ library visibility, selected-song restoration, and four viewport layouts. It
 retains this fixture for the separate database/API restart check and writes exact
 IDs plus the expected audio digest to mode 0600 files in ignored
 `test-results/domain-fixtures/`. No existing project is edited or deleted.
+The orchestration project then uses `scripts/create-diagnostic-job.py` to create
+real local Windmill diagnostics in that fixture project. It verifies progress,
+refresh and closed-page recovery, a fail-once attempt followed by explicit retry,
+durable event history, cancellation, sanitized errors, and four viewport layouts.
+Diagnostics are visibly identified as local verification and never call providers
+or claim to generate music. The private helper returns logical IDs only; failures
+do not copy subprocess output into browser reports. These cases require the actual
+dispatcher, Windmill server, tagged worker, and private operator configuration.
 When there are no projects yet, shell checks assert the explicit new-song
 prerequisite; the subsequent domain journey exercises the actual creation form.
 Each run covers 1440×900, 1280×800, 1024×768, and 390×844 viewports,

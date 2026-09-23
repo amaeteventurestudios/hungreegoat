@@ -27,7 +27,7 @@ export default defineConfig({
   },
   projects: [...sizes.map(({ name, width, height }) => ({
     name,
-    testIgnore: ["auth.spec.ts", "domain.spec.ts"],
+    testIgnore: ["auth.spec.ts", "domain.spec.ts", "orchestration.spec.ts"],
     use: { browserName: "chromium", viewport: { width, height } },
   })), {
     name: "auth-settings",
@@ -38,6 +38,11 @@ export default defineConfig({
     name: "domain",
     testMatch: "domain.spec.ts",
     dependencies: ["auth-settings"],
+    use: { browserName: "chromium", viewport: { width: 1440, height: 900 } },
+  }, {
+    name: "orchestration",
+    testMatch: "orchestration.spec.ts",
+    dependencies: ["domain"],
     use: { browserName: "chromium", viewport: { width: 1440, height: 900 } },
   }],
 });

@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     database_url: SecretStr
     asset_root: Path
+    worker_token_file: Path | None = None
+    windmill_token_file: Path | None = None
+    windmill_script_hash_file: Path | None = None
+    windmill_url: str | None = None
+    windmill_workspace: str = "studio"
     secret_root: Path | None = None
     secret_key_file: Path | None = None
     public_url: str = "http://localhost:3210"

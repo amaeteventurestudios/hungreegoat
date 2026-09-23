@@ -31,6 +31,11 @@ services:
       STUDIO_SECRET_KEY_FILE: /var/lib/studio/secrets/fernet.key
       STUDIO_DATABASE_URL: postgresql+psycopg://studio:${STUDIO_DB_PASSWORD}@studio-postgres:5432/studio
       STUDIO_ASSET_ROOT: /var/lib/studio/assets
+      STUDIO_WINDMILL_URL: http://studio-windmill:8000
+      STUDIO_WINDMILL_WORKSPACE: studio
+      STUDIO_WINDMILL_TOKEN_FILE: /run/studio-orchestration/windmill-token
+      STUDIO_WINDMILL_SCRIPT_HASH_FILE: /run/studio-orchestration/script-hash
+      STUDIO_WORKER_TOKEN_FILE: /run/studio-orchestration/worker-token
     command: [alembic, upgrade, head]
     volumes:
       - ${STUDIO_SECRET_DIRECTORY:?Run scripts/bootstrap-secrets.py first}:/var/lib/studio/secrets:ro
@@ -49,6 +54,9 @@ services:
     volumes:
       - ${STUDIO_ASSET_ROOT:?Run scripts/bootstrap.py first}:/var/lib/studio/assets
       - ${STUDIO_SECRET_DIRECTORY:?Run scripts/bootstrap-secrets.py first}:/var/lib/studio/secrets
+      - ${STUDIO_ORCHESTRATION_DIRECTORY:?Run scripts/bootstrap-orchestration.py first}/worker-token:/run/studio-orchestration/worker-token:ro
+      - ${STUDIO_ORCHESTRATION_DIRECTORY}/windmill-token:/run/studio-orchestration/windmill-token:ro
+      - ${STUDIO_ORCHESTRATION_DIRECTORY}/script-hash:/run/studio-orchestration/script-hash:ro
     ports:
       - "127.0.0.1:${STUDIO_API_PORT:-8310}:8000"
     depends_on:
@@ -90,5 +98,91 @@ services:
     cpus: 1.0
     security_opt: [no-new-privileges:true]
 
+  studio-windmill-postgres:
+    image: postgres:17.11-alpine
+    environment:
+      POSTGRES_DB: windmill
+      POSTGRES_USER: windmill
+      POSTGRES_PASSWORD: ${STUDIO_WINDMILL_DB_PASSWORD:?Run scripts/bootstrap-orchestration.py first}
+    volumes:
+      - windmill-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U windmill -d windmill"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.5
+
+  studio-windmill:
+    image: hg-studio-windmill:1.817.0-source
+    environment:
+      MODE: server
+      PORT: 8000
+      DATABASE_URL: postgresql://windmill:${STUDIO_WINDMILL_DB_PASSWORD}@studio-windmill-postgres:5432/windmill
+      SUPERADMIN_SECRET: ${STUDIO_WINDMILL_BOOTSTRAP_TOKEN:-}
+      BASE_URL: http://studio-windmill:8000
+      NUM_WORKERS: 0
+      JSON_FMT: 'true'
+    depends_on:
+      studio-windmill-postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    mem_limit: 768m
+    cpus: 1.0
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+
+  studio-worker:
+    image: hg-studio-worker:local
+    build:
+      context: ../../apps/worker
+    environment:
+      MODE: worker
+      DATABASE_URL: postgresql://windmill:${STUDIO_WINDMILL_DB_PASSWORD}@studio-windmill-postgres:5432/windmill
+      BASE_INTERNAL_URL: http://studio-windmill:8000
+      WORKER_GROUP: studio
+      WORKER_TAGS: studio-ai,dependency
+      FORCE_WORKER_TAGS: studio-ai,dependency
+      NUM_WORKERS: 1
+      JSON_FMT: 'true'
+    volumes:
+      - ${STUDIO_ORCHESTRATION_DIRECTORY}/worker-token:/run/studio-orchestration/worker-token:ro
+      - ${STUDIO_ASSET_ROOT}:/var/lib/studio/assets
+      - worker-cache:/tmp/windmill
+    depends_on:
+      studio-windmill-postgres:
+        condition: service_healthy
+      studio-windmill:
+        condition: service_started
+    restart: unless-stopped
+    mem_limit: 768m
+    cpus: 1.0
+    pids_limit: 128
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+
+  studio-dispatcher:
+    image: hg-studio-api:local
+    user: "${STUDIO_UID:-1000}:${STUDIO_GID:-1000}"
+    command: [python, -m, studio_api.dispatcher]
+    environment: *api-environment
+    volumes:
+      - ${STUDIO_ORCHESTRATION_DIRECTORY}/windmill-token:/run/studio-orchestration/windmill-token:ro
+      - ${STUDIO_ORCHESTRATION_DIRECTORY}/script-hash:/run/studio-orchestration/script-hash:ro
+    depends_on:
+      studio-api:
+        condition: service_healthy
+      studio-windmill:
+        condition: service_started
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.5
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+
 volumes:
   postgres-data:
+  windmill-postgres-data:
+  worker-cache:

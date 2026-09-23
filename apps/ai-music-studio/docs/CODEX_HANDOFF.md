@@ -1,5 +1,23 @@
 # Codex handoff — 2026-09-23
 
+> **Current update — supersedes the historical snapshot below:** Phase 06 has a
+> source-backed OSS provisioning design. Pinned Windmill OSS v1.817.0 cannot
+> create ordinary users or service accounts. The provisioner now bootstraps only
+> the `studio` workspace and fixed `f/studio/execute` script, persists its hash,
+> and removes the bootstrap secret; it never uses the reserved superadmin
+> identity for runtime work. The rebuilt Studio API is at
+> `0005_orchestration (head)`, API/web readiness passes, 41 API tests and 5
+> worker tests pass, and lint/typecheck/build/boundary checks pass. The remaining
+> live diagnostic, worker/dispatcher recovery, browser orchestration and visual
+> gates need a normal, non-superadmin Windmill account token with
+> `workspace_id=studio` and exact scope `jobs:run:scripts:f/studio/execute` in
+> the private 0600 `windmill-token` file. `script-hash` is populated;
+> `windmill-token` remains empty. See `docs/HUMAN_BLOCKERS.md`. Resume with Terra
+> High after the token exists, verify permitted exact-script/own-job polling and
+> denied list/other-script access without printing the token, then run the live
+> acceptance commands already listed below. Check the local usage guard before
+> and after each major batch.
+
 ## Current phase and task
 
 Phase 06 (Orchestration Kernel) is in progress. The current task is to finish

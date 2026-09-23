@@ -5,6 +5,20 @@ This file is the single collection point for actions that truly require the owne
 Codex must not use this file for routine questions, design decisions, debugging, package choices, testing, or implementation uncertainty.
 
 ## Current Blockers
+## Windmill OSS runtime identity (confirmed 2026-09-23)
+Pinned Windmill OSS v1.817.0 does not support ordinary-user creation or service
+account provisioning. The local `studio` workspace and fixed execution script
+can be bootstrapped safely, but an externally established normal, non-superadmin
+Windmill account is required to mint the dispatcher token. Do not use the
+temporary `SUPERADMIN_SECRET` as a runtime identity.
+
+Owner action: establish or supply a normal Windmill account through a supported
+identity lifecycle, grant it access to workspace `studio`, and create an expiring
+token scoped exactly to `jobs:run:scripts:f/studio/execute` with
+`workspace_id=studio`. Place it in the private 0600 local orchestration
+`windmill-token` file without sharing it in chat, source, or logs. The Studio
+provisioner and acceptance checks can then validate it locally.
+
 ## Public gateway ingress (confirmed 2026-09-23)
 DNS for `studio.hungreegoat.com` already points to gateway `2.29.28.125`, but
 HTTPS returns TLS `unrecognized name`: nginx has no Studio vhost. Available SSH

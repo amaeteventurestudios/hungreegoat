@@ -40,3 +40,11 @@ export interface StudioProject { id:string; name:string; description:string; tag
 export interface StudioSong { id:string; project_id:string; title:string; brief:string; style:string; vocal_mode:"instrumental"|"vocals"|"auto"; target_duration_seconds:number|null; notes:string; tags:string[]; bpm:number|null; musical_key:string|null; created_at:string; updated_at:string }
 export interface AudioAsset { id:string; project_id:string; song_id:string|null; kind:string; original_filename:string; media_type:string; byte_size:number; sha256:string; duration_seconds:number|null; sample_rate:number|null; channels:number|null; created_at:string }
 export interface AssetLineage { id:string; parent_asset_id:string; child_asset_id:string; operation:string; parameters:Record<string,unknown>; created_at:string }
+export type JobState = "pending" | "queued" | "running" | "succeeded" | "failed" | "cancelled";
+export interface StudioJob {
+ id:string; project_id:string; song_id:string|null; kind:string; state:JobState;
+ progress_percent:number; current_stage:string|null; error_code:string|null; error_message:string|null;
+ result_asset_id:string|null; created_at:string; updated_at:string; started_at:string|null; completed_at:string|null;
+ attempt:number; can_retry:boolean; can_cancel:boolean; cancel_requested:boolean; outcome_unknown:boolean;
+}
+export interface JobEvent { id:string; sequence:number; state:JobState; message:string; created_at:string }
