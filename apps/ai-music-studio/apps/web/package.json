@@ -1,0 +1,28 @@
+{
+  "name": "@hungreegoat/studio-web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --hostname 127.0.0.1 --port 3210",
+    "build": "next build",
+    "start": "next start --hostname 0.0.0.0 --port 3210",
+    "typecheck": "next typegen && tsc --noEmit"
+  },
+  "dependencies": {
+    "@hungreegoat/studio-ui": "*",
+    "@hungreegoat/studio-contracts": "*",
+    "next": "16.3.6",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "lucide-react": "1.47.0",
+    "server-only": "0.0.1"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "@types/node": "26.6.2",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "tailwindcss": "4.3.3",
+    "@tailwindcss/postcss": "4.3.3"
+  }
+}

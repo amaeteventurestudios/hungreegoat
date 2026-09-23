@@ -1,0 +1,19 @@
+{
+  "name": "@hungreegoat/ai-music-studio",
+  "private": true,
+  "workspaces": [
+    "apps/web",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "dev": "npm run dev -w @hungreegoat/studio-web",
+    "build": "npm run build -w @hungreegoat/studio-web",
+    "typecheck": "npm run typecheck -w @hungreegoat/studio-web"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.55.1"
+  }
+}

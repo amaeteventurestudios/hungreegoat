@@ -54,3 +54,33 @@ Literal tempo transformation is distinct from a musical double-time/half-time re
 Status: Accepted
 
 Canonical source is under `/home/aumanah/hungree-goat-src/hungreegoat-canonical`. `/home/aumanah/hungree-goat` is runtime/deployment, not authoring source.
+
+## ADR-012 — Studio-local Tooling and Environment Isolation
+Status: Accepted (Phase 00, 2026-09-23)
+
+Root inspection found no workspace manifest requiring integration. Plan an npm
+workspace and lockfile inside Studio for the web and shared TypeScript packages,
+with separate Python dependency environments for the API and workers. Introduce
+the executable manifests in Phase 01. Root tooling and sibling apps remain unchanged.
+
+Use `STUDIO_*` server configuration, explicit `hg-studio-dev/test/prod` Compose
+project names, project-scoped networks/volumes, and external persistent storage.
+The environment template is a naming contract until Phase 01 implements validation.
+See `MONOREPO_LAYOUT.md` for paths and configuration ownership.
+
+No architecture deviations are introduced. The existing nginx gateway is recorded
+as a constraint for later Studio Caddy integration, not altered by this phase.
+
+## ADR-013 — Isolated Foundation Services
+Status: Accepted (2026-09-23)
+
+Use Node 24 and Python 3.12 containers, exact npm/uv dependency locks, and
+PostgreSQL 17.11. Studio Compose has a separate project/network/volume, no database
+host port, bounded service resources, and loopback web/API ports 3210/8310.
+The web health proxy uses a server-only API origin. Migrations run in a one-shot
+service before API startup. Assets live in a private external user-owned directory.
+Development bootstrap generates credentials; it never overwrites an existing env.
+
+The existing gateway has no Studio route and available SSH access is read-only.
+Production will use a dedicated route/tunnel when an administrator grants it;
+local deployment and verification proceed independently.

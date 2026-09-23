@@ -5,7 +5,21 @@ This file is the single collection point for actions that truly require the owne
 Codex must not use this file for routine questions, design decisions, debugging, package choices, testing, or implementation uncertainty.
 
 ## Current Blockers
-None recorded.
+## Public gateway ingress (confirmed 2026-09-23)
+DNS for `studio.hungreegoat.com` already points to gateway `2.29.28.125`, but
+HTTPS returns TLS `unrecognized name`: nginx has no Studio vhost. Available SSH
+identity `hermes-ro` permits read-only inspection and Docker listing only, with
+no nginx configuration write or reload permission. Existing tunnel authorization
+is restricted to Control's port 18090 and must remain untouched.
+
+Gateway administrator action: install a dedicated Studio TLS vhost and authorize
+a new dedicated reverse-tunnel key/listen port (proposed gateway 18310 → local
+Studio Caddy 8410). Phase 14 will provide concrete configuration/install artifacts.
+No DNS change is currently needed. Local deployment, tests, backups, audio engine
+verification, and hardening remain independent and continue.
+
+Provider credential availability has not yet been established.
+
 
 ## Allowed Blocker Categories
 - provider account/API credential unavailable

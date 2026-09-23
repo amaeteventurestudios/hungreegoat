@@ -1,0 +1,4 @@
+@import "tailwindcss";
+@import "@hungreegoat/studio-ui/styles.css";
+@source "../../../../packages/ui/src";
+

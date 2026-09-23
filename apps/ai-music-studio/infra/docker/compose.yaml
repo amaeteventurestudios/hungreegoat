@@ -1,0 +1,86 @@
+name: ${COMPOSE_PROJECT_NAME:-hg-studio-dev}
+
+services:
+  studio-postgres:
+    image: postgres:17.11-alpine
+    environment:
+      POSTGRES_DB: studio
+      POSTGRES_USER: studio
+      POSTGRES_PASSWORD: ${STUDIO_DB_PASSWORD:?Run scripts/bootstrap.py first}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U studio -d studio"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 1.0
+
+  studio-migrate:
+    build:
+      context: ../../apps/api
+    image: hg-studio-api:local
+    environment: &api-environment
+      STUDIO_ENV: ${STUDIO_ENV:-development}
+      STUDIO_LOG_LEVEL: ${STUDIO_LOG_LEVEL:-INFO}
+      STUDIO_DATABASE_URL: postgresql+psycopg://studio:${STUDIO_DB_PASSWORD}@studio-postgres:5432/studio
+      STUDIO_ASSET_ROOT: /var/lib/studio/assets
+    command: [alembic, upgrade, head]
+    depends_on:
+      studio-postgres:
+        condition: service_healthy
+    mem_limit: 384m
+    cpus: 0.5
+
+  studio-api:
+    image: hg-studio-api:local
+    user: "${STUDIO_UID:-1000}:${STUDIO_GID:-1000}"
+    build:
+      context: ../../apps/api
+    environment: *api-environment
+    volumes:
+      - ${STUDIO_ASSET_ROOT:?Run scripts/bootstrap.py first}:/var/lib/studio/assets
+    ports:
+      - "127.0.0.1:${STUDIO_API_PORT:-8310}:8000"
+    depends_on:
+      studio-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/ready', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+    mem_limit: 768m
+    cpus: 1.0
+    security_opt: [no-new-privileges:true]
+
+  studio-web:
+    image: hg-studio-web:local
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+    environment:
+      STUDIO_API_URL: http://studio-api:8000
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+      NEXT_TELEMETRY_DISABLED: 1
+    ports:
+      - "127.0.0.1:${STUDIO_WEB_PORT:-3210}:3000"
+    depends_on:
+      studio-api:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+    mem_limit: 768m
+    cpus: 1.0
+    security_opt: [no-new-privileges:true]
+
+volumes:
+  postgres-data:

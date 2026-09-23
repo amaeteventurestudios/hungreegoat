@@ -1,0 +1,31 @@
+# Studio-local secrets; keep only reviewed example files.
+.env
+.env.*
+!.env.example
+
+# JavaScript output and caches.
+node_modules/
+.next/
+out/
+dist/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+
+# Python environments, caches, and build output.
+.venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.coverage
+htmlcov/
+
+# Local runtime data must never become source.
+data/
+uploads/
+secrets/
+tmp/
+logs/
