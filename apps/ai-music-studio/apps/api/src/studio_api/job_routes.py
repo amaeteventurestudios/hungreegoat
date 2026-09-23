@@ -6,10 +6,10 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from studio_api.auth import fail
-from studio_api.domain_models import Job, JobEvent, Project, Song
+from studio_api.domain_models import Job, JobEvent, ProductionPlan, Project, Song
 from studio_api.domain_routes import DB, JOB_FIELDS, Auth, Limit, Offset, public, scoped
 from studio_api.job_service import (
     LEASE_SECONDS,
@@ -24,6 +24,8 @@ from studio_api.job_service import (
 )
 from studio_api.models import utcnow
 from studio_api.orchestration_client import OrchestrationError, private_value
+from studio_api.producer import ProducerJobInput, ProducerResult
+from studio_api.provider_routes import config_row, get_secret_store, read_key
 from studio_api.schemas import StrictModel
 
 router = APIRouter(prefix="/api/v1")
@@ -199,9 +201,12 @@ def claim(
     job.started_at = job.started_at or utcnow()
     job.updated_at = utcnow()
     event(db, job, "Worker claimed attempt")
-    if job.kind != "system.verify":
+    if job.kind == "system.verify":
+        inputs = DiagnosticInput.model_validate(job.parameters).model_dump()
+    elif job.kind == "producer.plan":
+        inputs = ProducerJobInput.model_validate(job.parameters).model_dump(mode="json")
+    else:
         raise fail(409, "unsupported_operation", "No worker handler is enabled for this job")
-    inputs = DiagnosticInput.model_validate(job.parameters).model_dump()
     db.commit()
     return {
         "job_id": job.id,
@@ -271,8 +276,8 @@ def complete(
         raise fail(409, "job_terminal", "Job has already finished")
     if job.cancel_requested:
         terminal(db, job, attempt, "cancelled", retryable=job.kind == "system.verify")
-    else:
-        if job.kind != "system.verify" or data.outputs:
+    elif job.kind == "system.verify":
+        if data.outputs:
             raise fail(422, "unsupported_operation", "This job does not accept output assets")
         try:
             result = DiagnosticResult.model_validate(data.result)
@@ -287,6 +292,51 @@ def complete(
             raise fail(422, "invalid_result", "Diagnostic verification did not match its input")
         attempt.result = result.model_dump()
         terminal(db, job, attempt, "succeeded")
+    elif job.kind == "producer.plan":
+        if data.outputs:
+            raise fail(422, "unsupported_operation", "Production plans do not accept audio outputs")
+        try:
+            result = ProducerResult.model_validate(data.result)
+            inputs = ProducerJobInput.model_validate(job.parameters)
+        except ValueError:
+            raise fail(422, "invalid_result", "Invalid production plan result") from None
+        song = scoped(db, Song, job.song_id, job.workspace_id)
+        active = db.scalar(
+            select(ProductionPlan)
+            .where(
+                ProductionPlan.song_id == song.id,
+                ProductionPlan.workspace_id == job.workspace_id,
+                ProductionPlan.active,
+            )
+            .with_for_update()
+        )
+        version = (
+            db.scalar(
+                select(func.max(ProductionPlan.version)).where(
+                    ProductionPlan.song_id == song.id,
+                    ProductionPlan.workspace_id == job.workspace_id,
+                )
+            )
+            or 0
+        ) + 1
+        if active:
+            active.active = False
+        plan = ProductionPlan(
+            workspace_id=job.workspace_id,
+            project_id=job.project_id,
+            song_id=song.id,
+            version=version,
+            provider=inputs.provider,
+            model=inputs.model,
+            plan=result.plan.model_dump(mode="json"),
+            active=True,
+        )
+        db.add(plan)
+        db.flush()
+        attempt.result = {"plan_id": str(plan.id), "plan_version": version}
+        terminal(db, job, attempt, "succeeded")
+    else:
+        raise fail(422, "unsupported_operation", "This job does not accept completion")
     db.commit()
     return {"state": job.state, "result_asset_id": job.result_asset_id, "output_asset_ids": []}
 
@@ -321,7 +371,13 @@ def worker_fail(
 def credentials(
     job_id: UUID, number: int, provider: str, request: Request, service: Service, db: DB
 ) -> dict:
-    leased(db, job_id, number, request)
-    raise fail(
-        403, "credential_access_denied", "This job is not authorized for provider credentials"
-    )
+    job, _ = leased(db, job_id, number, request)
+    if job.kind != "producer.plan":
+        raise fail(403, "credential_access_denied", "This job is not authorized for credentials")
+    inputs = ProducerJobInput.model_validate(job.parameters)
+    if provider != inputs.provider:
+        raise fail(403, "credential_access_denied", "This job is not authorized for this provider")
+    row = config_row(db, job.workspace_id, provider)
+    if row is None or not row.enabled or not row.secret_reference:
+        raise fail(409, "provider_not_configured", "Selected AI producer is not configured")
+    return {"api_key": read_key(get_secret_store(request), row.secret_reference)}

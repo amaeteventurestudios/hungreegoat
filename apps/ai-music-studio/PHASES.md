@@ -34,7 +34,11 @@ Missing provider credentials block only the live provider call requiring them. B
 
 ## Current Status
 
-Phases 00–05 are verified. Phase 06 is active; the durable implementation is committed and its live orchestration identity path is under autonomous recovery. Phases 07–14 remain pending their dependencies. See the active execution record for current evidence.
+Phases 00–07 are verified. Phase 06 uses a restricted local OSS runtime identity;
+Phase 07 has provider-neutral structured-plan adapters and deterministic fixture
+coverage. Live provider calls remain separately dependent on configured credentials.
+Phase 08 is the next dependency-ready checkpoint. See the active execution record
+for current evidence.
 
 ## Completion
 

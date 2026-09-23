@@ -24,6 +24,7 @@ from studio_api.domain_routes import router as domain_router
 from studio_api.job_routes import router as job_router
 from studio_api.job_routes import service_auth
 from studio_api.logging import configure_logging
+from studio_api.producer_routes import router as producer_router
 from studio_api.provider_routes import router as provider_router
 from studio_api.settings_routes import router as settings_router
 from studio_api.storage import MAX_MULTIPART, UploadTooLarge
@@ -69,6 +70,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     app.include_router(auth_router)
     app.include_router(settings_router)
     app.include_router(provider_router)
+    app.include_router(producer_router)
     app.include_router(domain_router)
     app.include_router(job_router)
 

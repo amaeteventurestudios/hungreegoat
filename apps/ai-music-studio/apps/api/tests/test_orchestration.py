@@ -11,12 +11,13 @@ from sqlalchemy.orm import Session
 from test_auth_settings import ORIGIN, configured, login  # noqa:F401
 
 from studio_api.dispatcher import dispatch_once, reconcile_once
-from studio_api.domain_models import JobEvent
-from studio_api.job_service import DiagnosticInput, create_diagnostic
+from studio_api.domain_models import Job, JobEvent, ProductionPlan
+from studio_api.job_service import DiagnosticInput, create_diagnostic, create_producer
 from studio_api.main import create_app
 from studio_api.models import utcnow
 from studio_api.orchestration_client import OrchestrationError, WindmillClient
 from studio_api.orchestration_models import JobAttempt, JobOutbox
+from studio_api.producer import ProducerJobInput
 
 pytestmark = pytest.mark.skipif(
     not os.getenv("STUDIO_TEST_DATABASE_URL"), reason="Needs PostgreSQL"
@@ -72,6 +73,22 @@ def worker_headers(lease=None):
     if lease:
         result["X-Job-Lease"] = lease
     return result
+
+
+def production_plan(style="warm electronic"):
+    return {
+        "style": style,
+        "bpm": 118,
+        "musical_key": "A minor",
+        "instrumentation": ["sub bass", "soft percussion"],
+        "structure": ["intro", "verse", "chorus", "outro"],
+        "energy_curve": ["gentle", "lifting", "bright", "release"],
+        "vocal_direction": "Breathy, close vocal with a restrained chorus lift.",
+        "arrangement_guidance": "Leave space for the hook and open the drums gradually.",
+        "negative_instructions": ["No harsh distortion"],
+        "production_notes": "Keep transients rounded and the low end focused.",
+        "provider_request_id": "provider-request-1",
+    }
 
 
 def claim(browser, id, execution, number=1):
@@ -317,6 +334,63 @@ def test_expired_worker_lease_reconciles_without_redispatch(orchestration):
     assert job["state"] == "failed"
     assert job["can_retry"]
     assert client.submissions == 1
+
+
+def test_producer_completion_versions_immutable_plans(orchestration):
+    browser, config, engine, id, execution = orchestration
+    project_id = browser.get(f"/api/v1/jobs/{id}").json()["project_id"]
+    song_id = UUID(
+        browser.post(
+            f"/api/v1/projects/{project_id}/songs", json={"title": "Workflow song"}
+        ).json()["id"]
+    )
+    with Session(engine) as db:
+        original = db.get(Job, id)
+        workspace_id, workflow_project_id = original.workspace_id, original.project_id
+        first = create_producer(
+            db,
+            workspace_id,
+            workflow_project_id,
+            song_id,
+            uuid4(),
+            ProducerJobInput(provider="openai", model="gpt-6-luna", title="Workflow tests"),
+        )
+        first_attempt = db.scalar(select(JobAttempt).where(JobAttempt.job_id == first.id))
+    first_lease = claim(browser, first.id, first_attempt.execution_id)
+    first_response = browser.post(
+        f"/api/v1/internal/jobs/{first.id}/attempts/1/complete",
+        headers=worker_headers(first_lease),
+        json={"outputs": [], "result": {"plan": production_plan()}},
+    )
+    assert first_response.json()["state"] == "succeeded"
+    with Session(engine) as db:
+        active = db.scalar(select(ProductionPlan).where(ProductionPlan.song_id == song_id))
+        assert active.active and active.version == 1 and active.plan["style"] == "warm electronic"
+        second = create_producer(
+            db,
+            workspace_id,
+            workflow_project_id,
+            song_id,
+            uuid4(),
+            ProducerJobInput(provider="anthropic", model="claude-sonnet-5", title="Workflow tests"),
+        )
+        second_attempt = db.scalar(select(JobAttempt).where(JobAttempt.job_id == second.id))
+    second_lease = claim(browser, second.id, second_attempt.execution_id)
+    assert (
+        browser.post(
+            f"/api/v1/internal/jobs/{second.id}/attempts/1/complete",
+            headers=worker_headers(second_lease),
+            json={"outputs": [], "result": {"plan": production_plan("cinematic ambient")}},
+        ).json()["state"]
+        == "succeeded"
+    )
+    with Session(engine) as db:
+        plans = db.scalars(
+            select(ProductionPlan)
+            .where(ProductionPlan.song_id == song_id)
+            .order_by(ProductionPlan.version)
+        ).all()
+        assert [(plan.version, plan.active) for plan in plans] == [(1, False), (2, True)]
 
 
 def test_existing_execution_identity_mismatch_is_not_accepted(orchestration):

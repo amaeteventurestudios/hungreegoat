@@ -8,6 +8,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from studio_worker.runtime import JobCancelled, ProtocolFailure, WorkerClient, WorkerContext, WorkerFailure
+from studio_worker.producer import create_plan
 
 
 def diagnostic(context: WorkerContext) -> dict[str, Any]:
@@ -34,6 +35,22 @@ def diagnostic(context: WorkerContext) -> dict[str, Any]:
     return {"diagnostic": True, "sha256": hashlib.sha256(value).hexdigest(), "bytes": len(value)}
 
 
+def production_plan(context: WorkerContext) -> dict[str, Any]:
+    inputs = context.claim["inputs"]
+    provider, model = inputs.get("provider"), inputs.get("model")
+    if provider not in {"openai", "openrouter", "anthropic"} or not isinstance(model, str):
+        raise WorkerFailure("invalid_producer_input", "Production plan inputs are invalid")
+    context.progress(10, "verifying")
+    credential = context.client.call("/credentials/" + provider)
+    api_key = credential.get("api_key")
+    if not isinstance(api_key, str) or not api_key:
+        raise WorkerFailure("provider_not_configured", "Selected AI producer is not configured")
+    context.progress(35, "working")
+    plan = create_plan(provider, model, api_key, inputs)
+    context.progress(90, "finishing")
+    return {"plan": plan}
+
+
 def execute(job_id: str, attempt: int) -> dict[str, Any]:
     client = WorkerClient(job_id, attempt)
     execution_id = str(UUID(os.environ["WM_JOB_ID"]))
@@ -58,9 +75,12 @@ def execute(job_id: str, attempt: int) -> dict[str, Any]:
     failure: WorkerFailure | None = None
     try:
         context.check_cancelled()
-        if claim["kind"] != "system.verify":
+        if claim["kind"] == "system.verify":
+            result = diagnostic(context)
+        elif claim["kind"] == "producer.plan":
+            result = production_plan(context)
+        else:
             raise WorkerFailure("unsupported_job", "This worker does not support the requested job")
-        result = diagnostic(context)
         context.stop()
         for retry in range(3):
             try:

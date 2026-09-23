@@ -63,13 +63,13 @@ independent work.
   25 API tests, 87 browser tests and four-viewport visual review pass.
 - 05: Verified — projects/songs/immutable assets, 33 API tests, 89 browser tests,
   2 targeted post-polish checks and actual database/API recovery with audio SHA256.
-- 06: Awaiting normal-account Windmill runtime identity provisioning — durable
-  dispatch/attempts/workers are implemented and locally verified; a scoped normal
-  user token (not a service account) meets least privilege, and the live gate
-  must validate it before worker/dispatcher startup. The documented v1.817.0 CLI
-  and Instance Settings paths have been tested against this OSS deployment and
-  both resolve to the disabled `POST /api/users/create` endpoint.
-- 07–14: Pending the Phase 06 live orchestration dependency.
+- 06: Verified — restricted local OSS identity, durable dispatch/attempts/workers,
+  live diagnostics, browser-close persistence, forced worker-crash reconciliation,
+  and full browser regression pass.
+- 07: Verified — durable provider-neutral production plans, immutable versioning,
+  worker structured-output adapters, selected-song Producer UI and fixture/browser
+  verification pass. Live provider calls remain credential-dependent.
+- 08–14: Pending their dependency-ready implementation.
 
 ## Research
 - Compose project isolation: https://docs.docker.com/compose/how-tos/project-name/
@@ -317,3 +317,18 @@ recovery, and a forced active-worker kill. The killed diagnostic reconciled to
 43 API tests, 5 worker tests, full 92-test browser suite, lint, typecheck, build,
 Compose config, diff check, and protected-boundary check all pass. Proceed to
 Phase 07 without an owner decision.
+
+### Phase 07 acceptance (2026-09-23)
+
+`producer.plan` joins the durable orchestration boundary with typed song context,
+model/provider selection through Settings, idempotency, lease-bound credential
+retrieval and canonical structured-plan validation. Completion writes the next
+immutable plan version atomically. The UI queues a plan from the selected song,
+displays the active result and retains job history.
+
+Adapter fixtures cover OpenAI Responses structured output, OpenRouter JSON schema
+responses and Anthropic `output_config.format`, including request IDs and sanitized
+invalid-output paths. API: 45 tests; worker: 8 tests; lint/typecheck/build pass;
+the rebuilt local stack passed the no-credential Producer browser flow. No provider
+credential exists locally, so no paid request was made; Phase 08 continues with
+the same fixture-first rule.

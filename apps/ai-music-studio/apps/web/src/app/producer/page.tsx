@@ -1,2 +1,2 @@
-import { Workstation } from "@/components/workstation";
-export default function Page() { return <Workstation page="producer" />; }
+import { ProducerWorkspace } from "@/components/producer-workspace";
+export default function Page() { return <ProducerWorkspace />; }

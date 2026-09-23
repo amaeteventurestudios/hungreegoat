@@ -94,3 +94,8 @@ Pinned Windmill OSS deliberately disables ordinary-user provisioning. For the is
 Status: Accepted (Phase 06)
 
 The Studio attempt lease is the authoritative liveness signal when a Windmill worker disappears but leaves a remote run nonterminal. Dispatcher reconciliation terminally fails an expired running lease instead of redispatching its execution ID. `system.verify` may be deliberately retried; future provider operations are marked outcome-unknown and require explicit reconciliation, preventing blind duplicate paid work.
+
+## ADR-020 — Provider-Neutral Structured Producer Plans
+Status: Accepted (Phase 07)
+
+Production plans are validated against one Studio-owned schema and persisted as immutable versions. A lease-bound worker adapter translates that schema to each provider's supported structured-output request shape; raw credentials and provider responses never reach the browser. Settings selects the enabled provider and model, while any later regeneration preserves prior plan history.

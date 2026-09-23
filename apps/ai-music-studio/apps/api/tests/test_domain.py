@@ -13,7 +13,7 @@ from test_auth_settings import ORIGIN, configured, login  # noqa: F401
 
 from studio_api.domain_models import Job, Song
 from studio_api.main import create_app
-from studio_api.models import AuthSession, Membership, Workspace
+from studio_api.models import AuthSession, Membership, ProviderConfig, Workspace, WorkspaceSettings
 from studio_api.storage import LocalStorageProvider, StorageError
 
 pytestmark = pytest.mark.skipif(
@@ -277,6 +277,51 @@ def test_plan_generation_constraints(domain):
         with pytest.raises(IntegrityError):
             db.commit()
         db.rollback()
+
+
+def test_producer_plan_job_uses_enabled_workspace_provider(domain):
+    browser, config, engine, project, song = domain
+    with Session(engine) as db:
+        session = db.scalar(select(AuthSession))
+        db.add(
+            ProviderConfig(
+                workspace_id=session.workspace_id,
+                provider="openai",
+                enabled=True,
+                secret_reference="00000000-0000-0000-0000-000000000001",
+                capabilities=["production_plan"],
+                default_model="gpt-6-luna",
+            )
+        )
+        settings = db.get(WorkspaceSettings, session.workspace_id)
+        settings.document = {
+            **settings.document,
+            "providers": {**settings.document["providers"], "default_producer": "openai"},
+        }
+        db.commit()
+    key = "f5f5019d-d426-4d2f-aea7-f15ce96e75a8"
+    response = browser.post(
+        f"/api/v1/songs/{song['id']}/production-plans",
+        json={"idempotency_key": key, "instructions": "Keep the intro intimate."},
+    )
+    assert response.status_code == 202, response.text
+    job_id = response.json()["job_id"]
+    assert browser.get(f"/api/v1/jobs/{job_id}").json()["kind"] == "producer.plan"
+    assert (
+        browser.post(
+            f"/api/v1/songs/{song['id']}/production-plans",
+            json={"idempotency_key": key, "instructions": "Keep the intro intimate."},
+        ).json()["job_id"]
+        == job_id
+    )
+    assert (
+        browser.post(
+            f"/api/v1/songs/{song['id']}/production-plans",
+            json={"idempotency_key": key, "instructions": "Different direction."},
+        ).status_code
+        == 409
+    )
+    assert browser.get(f"/api/v1/songs/{song['id']}/production-plans").json()["items"] == []
 
 
 def test_multiple_files_rejected_and_chunked_limit(domain, monkeypatch):

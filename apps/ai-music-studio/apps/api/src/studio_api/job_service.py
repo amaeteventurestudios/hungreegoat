@@ -10,6 +10,7 @@ from studio_api.auth import fail
 from studio_api.domain_models import Job, JobEvent
 from studio_api.models import utcnow
 from studio_api.orchestration_models import JobAttempt, JobOutbox
+from studio_api.producer import ProducerJobInput
 from studio_api.schemas import StrictModel
 
 TERMINAL = {"succeeded", "failed", "cancelled"}
@@ -72,6 +73,43 @@ def create_diagnostic(
     db.flush()
     add_attempt(db, job)
     event(db, job, "Diagnostic queued for verification")
+    db.commit()
+    return job
+
+
+def create_producer(
+    db: Session,
+    workspace_id: UUID,
+    project_id: UUID,
+    song_id: UUID,
+    idempotency_key: UUID,
+    inputs: ProducerJobInput,
+) -> Job:
+    db.execute(text("SELECT pg_advisory_xact_lock(hashtext(:key))"), {"key": str(idempotency_key)})
+    existing = db.scalar(
+        select(Job).where(Job.workspace_id == workspace_id, Job.idempotency_key == idempotency_key)
+    )
+    if existing:
+        if (
+            existing.project_id != project_id
+            or existing.song_id != song_id
+            or existing.kind != "producer.plan"
+            or existing.parameters != inputs.model_dump(mode="json")
+        ):
+            raise ValueError("Idempotency key already belongs to another request")
+        return existing
+    job = Job(
+        workspace_id=workspace_id,
+        project_id=project_id,
+        song_id=song_id,
+        kind="producer.plan",
+        parameters=inputs.model_dump(mode="json"),
+        idempotency_key=idempotency_key,
+    )
+    db.add(job)
+    db.flush()
+    add_attempt(db, job)
+    event(db, job, "Production plan queued")
     db.commit()
     return job
 

@@ -48,3 +48,4 @@ export interface StudioJob {
  attempt:number; can_retry:boolean; can_cancel:boolean; cancel_requested:boolean; outcome_unknown:boolean;
 }
 export interface JobEvent { id:string; sequence:number; state:JobState; message:string; created_at:string }
+export interface ProductionPlan { id:string; song_id:string; version:number; provider:string; model:string; plan:{style:string;bpm:number|null;musical_key:string|null;instrumentation:string[];structure:string[];energy_curve:string[];vocal_direction:string;arrangement_guidance:string;negative_instructions:string[];production_notes:string;provider_request_id:string|null}; active:boolean; created_at:string }
