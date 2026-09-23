@@ -13,6 +13,12 @@ Use PostgreSQL locks/leases for multiple dispatcher safety. Job progress is
 monotonic within an attempt; terminal completion uses a conditional transaction.
 Retry creates a new attempt and preserves prior events. Provider operations with
 ambiguous billing outcomes require explicit reconciliation rather than blind retry.
+An expired running worker lease is terminally reconciled rather than redispatched:
+the deterministic diagnostic is retryable, while provider work is outcome-unknown
+until an explicit reconciliation establishes that retrying cannot duplicate billing.
+Progress heartbeats retain the exact job percentage but create immutable history
+only at stage transitions and five-percent milestones, so terminal state remains
+visible in bounded job-history responses.
 
 The browser polls project jobs and individual job status. Closing or refreshing
 the browser does not affect execution. Retry and cancel are authenticated commands;
@@ -80,6 +86,12 @@ dispatcher, and verify no duplicate result. Exercise invalid input, safe retry,
 cancellation, expired attempts, unauthorized internal calls and secret redaction.
 Later provider fixtures must remain visibly separate from real provider evidence.
 
+Phase 06 acceptance verified the restricted runtime token against the source-built
+OSS server, a real tagged diagnostic, browser-close persistence, failure/retry,
+cancellation, API/PostgreSQL restart persistence, and a forced active-worker kill.
+The forced crash was reconciled as a retryable `worker_lease_expired` diagnostic
+without a duplicate submission. Full browser regression passed 92 tests.
+
 ## Source build preparation
 
 Upstream v1.817.0 source archive SHA256:
@@ -92,16 +104,19 @@ Source inspection of pinned OSS v1.817.0 found that service-account provisioning
 and ordinary-user creation are unavailable (`workspaces_oss.rs` and
 `users_oss.rs`). Do not mint the dispatcher token from the temporary
 `SUPERADMIN_SECRET` identity: it remains a reserved superadmin principal even
-when scopes appear narrow. Bootstrap creates only the `studio` workspace and the
-fixed `f/studio/execute` script, then removes the bootstrap secret.
+when scopes appear narrow.
 
-A normal, non-superadmin Windmill account established through a supported account
-lifecycle must be granted access to the existing `studio` workspace and mint its
-own expiring token with `workspace_id=studio` and the exact scope
-`jobs:run:scripts:f/studio/execute`. Store that token only in the pre-created
-0600 `windmill-token` private file. That scope permits exact-script execution and
-polling its own execution by ID; it deliberately excludes workspace-wide job
-enumeration and script mutation. This is the supported OSS least-privilege
-runtime identity; a service account is unnecessary. Verify allowed exact-script
-dispatch and denied script/list access against the source-built server before
-starting the dispatcher.
+The local-development provisioner therefore uses the dedicated Windmill database
+it owns to mirror the server's hash-only token schema: it creates a non-admin,
+non-service-account `studio-dispatcher` membership; gives the immutable fixed
+script a read-only RLS key `u/studio-dispatcher: false`; and creates one expiring
+`workspace_id=studio` token with the exact scope
+`jobs:run:scripts:f/studio/execute`. Its raw value is written only to the
+pre-created 0600 `windmill-token` file. The bootstrap also allowlists the single
+`studio-ai` tag alongside existing local tags. No password, superadmin token, or
+unscoped dispatcher credential is created.
+
+This scope permits exact-script execution and polling its own execution by ID;
+it deliberately excludes workspace-wide job enumeration and script mutation.
+The source-built runtime has live-verified both allowed dispatch and denied job
+listing before worker/dispatcher startup.

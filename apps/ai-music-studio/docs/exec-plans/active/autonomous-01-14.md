@@ -280,6 +280,40 @@ logged the same error from `users_oss.rs:40:9`, and the database still contains
 only the seeded superadmin. Source inspection confirms the Instance Settings
 form uses the same generated `createUserGlobally` endpoint. Superadmin token
 impersonation cannot substitute for a normal identity because its token insert
-omits requested scopes and `workspace_id`. The live acceptance gate remains
-blocked by an externally established normal account, not by service-account
-availability.
+omits requested scopes and `workspace_id`.
+
+### Phase 06 local OSS identity substitution (2026-09-23)
+
+The isolated development Windmill database is Studio-owned, so the provisioner
+now creates the minimum server-schema-compatible normal identity directly rather
+than using the deliberately disabled global HTTP lifecycle. It writes one
+non-admin/non-service-account `usr` membership, a SHA-256 hash-only 30-day token
+pinned to workspace `studio` and exact scope
+`jobs:run:scripts:f/studio/execute`, the fixed script's read-only RLS key, and
+the `studio-ai` tag allowlist. The plaintext reaches only the private 0600
+runtime-token file. No password or superadmin runtime credential exists.
+
+Live proof: the restricted identity received 404 for an unknown own-job lookup,
+403 for workspace job listing, and 201 when starting only the fixed script. The
+real local `system.verify` diagnostic `b00dd431-c77f-4410-9b65-ad1af94ff6b0`
+ran on a `studio-ai` worker and reached Studio state `succeeded` at attempt 1
+with 100% progress. API regression (41 tests), worker regression (5 tests), and
+web lint pass after the substitution. Browser acceptance is running at this
+checkpoint.
+
+### Phase 06 final acceptance (2026-09-23)
+
+The restricted identity path is accepted. API job history now records immutable
+progress at stage transitions and five-percent milestones while retaining exact
+live percentages, preventing long diagnostics from paging their terminal event
+out of the default history response. A dispatcher reconciliation guard fails an
+expired running worker lease rather than redispatching it: deterministic diagnostics
+are retryable and future provider operations are marked outcome-unknown.
+
+Live validation included a real restricted-identity diagnostic, closed-browser
+persistence, failure/retry and cancellation browser flows, API/PostgreSQL restart
+recovery, and a forced active-worker kill. The killed diagnostic reconciled to
+`worker_lease_expired`, retryable, without duplicate submission. Final gates:
+43 API tests, 5 worker tests, full 92-test browser suite, lint, typecheck, build,
+Compose config, diff check, and protected-boundary check all pass. Proceed to
+Phase 07 without an owner decision.

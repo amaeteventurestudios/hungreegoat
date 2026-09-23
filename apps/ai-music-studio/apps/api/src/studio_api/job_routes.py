@@ -243,10 +243,17 @@ def progress(
         if data.current_stage in {"starting", "verifying", "waiting", "hashing", "finishing"}
         else "working"
     )
-    if data.progress_percent > job.progress_percent or stage != job.current_stage:
+    previous_progress = job.progress_percent
+    previous_stage = job.current_stage
+    if data.progress_percent > previous_progress or stage != previous_stage:
         job.progress_percent = data.progress_percent
         job.current_stage = stage
-        event(db, job, "Worker progress updated")
+        # Progress is updated on every worker heartbeat, but immutable history is
+        # intentionally compact.  Without this, a long-running task can hide its
+        # terminal event behind a page of heartbeat noise.
+        crossed_milestone = data.progress_percent // 5 > previous_progress // 5
+        if stage != previous_stage or crossed_milestone:
+            event(db, job, "Worker progress updated")
     job.updated_at = utcnow()
     attempt.lease_expires_at = utcnow() + timedelta(seconds=LEASE_SECONDS)
     db.commit()

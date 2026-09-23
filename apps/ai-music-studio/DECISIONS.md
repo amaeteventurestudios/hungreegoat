@@ -84,3 +84,13 @@ Provider secrets are server-only encrypted files referenced by opaque IDs in Pos
 Status: Accepted (Phase 06)
 
 The API persists canonical jobs, attempts, outbox records, and immutable events. A dispatcher submits only bounded identifiers to an orchestrator. Workers claim, progress, and finalize through authenticated internal APIs; neither browser nor API request executes long audio work directly. Derived assets remain immutable and lineage-tracked.
+
+## ADR-018 — Local OSS Runtime Identity Bootstrap
+Status: Accepted (Phase 06)
+
+Pinned Windmill OSS deliberately disables ordinary-user provisioning. For the isolated local development instance, the Studio provisioner owns the dedicated Windmill database and atomically creates the smallest compatible identity: one non-admin, non-service-account workspace member, a hash-only 30-day token pinned to `studio` and `jobs:run:scripts:f/studio/execute`, read-only RLS visibility of the immutable fixed script, and the `studio-ai` tag allowlist. The raw token is only a 0600 private file. This replaces the unavailable HTTP lifecycle without retaining any superadmin runtime credential.
+
+## ADR-019 — Lease Expiry Is a Safe Worker-Interruption Boundary
+Status: Accepted (Phase 06)
+
+The Studio attempt lease is the authoritative liveness signal when a Windmill worker disappears but leaves a remote run nonterminal. Dispatcher reconciliation terminally fails an expired running lease instead of redispatching its execution ID. `system.verify` may be deliberately retried; future provider operations are marked outcome-unknown and require explicit reconciliation, preventing blind duplicate paid work.

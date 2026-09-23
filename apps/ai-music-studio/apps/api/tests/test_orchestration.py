@@ -158,6 +158,32 @@ def test_claim_progress_complete_idempotency_and_auth(orchestration):
     assert "lease" not in str(public) and "execution_id" not in public
 
 
+def test_progress_history_is_compact_and_keeps_terminal_event_visible(orchestration):
+    browser, config, engine, id, execution = orchestration
+    lease = claim(browser, id, execution)
+    base = f"/api/v1/internal/jobs/{id}/attempts/1"
+    for percent in range(1, 100):
+        response = browser.post(
+            base + "/progress",
+            json={"progress_percent": percent, "current_stage": "verifying"},
+            headers=worker_headers(lease),
+        )
+        assert response.status_code == 200, response.text
+    result = {
+        "outputs": [],
+        "result": {
+            "diagnostic": True,
+            "sha256": hashlib.sha256(b"original fixture").hexdigest(),
+            "bytes": len(b"original fixture"),
+        },
+    }
+    response = browser.post(base + "/complete", json=result, headers=worker_headers(lease))
+    assert response.status_code == 200
+    events = browser.get(f"/api/v1/jobs/{id}/events").json()["items"]
+    assert len(events) < 50
+    assert events[-1]["state"] == "succeeded"
+
+
 def test_retry_stale_completion_cancel_and_error_redaction(orchestration):
     browser, config, engine, id, execution = orchestration
     lease = claim(browser, id, execution)
@@ -274,6 +300,23 @@ def test_dispatch_lost_response_recovery_and_remote_failure(orchestration):
     reconcile_once(engine, client)
     job = browser.get(f"/api/v1/jobs/{id}").json()
     assert job["state"] == "failed" and job["can_retry"]
+
+
+def test_expired_worker_lease_reconciles_without_redispatch(orchestration):
+    browser, config, engine, id, execution = orchestration
+    client = FakeOrchestrator()
+    assert dispatch_once(engine, config, client)
+    lease = claim(browser, id, execution)
+    assert lease
+    with Session(engine) as db:
+        attempt = db.scalar(select(JobAttempt).where(JobAttempt.job_id == id))
+        attempt.lease_expires_at = utcnow() - timedelta(seconds=1)
+        db.commit()
+    reconcile_once(engine, client)
+    job = browser.get(f"/api/v1/jobs/{id}").json()
+    assert job["state"] == "failed"
+    assert job["can_retry"]
+    assert client.submissions == 1
 
 
 def test_existing_execution_identity_mismatch_is_not_accepted(orchestration):

@@ -9,8 +9,10 @@ never used as that runtime identity.
 """
 
 import json
+import hashlib
 import os
 from pathlib import Path
+import secrets
 import stat
 import subprocess
 import sys
@@ -24,10 +26,9 @@ ROOT = Path(__file__).resolve().parents[1]
 COMPOSE = ["bash", str(ROOT / "scripts/compose.sh")]
 WORKSPACE = "studio"
 RUNTIME_SCOPE = "jobs:run:scripts:f/studio/execute"
-
-
-class RuntimeTokenRequired(RuntimeError):
-    pass
+RUNTIME_EMAIL = "studio-dispatcher@windmill.local"
+RUNTIME_USERNAME = "studio-dispatcher"
+RUNTIME_LABEL = "studio-dispatcher"
 
 
 def private(path: Path, empty: bool = False) -> str:
@@ -64,6 +65,76 @@ def write_private(path: Path, value: str) -> None:
 
 def compose(environment: dict[str, str], *arguments: str) -> None:
     result = subprocess.run(COMPOSE + list(arguments), env=environment, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+    if result.returncode:
+        raise RuntimeError
+
+
+def provision_runtime_identity(environment: dict[str, str]) -> str:
+    """Create the isolated development identity from Windmill's documented schema.
+
+    The pinned OSS server deliberately disables its global user-creation HTTP
+    handler. This local-only bootstrap has direct ownership of the dedicated
+    Windmill database and creates the minimum records consumed by its auth
+    layer: a non-admin workspace membership and one path-scoped, hashed token.
+    It never creates a password or a service account and never writes a
+    superadmin token to the runtime credential file.
+    """
+    token = secrets.token_hex(32)
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    token_prefix = token[:10]
+    sql = f"""BEGIN;
+INSERT INTO usr (workspace_id, username, email, is_admin, operator, disabled, is_service_account)
+VALUES ('{WORKSPACE}', '{RUNTIME_USERNAME}', '{RUNTIME_EMAIL}', false, false, false, false)
+ON CONFLICT (workspace_id, username) DO UPDATE SET
+  email = EXCLUDED.email, is_admin = false, operator = false, disabled = false, is_service_account = false;
+DELETE FROM token WHERE email = '{RUNTIME_EMAIL}' AND label = '{RUNTIME_LABEL}';
+INSERT INTO token
+  (token_hash, token_prefix, token, email, label, expiration, super_admin, scopes, workspace_id, read_only)
+VALUES
+  ('{token_hash}', '{token_prefix}', NULL, '{RUNTIME_EMAIL}', '{RUNTIME_LABEL}', now() + interval '30 days', false,
+   ARRAY['{RUNTIME_SCOPE}'], '{WORKSPACE}', false);
+COMMIT;
+"""
+    result = subprocess.run(
+        COMPOSE + [
+            "exec", "-T", "studio-windmill-postgres", "psql", "-X", "-q",
+            "-v", "ON_ERROR_STOP=1", "-U", "windmill", "-d", "windmill",
+        ],
+        env=environment,
+        input=sql,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    if result.returncode:
+        raise RuntimeError
+    return token
+
+
+def configure_runtime_resources(environment: dict[str, str]) -> None:
+    """Allow the fixed tag and read-only RLS visibility for the runtime identity."""
+    result = subprocess.run(
+        COMPOSE + [
+            "exec", "-T", "studio-windmill-postgres", "psql", "-X", "-q",
+            "-v", "ON_ERROR_STOP=1", "-U", "windmill", "-d", "windmill",
+        ],
+        env=environment,
+        input=f"""INSERT INTO global_settings (name, value)
+VALUES ('custom_tags', '[\"chromium\", \"studio-ai\"]'::jsonb)
+ON CONFLICT (name) DO UPDATE SET
+  value = CASE WHEN global_settings.value ? 'studio-ai' THEN global_settings.value
+               ELSE global_settings.value || '\"studio-ai\"'::jsonb END,
+  updated_at = now();
+UPDATE script
+SET extra_perms = COALESCE(extra_perms, '{{}}'::jsonb)
+                  || jsonb_build_object('u/{RUNTIME_USERNAME}', false)
+WHERE workspace_id = '{WORKSPACE}' AND path = 'f/studio/execute'
+  AND deleted = false AND archived = false;
+""",
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
     if result.returncode:
         raise RuntimeError
 
@@ -147,14 +218,17 @@ def main() -> None:
         if not script_hash or len(script_hash) > 32 or not all(c in "0123456789abcdef" for c in script_hash.lower()):
             raise RuntimeError
         write_private(directory / "script-hash", script_hash)
+        configure_runtime_resources(environment)
         if not existing_runtime:
-            raise RuntimeTokenRequired(
-                "Windmill workspace/script prepared. A normal non-superadmin Windmill account "
-                f"must place a 0600 runtime token scoped only to {RUNTIME_SCOPE} in "
-                "windmill-token before dispatcher startup."
-            )
-    except RuntimeTokenRequired as error:
-        pending = str(error)
+            existing_runtime = provision_runtime_identity(environment)
+            write_private(directory / "windmill-token", existing_runtime)
+        status, _ = request(
+            origin,
+            f"/api/w/{WORKSPACE}/jobs_u/get/{uuid4()}",
+            existing_runtime,
+        )
+        if status != 404:
+            raise RuntimeError
     except (RuntimeError, OSError, ValueError):
         pending = "Windmill provisioning failed; inspect Studio-only sanitized service logs."
     else:

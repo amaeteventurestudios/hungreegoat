@@ -138,6 +138,29 @@ def reconcile_once(engine, client: OrchestrationClient) -> None:
             job = db.get(Job, id)
             attempt = current_attempt(db, job, job.attempt)
             execution_id = attempt.execution_id
+            # A worker that disappears can leave Windmill's remote execution in
+            # a non-terminal state.  The Studio lease is the authoritative
+            # liveness signal: do not redispatch the same execution and risk a
+            # duplicate operation.  Diagnostics are safe to retry; provider
+            # work requires explicit reconciliation because billing may be
+            # ambiguous.
+            if (
+                job.state == "running"
+                and attempt.lease_expires_at is not None
+                and attempt.lease_expires_at <= utcnow()
+            ):
+                terminal(
+                    db,
+                    job,
+                    attempt,
+                    "failed",
+                    "worker_lease_expired",
+                    "Worker lease expired before finalization",
+                    retryable=job.kind == "system.verify",
+                    unknown=job.kind != "system.verify",
+                )
+                db.commit()
+                continue
             try:
                 remote = client.inspect(execution_id)
             except OrchestrationError:
