@@ -3,22 +3,22 @@
 ## ADR-001 — Studio Lives in Hungree Goat Monorepo
 Status: Accepted
 
-AI Music Studio is located at `apps/ai-music-studio` inside `amaeteventurestudios/hungreegoat`. It is not a nested Git repository.
+AI Music Studio lives at `apps/ai-music-studio` inside `amaeteventurestudios/hungreegoat`; it is not a nested repository.
 
 ## ADR-002 — Protect Existing Apps
 Status: Accepted
 
-`apps/control`, `apps/player`, and `apps/dj-studio` are sibling apps and are no-touch by default for Studio tasks.
+`apps/control`, `apps/player`, `apps/dj-studio`, and the broadcast stack are protected from unrelated Studio work.
 
-## ADR-003 — Windmill for V1 Orchestration
+## ADR-003 — Windmill Is the Initial V1 Orchestrator, Not an Approval Gate
 Status: Accepted
 
-Use Windmill for workflows, worker routing, retries, and operational execution state. Do not introduce Temporal in V1.
+Windmill is the initial orchestration implementation. If its mechanism, version, edition, or identity model cannot satisfy requirements safely, Codex may autonomously reconfigure, upgrade/downgrade, change the authentication flow, or replace it behind the orchestration abstraction. The product contract takes precedence over preserving a broken implementation choice.
 
 ## ADR-004 — PostgreSQL Is Domain Truth
 Status: Accepted
 
-Windmill state does not replace Studio domain records.
+Operational workflow state does not replace Studio domain records.
 
 ## ADR-005 — shadcn/ui First
 Status: Accepted
@@ -33,87 +33,54 @@ Every transformation creates a new asset and lineage relationship.
 ## ADR-007 — Provider Abstractions
 Status: Accepted
 
-No shared domain/UI code depends directly on ElevenLabs, Demucs, Matchering, or one provider implementation.
+Shared domain/UI code does not depend directly on one provider implementation.
 
 ## ADR-008 — Local Filesystem First
 Status: Accepted
 
-Use local storage behind `StorageProvider` in V1. Object storage can come later.
+Use local storage behind `StorageProvider` initially; object storage may replace it later.
 
 ## ADR-009 — Docker Compose, Not Kubernetes
 Status: Accepted
 
-V1 uses Docker Compose and Caddy.
+V1 defaults to Docker Compose and Caddy, with isolated Studio project names, networks, volumes, and loopback ports.
 
 ## ADR-010 — Tempo Stretch vs Double-Time
 Status: Accepted
 
-Literal tempo transformation is distinct from a musical double-time/half-time remix concept.
+Literal tempo transformation is distinct from musical double-time/half-time concepts.
 
 ## ADR-011 — Canonical Source vs Runtime
 Status: Accepted
 
-Canonical source is under `/home/aumanah/hungree-goat-src/hungreegoat-canonical`. `/home/aumanah/hungree-goat` is runtime/deployment, not authoring source.
+Canonical source is `/home/aumanah/hungree-goat-src/hungreegoat-canonical`; `/home/aumanah/hungree-goat` is runtime/deployment.
 
-## ADR-012 — Studio-local Tooling and Environment Isolation
-Status: Accepted (Phase 00, 2026-09-23)
+## ADR-012 — Owner-Independent Engineering
+Status: Accepted
 
-Root inspection found no workspace manifest requiring integration. Plan an npm
-workspace and lockfile inside Studio for the web and shared TypeScript packages,
-with separate Python dependency environments for the API and workers. Introduce
-the executable manifests in Phase 01. Root tooling and sibling apps remain unchanged.
+Within the Studio boundary, Codex may make and execute technical decisions without routine approval. A failed plan requires investigation and an architecture-preserving substitution, not interruption. Owner interruption is reserved for proven external human-only actions or the usage-safety stop.
 
-Use `STUDIO_*` server configuration, explicit `hg-studio-dev/test/prod` Compose
-project names, project-scoped networks/volumes, and external persistent storage.
-The environment template is a naming contract until Phase 01 implements validation.
-See `MONOREPO_LAYOUT.md` for paths and configuration ownership.
+## ADR-013 — Cost-Aware Model Routing
+Status: Accepted
 
-No architecture deviations are introduced. The existing nginx gateway is recorded
-as a constraint for later Studio Caddy integration, not altered by this phase.
+Use Luna/Terra for most labor, Sol selectively for review/escalation, and Astra only exceptionally. Child model and reasoning effort are explicit.
 
-## ADR-013 — Isolated Foundation Services
-Status: Accepted (2026-09-23)
+## ADR-014 — Usage Reserve
+Status: Accepted
 
-Use Node 24 and Python 3.12 containers, exact npm/uv dependency locks, and
-PostgreSQL 17.11. Studio Compose has a separate project/network/volume, no database
-host port, bounded service resources, and loopback web/API ports 3210/8310.
-The web health proxy uses a server-only API origin. Migrations run in a one-shot
-service before API startup. Assets live in a private external user-owned directory.
-Development bootstrap generates credentials; it never overwrites an existing env.
+At 70% weekly usage begin conservation. At 80% weekly usage checkpoint and stop, preserving the requested reserve.
 
-The existing gateway has no Studio route and available SSH access is read-only.
-Production will use a dedicated route/tunnel when an administrator grants it;
-local deployment and verification proceed independently.
+## ADR-015 — Private Owner and Server-Side Sessions
+Status: Accepted
 
-## ADR-014 — Private Owner and Server-side Sessions
-Status: Accepted (2026-09-23)
+Bootstrap one owner without public registration. Passwords use Argon2; opaque PostgreSQL-backed sessions are time-limited, revocable, HttpOnly, SameSite=Lax, and require exact Origin plus session-bound CSRF protection for unsafe authenticated requests.
 
-Bootstrap a single owner through a protected CLI; there is no public registration.
-Passwords use Argon2. Opaque sessions are hashed in PostgreSQL, time-limited,
-revocable, HttpOnly and SameSite=Lax; production additionally requires HTTPS and
-Secure __Host cookies. Unsafe browser requests require exact configured Origin;
-authenticated writes additionally require a session-bound CSRF token. Membership
-and workspace context come from the session, never client authorization claims.
-Account/source throttles and bounded hashing limit login resource usage.
+## ADR-016 — Encrypted Provider Credentials
+Status: Accepted
 
-Workspace preferences use validated JSONB. Errors omit submitted values and
-provider/password bodies. The web proxy has a fixed server origin, rejects internal
-paths, preserves cookies and bounds request bodies. Development-only operator
-helpers keep generated credentials outside source with restricted permissions.
+Provider secrets are server-only encrypted files referenced by opaque IDs in PostgreSQL. Browser responses expose only masked hints and status. Rotation is transactional and retains data integrity.
 
-## ADR-015 — Encrypted Provider Credentials
-Status: Accepted (2026-09-23)
+## ADR-017 — Durable Orchestration Boundary
+Status: Accepted (Phase 06)
 
-Implement SecretStore with authenticated Fernet encryption and opaque UUID file
-references. The private encryption key is separate from ciphertext values and
-outside source/assets. PostgreSQL stores references and masked hints only. Rotate
-by writing a new private file, committing the new reference, then removing the
-retired value; failed commits clean up new files. Cleanup failures are surfaced.
-Protected backups must preserve both database references and encrypted storage.
-
-Provider requests use fixed endpoints, bounded responses/timeouts and normalized
-errors. UI actions explicitly trigger health/model requests. Saved credentials
-start unverified; a healthy account endpoint does not prove paid generation
-entitlement. Model catalogs are labeled fallback data, and quota units retain
-their actual meaning (ElevenLabs subscription characters are not music quota).
-Provider enablement and model/default selection remain explicit owner choices.
+The API persists canonical jobs, attempts, outbox records, and immutable events. A dispatcher submits only bounded identifiers to an orchestrator. Workers claim, progress, and finalize through authenticated internal APIs; neither browser nor API request executes long audio work directly. Derived assets remain immutable and lineage-tracked.

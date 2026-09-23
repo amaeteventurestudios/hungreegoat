@@ -1,82 +1,29 @@
-# Human Blockers
+# HUMAN_BLOCKERS.md — External Human Actions Only
 
-This file is the single collection point for actions that truly require the owner.
+## Purpose
 
-Codex must not use this file for routine questions, design decisions, debugging, package choices, testing, or implementation uncertainty.
+This file is not a technical-issues list. Technical failures belong in execution plans and handoffs and must be solved autonomously.
 
-## Current Blockers
-## Windmill OSS runtime identity (confirmed 2026-09-23)
-Pinned Windmill OSS v1.817.0 does not support ordinary-user creation or service
-account provisioning. Service accounts being unavailable is not a blocker to the
-least-privilege design: an ordinary non-superadmin user token, bound to
-`workspace_id=studio` and scoped exactly to
-`jobs:run:scripts:f/studio/execute`, is sufficient. Windmill confines that token
-to starting the fixed script and following only its own jobs; it cannot enumerate
-workspace jobs or mutate scripts.
+Add an item only when a specific external human action is literally impossible for Codex to perform with available permissions and tools.
 
-This deployment currently has only its seeded superadmin and no configured
-external identity lifecycle. Its OSS `users/create` and password-setting handlers
-are disabled, so Codex cannot safely create the required normal account through a
-supported API. Do not use the temporary `SUPERADMIN_SECRET` as a runtime identity:
-it remains a superadmin principal even when a token has scopes.
+## Required Proof
 
-Verified 2026-09-23 against the running source-built v1.817.0 server: the pinned
-official CLI was installed outside the repository and invoked as
-`wmill --base-url <local-server> --workspace studio --token <redacted> user add
-<generated-local-email> <redacted> --name "Studio runtime worker"`. It exited 1.
-The CLI calls `POST /api/users/create`; that endpoint returned HTTP 500 with
-`Internal: User creation is not implemented in the open-source version.` The
-server logged the same error at `users_oss.rs:40:9`. The Instance Settings
-"Add user to instance" UI calls the identical generated API client endpoint, so
-interactive use of that UI cannot bypass the failure. The attempted account was
-not created.
+Every entry must state:
 
-`POST /api/users/tokens/impersonate` is not an alternative runtime-identity
-provisioner. It is a superadmin-only endpoint whose insert omits the requested
-scopes and `workspace_id`; later scope updates may only be performed by the token
-owner. It therefore cannot produce the required workspace-bound, path-scoped
-normal-user token and must not be used as a workaround.
+1. the exact blocked requirement;
+2. the exact external human action required;
+3. why Codex cannot perform it;
+4. safe automation paths already exhausted;
+5. relevant commands, endpoints, and errors;
+6. official docs/source/issues checked;
+7. architecture-preserving alternatives considered;
+8. why those alternatives cannot satisfy the requirement; and
+9. independent work that continues despite it.
 
-Owner action: establish or supply a normal Windmill account through a supported
-identity lifecycle, grant it access to workspace `studio`, and create an expiring
-token scoped exactly to `jobs:run:scripts:f/studio/execute` with
-`workspace_id=studio`. Place it in the private 0600 local orchestration
-`windmill-token` file without sharing it in chat, source, or logs. The Studio
-provisioner and acceptance checks can then validate it locally.
+## Explicit Non-Examples
 
-## Public gateway ingress (confirmed 2026-09-23)
-DNS for `studio.hungreegoat.com` already points to gateway `2.29.28.125`, but
-HTTPS returns TLS `unrecognized name`: nginx has no Studio vhost. Available SSH
-identity `hermes-ro` permits read-only inspection and Docker listing only, with
-no nginx configuration write or reload permission. Existing tunnel authorization
-is restricted to Control's port 18090 and must remain untouched.
+Do not record an API/CLI error, OSS limitation, local-user/token task, version mismatch, migration, component replacement, research need, or technical choice as a human blocker by itself.
 
-Gateway administrator action: install a dedicated Studio TLS vhost and authorize
-a new dedicated reverse-tunnel key/listen port (proposed gateway 18310 → local
-Studio Caddy 8410). Phase 14 will provide concrete configuration/install artifacts.
-No DNS change is currently needed. Local deployment, tests, backups, audio engine
-verification, and hardening remain independent and continue.
+## Current Status
 
-## Provider credentials (confirmed 2026-09-23)
-The Studio has no configured provider credentials, and this session has no
-OpenAI, OpenRouter, Anthropic or ElevenLabs API key environment variables.
-An owner with the relevant accounts must add keys in Settings → Integrations
-and verify account permissions/quota. A credential from an unrelated application
-is not assumed available for this Studio. Adapter contract tests and all local
-audio workflows continue independently; paid provider success cannot be claimed
-until valid credentials permit a real invocation.
-
-
-## Allowed Blocker Categories
-- provider account/API credential unavailable
-- payment/subscription
-- MFA/2FA
-- CAPTCHA
-- email verification
-- legal/terms acceptance
-- unavailable private reference asset
-- unavailable authorized DNS/registrar action
-- destructive production action outside Studio scope requiring owner authorization
-
-## Rule
-Continue all independent work before stopping. Consolidate human-only actions here and present them together at the end whenever possible.
+No entry is currently authorized to halt the autonomous build. The Windmill runtime-identity issue is a technical substitution investigation, not a human-only blocker.

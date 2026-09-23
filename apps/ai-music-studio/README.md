@@ -6,45 +6,40 @@ Self-hosted AI music production and orchestration inside the Hungree Goat monore
 - Source: `apps/ai-music-studio/`
 - GitHub: `amaeteventurestudios/hungreegoat`
 
-## What It Does
-AI Music Studio combines AI-assisted production planning, music generation, version comparison, arrangement editing, tempo/pitch transformation, stem separation, mastering, project/version management, and final export.
+## Autonomous Engineering Contract
 
-It orchestrates mature engines rather than rebuilding them.
+This project operates in owner-independent engineering mode. Within the Studio boundary, Codex/Terra may decide and act without owner approval: edit Studio source and configuration, operate Studio services, change dependencies and internal architecture, run migrations/tests, document and commit coherent Studio work, and continue through dependency-ready phases.
 
-## Core Stack
-- Next.js / React / TypeScript
-- shadcn/ui + Base UI + Tailwind
-- FastAPI
-- PostgreSQL
-- Windmill
-- ElevenLabs Music adapter
-- OpenAI / Claude adapters
-- FFmpeg
-- librosa / SoundFile
-- Rubber Band
-- Demucs
-- Matchering
-- Docker Compose
-- Caddy
+When a planned mechanism fails, use the safest supported substitution that preserves product requirements, security, data integrity, and the protected Hungree Goat boundary. Technical failures, OSS limitations, API failures, and missing local identities are not human blockers by themselves.
 
-## Start Here
-Codex should read:
-1. `AGENTS.md`
-2. `CODEX.md`
-3. `MONOREPO_LAYOUT.md`
-4. `ARCHITECTURE.md`
-5. `PRODUCT_SPEC.md`
-6. `PHASES.md`
+The operating loop is:
 
-Read `AUTONOMOUS_EXECUTION.md` and execute phases continuously in dependency order.
+`inspect → decide → implement → test → fix → substitute if needed → verify → document → commit → continue`
 
-This directory is part of the parent Hungree Goat repository. It must not contain a nested Git repository.
+Only a proven external human-only action or the mandatory stop in `USAGE_GUARD.md` justifies interruption.
 
-## Implementation status
-Phase 00 is complete. Phase 01 introduces the local web/API/PostgreSQL foundation.
-The autonomous build continues through Phase 14; current checkpoint evidence is
-in [the execution plan](docs/exec-plans/active/autonomous-01-14.md).
+## Protected Boundary
 
-See [local development](docs/LOCAL_DEVELOPMENT.md) to start the isolated Studio
-stack, and [human blockers](docs/HUMAN_BLOCKERS.md) for public gateway access.
-The production URL is the target surface, not a claim of a completed launch.
+Do not reset, clean, overwrite, stage, commit, or disrupt unrelated work in `apps/control/`, `apps/player/`, `apps/dj-studio/`, the existing broadcast stack, or unrelated root files. Make any necessary cross-app change as narrowly as possible and verify the affected service.
+
+## Mandatory Read Order
+
+1. `README.md`
+2. `AGENTS.md`
+3. `AUTONOMOUS_EXECUTION.md`
+4. `MODEL_ROUTING.md`
+5. `USAGE_GUARD.md`
+6. `CODEX.md`
+7. `PHASES.md`
+8. `DECISIONS.md`
+9. `docs/CODEX_HANDOFF.md`
+10. `docs/HUMAN_BLOCKERS.md`
+11. current phase and execution-plan records
+
+## Product
+
+`Idea → AI Producer → Music Generation → Version Review → Arrangement → Tempo/Pitch → Stems → Mastering → Exports`
+
+Core stack: Next.js, React, TypeScript, shadcn/ui, FastAPI, PostgreSQL, Windmill, provider adapters, FFmpeg, librosa, SoundFile, Rubber Band, Demucs, Matchering, Docker Compose, and Caddy.
+
+The current phase checkpoint and acceptance evidence are in `docs/exec-plans/active/autonomous-01-14.md`.
