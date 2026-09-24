@@ -22,8 +22,8 @@ REMOTE_ROOT = "/home/hermes-ro/.local/share/hg-studio-backups"
 SSH = ["ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "ConnectTimeout=8", HOST]
 
 
-def remote(*command: str, check: bool = True) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(SSH + [shlex.join(command)], text=True, capture_output=True, check=check, timeout=30)
+def remote(*command: str, check: bool = True, timeout: int = 30) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(SSH + [shlex.join(command)], text=True, capture_output=True, check=check, timeout=timeout)
 
 
 def digest(path: Path) -> str:
@@ -32,7 +32,7 @@ def digest(path: Path) -> str:
 
 
 def remote_digest(path: str) -> str:
-    output = remote("sha256sum", path).stdout.strip().split()
+    output = remote("sha256sum", path, timeout=4 * 3600).stdout.strip().split()
     if not output or not re.fullmatch(r"[0-9a-f]{64}", output[0]):
         raise RuntimeError("Remote backup checksum is unavailable")
     return output[0]
@@ -81,9 +81,17 @@ def main() -> None:
         record_verified()
         print(f"Off-site encrypted Studio backup already verified: {source.name}")
         return
+    disk = remote("df", "-Pk", REMOTE_ROOT).stdout.splitlines()[-1].split()
+    if len(disk) < 4:
+        raise RuntimeError("Off-site storage capacity is unavailable")
+    free_bytes = int(disk[3]) * 1024
+    total_bytes = sum((source / name).stat().st_size for name in expected)
+    if free_bytes - total_bytes < 5 * 1024**3:
+        raise RuntimeError("Off-site copy would leave less than 5 GiB free on the shared gateway")
     staging = f"{REMOTE_ROOT}/.incoming-{uuid4().hex}"
     remote("install", "-d", "-m", "700", staging)
-    subprocess.run(["rsync", "-a", "--chmod=Du=rwx,Dgo=,Fu=rw,Fgo=", "-e", "ssh -o BatchMode=yes -o StrictHostKeyChecking=yes", f"{source}/", f"{HOST}:{staging}/"], check=True, timeout=180)
+    transfer_timeout = min(4 * 3600, max(180, 180 + total_bytes // (2 * 1024 * 1024)))
+    subprocess.run(["rsync", "-a", "--chmod=Du=rwx,Dgo=,Fu=rw,Fgo=", "-e", "ssh -o BatchMode=yes -o StrictHostKeyChecking=yes", f"{source}/", f"{HOST}:{staging}/"], check=True, timeout=transfer_timeout)
     if any(remote_digest(f"{staging}/{name}") != checksum for name, checksum in expected.items()):
         raise ValueError("Off-site transfer failed checksum verification; staging retained")
     remote("mv", "-T", staging, target)

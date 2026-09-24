@@ -85,6 +85,11 @@ with httpx.Client(base_url=url, timeout=10, trust_env=False) as client:
     preserved = client.get(f"/api/v1/assets/{source_id}/download", headers=headers)
     preserved.raise_for_status()
     assert hashlib.sha256(preserved.content).digest() == hashlib.sha256(audio.getvalue()).digest()
+    for asset_id, original in ((source_id, audio.getvalue()), (master_id, mastered.content)):
+        ranged = client.get(f"/api/v1/assets/{asset_id}/stream", headers={**headers, "Range": "bytes=0-31"})
+        assert ranged.status_code == 206
+        assert ranged.headers["content-range"] == f"bytes 0-31/{len(original)}"
+        assert ranged.content == original[:32]
     if args.restart:
         subprocess.run(["bash", str(ROOT / "scripts/compose.sh"), "restart", "studio-postgres", "studio-api"], check=True, stdout=subprocess.DEVNULL)
         deadline = time.monotonic() + 90

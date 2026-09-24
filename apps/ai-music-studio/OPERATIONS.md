@@ -20,7 +20,7 @@ Structured logs should include:
 
 ## Backups
 
-`studio-backup.timer` encrypts two PostgreSQL custom dumps, assets, Studio secrets/orchestration files, and Kuma configuration daily with GPG AES-256. `studio-offsite-backup.timer` transfers the newest complete encrypted set to a private directory on the separate gateway host and checks every artifact digest without deleting older copies. `studio-restore-check.timer` verifies checksums/decryption and restores both databases into disposable databases plus Kuma into disposable SQLite monthly. Run the three systemd services manually after a storage or migration change. The passphrase must be escrowed separately from both hosts; the off-site encrypted copy alone cannot be decrypted after total local-host loss. See `DEPLOYMENT.md`.
+`studio-backup.timer` encrypts two PostgreSQL custom dumps, assets, Studio secrets/orchestration files, and Kuma configuration daily with GPG AES-256. `studio-offsite-backup.timer` transfers the newest complete encrypted set to a private directory on the separate gateway host and checks every artifact digest without deleting older copies; it refuses a transfer that would leave less than 5 GiB free on that shared host. `studio-restore-check.timer` verifies checksums/decryption and restores both databases into disposable databases plus Kuma into disposable SQLite monthly. Run the three systemd services manually after a storage or migration change. The passphrase must be escrowed separately from both hosts; the off-site encrypted copy alone cannot be decrypted after total local-host loss. See `DEPLOYMENT.md`.
 
 ## Disk
 Track storage used by:
