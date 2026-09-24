@@ -6,6 +6,8 @@ The canonical checkout is `/home/aumanah/hungree-goat-src/hungreegoat-canonical/
 
 The public name `studio.hungreegoat.com` points to the existing shared Hetzner nginx gateway. That gateway currently has **no Studio virtual host or certificate**, so the production URL is not yet live. This is tracked with exact access evidence in `docs/HUMAN_BLOCKERS.md`. A narrow Studio-only nginx/SSH-tunnel installation is prepared in `infra/gateway/`; do not change existing gateway vhosts or the broadcast tunnel. The former Caddy plan is superseded by the gateway's actual nginx installation (ADR-027).
 
+A separately connected Vercel project named `hungreegoat-ai-music-studio` exists and currently reports failed builds even though local Next.js/Docker builds pass. Its private build logs/settings require a Vercel token that is not available here (H14-03). Vercel cannot reach the private Studio API under the current topology and is not the canonical runtime. Do not redirect production DNS to a web-only Vercel preview or weaken API exposure to make that status green.
+
 ## Isolated rollout
 
 Use `STUDIO_COMPOSE_ENV_FILE=/home/aumanah/.local/share/hg-studio/prod/.env` for every production command. `scripts/compose.sh` rejects missing or relative environment files. Secrets and generated audio must never be copied into the Git checkout.

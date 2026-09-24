@@ -100,6 +100,9 @@ independent work.
   production-origin desktop/mobile browser smoke, security headers and resource limits. Gateway
   nginx templates pass syntax tests. Public HTTPS still fails due to unavailable
   privileged gateway access; H14-01 in `docs/HUMAN_BLOCKERS.md` records proof.
+  The connected Vercel Studio project failed build on `348c157`; its logs/settings
+  require unavailable project credentials (H14-03), so Compose/nginx remains the
+  tested canonical runtime rather than exposing the private API to Vercel.
 
 ## Research
 - Compose project isolation: https://docs.docker.com/compose/how-tos/project-name/

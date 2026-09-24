@@ -5,7 +5,7 @@
 - Model / effort: Terra High.
 - Usage: weekly 31% used / 69% remaining at the last live guard; check again before the next batch.
 - Current phase: 14 — Production Hardening and Launch after the Phase 13 checkpoint.
-- Last Phase 13 checkpoint: `475529e feat(studio): add reference mastering and immutable deliveries` (remote `main`). Inspect `git log` and origin before continuing Phase 14; this handoff includes the verified hardening work intended for the next Studio-only checkpoint.
+- Latest Phase 14 hardening checkpoint: `348c157 feat(studio): harden isolated production and recovery`, pushed to `origin/main`. Inspect `git log` and origin before continuing; later documentation may have its own checkpoint.
 
 ## Completed
 
@@ -32,7 +32,7 @@
 
 ## Current Technical Position
 
-Pinned Windmill OSS v1.817.0 rejects ordinary-user creation through its documented CLI/UI endpoint. This is resolved by the narrowly scoped local database bootstrap described above, including production. Phase 14 has completed isolated runtime hardening, monitoring, backup/restore, off-host encrypted copy, and local production recovery/browser smoke. The public hostname still fails TLS handshake (`unrecognized name`) at the shared nginx gateway. Its only available SSH identity lacks nginx/user/cert privileges; H14-01 in `docs/HUMAN_BLOCKERS.md` records the exact external action and exhausted safe alternatives. H14-02 records the separate owner-controlled passphrase escrow needed for total-host-loss recovery. The Studio-only tunnel/vhost templates and runbook are ready and syntax-tested. Live paid-provider generation remains separately credential-dependent. Do not claim Phase 14 completion until public TLS/browser/audio-range/broadcast regression passes.
+Pinned Windmill OSS v1.817.0 rejects ordinary-user creation through its documented CLI/UI endpoint. This is resolved by the narrowly scoped local database bootstrap described above, including production. Phase 14 has completed isolated runtime hardening, monitoring, backup/restore, off-host encrypted copy, and local production recovery/browser smoke. The public hostname still fails TLS handshake (`unrecognized name`) at the shared nginx gateway. Its only available SSH identity lacks nginx/user/cert privileges; H14-01 in `docs/HUMAN_BLOCKERS.md` records the exact external action and exhausted safe alternatives. H14-02 records the separate owner-controlled passphrase escrow needed for total-host-loss recovery. GitHub confirms a separately connected Vercel Studio project, but its deployment failed again at `348c157`; logs and project settings require an unavailable Vercel credential (H14-03), and the private Studio API would not be reachable from a Vercel-only shell. The Studio-only nginx/tunnel templates and runbook are ready and syntax-tested. Live paid-provider generation remains separately credential-dependent. Do not claim Phase 14 completion until public TLS/browser/audio-range/broadcast regression passes.
 
 ## Protected Unrelated Work
 
