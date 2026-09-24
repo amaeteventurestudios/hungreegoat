@@ -5,7 +5,7 @@
 - Model / effort: Terra High.
 - Usage: weekly 31% used / 69% remaining at the last live guard; check again before the next batch.
 - Current phase: 14 — Production Hardening and Launch after the Phase 13 checkpoint.
-- Latest Phase 14 hardening checkpoint: `348c157 feat(studio): harden isolated production and recovery`, pushed to `origin/main`. Inspect `git log` and origin before continuing; later documentation may have its own checkpoint.
+- Phase 14 hardening began with pushed checkpoint `348c157 feat(studio): harden isolated production and recovery`; later range/capacity and access-evidence checkpoints were also pushed. Inspect `git log` and `origin/main` for the current SHA before continuing.
 
 ## Completed
 
