@@ -15,7 +15,7 @@ NTFY_TOPIC_FILE="$HOME/.hgc-ntfy-topic"
 STATE_FILE="$HOME/.hgc-monitor-state-local"
 COOLDOWN_SEC=900
 LABEL="Local-Pi"
-BEELINK_LAN="192.168.6.233"
+BEELINK_LAN="192.168.4.41"
 PUBLIC_HEALTH_URL="https://api.hungreegoat.com/v1/health/broadcast"
 
 [ -f "$NTFY_TOPIC_FILE" ] || { echo "missing $NTFY_TOPIC_FILE — monitor not configured" >&2; exit 1; }

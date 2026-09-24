@@ -31,7 +31,7 @@ broadcast itself relies on:
 
 3. **Secondary local monitor** — `infra/monitoring/hgc-monitor-local.sh`, runs via cron on
    `pi-node-01` as its own user. Checks Beelink directly over the LAN
-   (`http://192.168.6.233:8090/v1/health/broadcast`), bypassing the public gateway/tunnel
+   (`http://192.168.4.41:8090/v1/health/broadcast`), bypassing the public gateway/tunnel
    entirely. Does not touch the Pi's existing Uptime Kuma instance (separate script, separate
    state file, no shared credentials) — that instance already monitors unrelated personal
    services (FreshRSS, Linkding, n8n, Syncthing, ChangeDetection) and integrating with it would

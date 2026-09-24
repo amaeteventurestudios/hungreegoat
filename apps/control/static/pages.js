@@ -1090,7 +1090,7 @@ pages.monitoring = { live:true,
     ${section('Secondary Perspectives', [
       trow('Hetzner External Monitor','outside the house',unk,'hgc-monitor-external.sh',['secondary','external']),
       trow('Raspberry Pi Local Monitor','LAN-local',unk,'hgc-monitor-local.sh',['secondary','local']),
-      trow('Pi → Beelink LAN','bypasses gateway',unk,'192.168.6.233:8090',['secondary','local']),
+      trow('Pi → Beelink LAN','bypasses gateway',unk,'192.168.4.41:8090',['secondary','local']),
     ].join(''))}
     <p class="small muted2" style="margin-top:10px">"—" means HGC itself cannot see that monitor's own last-check time from here (it runs on a different host) — use Notifications → Send Test Push to verify the alert channel end-to-end.</p>`;
   } else if (tab === 'notifications') {
