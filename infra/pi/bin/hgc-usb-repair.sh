@@ -11,7 +11,9 @@ DEV=$(blkid -U "$UUID" || true)
 echo "device with HUNGREE-GOAT UUID: ${DEV:-NOT FOUND}"
 if findmnt -rn "$MNT" >/dev/null; then
   echo "== stopping station services"; sudo -u aumanah XDG_RUNTIME_DIR=/run/user/1000 systemctl --user stop 'hungree-goat-stream@*' 'hungree-goat-liquidsoap@*' 2>/dev/null || true
-  echo "== unmounting (lazy)"; umount "$MNT" 2>/dev/null || umount -l "$MNT" || true
+  echo "== unmounting every layer (a stale mount from a dropped device can sit under the live one)"
+  for _ in 1 2 3 4 5 6; do findmnt -rn "$MNT" >/dev/null 2>&1 || break; umount "$MNT" 2>/dev/null || umount -l "$MNT" || true; done
+  findmnt -rn "$MNT" >/dev/null 2>&1 && { echo "still mounted at $MNT after unmounting; stopping"; exit 5; }
 fi
 if [ -z "$DEV" ]; then
   echo "Drive not present on the USB bus. Unplug it, wait 10 s, plug it back in, then rerun this script."; exit 2
