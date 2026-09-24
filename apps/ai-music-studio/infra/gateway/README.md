@@ -1,0 +1,9 @@
+# Studio public gateway integration
+
+The production Studio is already isolated on `127.0.0.1:3211` in the `hg-studio-prod` Compose project. The DNS A record for `studio.hungreegoat.com` already points to the shared Hetzner gateway `2.29.28.125`. That gateway runs nginx 1.24 and Certbot; it currently has no Studio vhost or certificate. Existing `api.` and `control.` routes must remain untouched.
+
+Install a dedicated `hgstudiotunnel` account on the gateway with no shell and a single restricted public key from `/home/aumanah/.local/share/hg-studio/prod/gateway/studio-tunnel-ed25519.pub`. Restrict its authorized key to `command="/bin/false",restrict,port-forwarding,permitlisten="127.0.0.1:13211"`. Do not reuse the broadcast `hgtunnel` identity or its port 18090. Enable `AllowTcpForwarding remote` only for this account, with no gateway ports on non-loopback interfaces. The Studio user service `studio-gateway-tunnel.service` creates the remote `127.0.0.1:13211` listener pointing to local production web port 3211.
+
+Install `studio-http.nginx` as only the `studio.hungreegoat.com` vhost first, create `/var/www/hg-studio-acme`, run `nginx -t` and reload (never restart). Issue a certificate with Certbot's webroot method for `studio.hungreegoat.com`, then replace that vhost with `studio-https.nginx`, run `nginx -t`, and reload. Verify certificate auto-renewal, secure cookies, same-origin API, authenticated audio range requests, and the existing Hungree Goat public health checks. The HTTPS template proxies only the dedicated tunnel listener and never exposes Windmill, PostgreSQL, API, or worker ports.
+
+Current local automation has only the gateway's `hermes-ro` account, whose sudoers permit `docker ps`/`docker compose ls` but no nginx, user, or certificate writes. Changing the shared server's root password or entering rescue mode would affect unrelated tenants and is outside the Studio boundary; neither is an acceptable workaround.

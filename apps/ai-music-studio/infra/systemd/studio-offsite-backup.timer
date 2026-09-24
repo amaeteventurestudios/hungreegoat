@@ -1,0 +1,10 @@
+[Unit]
+Description=Copy nightly encrypted Studio backup to separate host
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+RandomizedDelaySec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

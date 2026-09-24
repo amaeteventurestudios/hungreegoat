@@ -44,6 +44,9 @@ def test_live_and_ready_contract() -> None:
         assert live.status_code == 200
         assert live.json()["service"] == "studio-api"
         assert live.headers["x-request-id"]
+        assert live.headers["cache-control"] == "no-store"
+        assert live.headers["x-content-type-options"] == "nosniff"
+        assert live.headers["x-frame-options"] == "DENY"
         ready = client.get("/api/v1/health/ready")
         assert ready.status_code == 200
         assert ready.json() == {"status": "ok", "service": "studio-api", "database": "ok"}

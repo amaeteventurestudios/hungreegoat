@@ -87,7 +87,19 @@ independent work.
   restricted-worker fixture that preserved source SHA-256. API 49 tests, worker
   image 13 tests, and 112 responsive browser checks pass; interruption retry is
   safe for local deterministic jobs without changing provider uncertainty rules.
-- 12–14: Pending their dependency-ready implementation.
+- 12: Verified and pushed — Demucs four-stem separation, immutable stem assets,
+  synchronized mixing, source preservation, 50 API tests, 14 worker-image tests,
+  and 116 responsive browser checks.
+- 13: Verified and pushed as `475529e` — reference/automatic mastering, immutable
+  WAV/MP3 delivery and stem ZIPs, 56 API tests, 16 worker-image tests, real leased
+  audio, and 120 responsive browser checks.
+- 14: In progress — isolated `hg-studio-prod` on loopback, real mastering and
+  PostgreSQL/API restart smoke, private Uptime Kuma with three UP internal checks,
+  encrypted seven-artifact backup, disposable PostgreSQL/SQLite restore, verified
+  eight-file encrypted off-host copy, systemd health/backup/off-site/restore timers,
+  production-origin desktop/mobile browser smoke, security headers and resource limits. Gateway
+  nginx templates pass syntax tests. Public HTTPS still fails due to unavailable
+  privileged gateway access; H14-01 in `docs/HUMAN_BLOCKERS.md` records proof.
 
 ## Research
 - Compose project isolation: https://docs.docker.com/compose/how-tos/project-name/

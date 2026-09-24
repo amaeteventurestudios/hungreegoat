@@ -3,8 +3,6 @@
 from typing import Literal
 from uuid import UUID
 
-from pydantic import Field
-
 from studio_api.schemas import StrictModel
 
 LABELS = ("vocals", "drums", "bass", "other")

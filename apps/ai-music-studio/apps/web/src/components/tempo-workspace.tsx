@@ -32,6 +32,8 @@ export function TempoWorkspace() {
   const asset = assets.data?.items.find(item => item.id === assetId) ?? assets.data?.items[0];
   const analysisResource = useResource(`analysis:${asset?.id ?? "none"}`, () => asset ? domain.analysis(asset.id) : Promise.resolve({ items: [] }));
   const variants = useResource(`tempo-variants:${asset?.id ?? "none"}`, () => asset ? domain.tempoVersions(asset.id) : Promise.resolve({ items: [] }));
+  const reloadAnalysis = analysisResource.reload;
+  const reloadVariants = variants.reload;
   const analysis = analysisResource.data?.items[0];
   const [manualBpm, setManualBpm] = useState<number | null>(null);
   const sourceBpm = manualBpm ?? analysis?.detected_bpm ?? song?.bpm ?? 120;
@@ -55,14 +57,14 @@ export function TempoWorkspace() {
 
   useEffect(() => {
     if (!analysisPending || analysis) return;
-    const timer = window.setInterval(() => void analysisResource.reload(), 5000);
+    const timer = window.setInterval(() => void reloadAnalysis(), 5000);
     return () => window.clearInterval(timer);
-  }, [analysisPending, analysis, analysisResource.reload]);
+  }, [analysisPending, analysis, reloadAnalysis]);
   useEffect(() => {
     if (variantBaseline === null || (variants.data?.items.length ?? 0) > variantBaseline) return;
-    const timer = window.setInterval(() => void variants.reload(), 5000);
+    const timer = window.setInterval(() => void reloadVariants(), 5000);
     return () => window.clearInterval(timer);
-  }, [variantBaseline, variants.data?.items.length, variants.reload]);
+  }, [variantBaseline, variants.data?.items.length, reloadVariants]);
 
   async function analyze() {
     if (!asset) return;

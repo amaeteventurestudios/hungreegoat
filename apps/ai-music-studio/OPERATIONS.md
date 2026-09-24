@@ -1,20 +1,12 @@
 # Operations
 
 ## Monitor
-- Studio web
-- Studio API
-- PostgreSQL
-- Windmill
-- worker health
-- storage free space
-- TLS
-- provider health
+
+`STUDIO_COMPOSE_ENV_FILE=/home/aumanah/.local/share/hg-studio/prod/.env python3 scripts/monitor-studio.py` checks isolated container health, loopback web/API/Kuma, worker ping recency, enabled-provider state, free storage, and local/off-site encrypted-backup age. `--public` also requires the production HTTPS endpoint; enable it in the timer after the gateway route is live. The user-level `studio-monitor.timer` runs every two minutes. A nonzero result is a degraded health signal; inspect its JSON and Studio-only logs before restarting a service.
 
 ## Uptime Kuma
-Add monitors for:
-- `https://studio.hungreegoat.com`
-- Studio API health
-- selected internal checks where useful
+
+The `monitoring` Compose profile runs pinned Uptime Kuma 2.5.5 on loopback `127.0.0.1:3212`, without Docker-socket access. `scripts/provision-uptime-kuma.mjs` provisions a private admin and four HTTP monitors through the UI: internal Studio web, API readiness, Windmill version, and public HTTPS readiness. The first three are UP locally. The public check remains DOWN until the gateway certificate/vhost is installed. The private password file and Kuma SQLite configuration are included in production credential/backup handling, respectively. Do not publish the admin console unauthenticated.
 
 ## Logging
 Structured logs should include:
@@ -27,11 +19,8 @@ Structured logs should include:
 - terminal state
 
 ## Backups
-At minimum:
-- nightly PostgreSQL backup
-- Studio asset backup
-- secure configuration backup
-- periodic restore test
+
+`studio-backup.timer` encrypts two PostgreSQL custom dumps, assets, Studio secrets/orchestration files, and Kuma configuration daily with GPG AES-256. `studio-offsite-backup.timer` transfers the newest complete encrypted set to a private directory on the separate gateway host and checks every artifact digest without deleting older copies. `studio-restore-check.timer` verifies checksums/decryption and restores both databases into disposable databases plus Kuma into disposable SQLite monthly. Run the three systemd services manually after a storage or migration change. The passphrase must be escrowed separately from both hosts; the off-site encrypted copy alone cannot be decrypted after total local-host loss. See `DEPLOYMENT.md`.
 
 ## Disk
 Track storage used by:

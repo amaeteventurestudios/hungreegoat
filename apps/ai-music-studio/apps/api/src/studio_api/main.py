@@ -227,7 +227,10 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                 },
             )
         response.headers["X-Request-ID"] = request_id
-        if request.url.path.startswith(("/api/v1/auth", "/api/v1/settings", "/api/v1/internal")):
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["X-Frame-Options"] = "DENY"
+        if request.url.path.startswith("/api/v1/"):
             response.headers["Cache-Control"] = "no-store"
         logger.info(
             "Request completed",

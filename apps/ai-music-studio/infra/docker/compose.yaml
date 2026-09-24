@@ -183,7 +183,25 @@ services:
     security_opt: [no-new-privileges:true]
     cap_drop: [ALL]
 
+  studio-uptime-kuma:
+    image: louislam/uptime-kuma:2.5.5
+    user: "1000:1000"
+    profiles: [monitoring]
+    volumes:
+      - uptime-kuma-data:/app/data
+    ports:
+      - "127.0.0.1:${STUDIO_MONITOR_PORT:-3212}:3001"
+    depends_on:
+      studio-api:
+        condition: service_healthy
+    restart: unless-stopped
+    mem_limit: 384m
+    cpus: 0.5
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+
 volumes:
   postgres-data:
   windmill-postgres-data:
   worker-cache:
+  uptime-kuma-data:

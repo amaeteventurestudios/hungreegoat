@@ -41,9 +41,6 @@ export function MasteringWorkspace() {
   const [masterJobId, setMasterJobId] = useState<string | null>(null);
   const [exportJobId, setExportJobId] = useState<string | null>(null);
   const [stemsJobId, setStemsJobId] = useState<string | null>(null);
-  const [masterBaseline, setMasterBaseline] = useState<number | null>(null);
-  const [exportBaseline, setExportBaseline] = useState<number | null>(null);
-  const [stemBaseline, setStemBaseline] = useState<number | null>(null);
   const [exportSourceId, setExportSourceId] = useState<string | null>(null);
   const [format, setFormat] = useState<"wav" | "mp3">("wav");
   const [bitDepth, setBitDepth] = useState<16 | 24>(24);
@@ -65,46 +62,44 @@ export function MasteringWorkspace() {
   }, [assets.data?.items, masters.data?.items]);
   const exportSource = exportSources.find(item => item.id === exportSourceId)?.id ?? selectedMaster?.asset_id ?? source?.id;
   const exports = useResource(`exports:${exportSource ?? "none"}`, () => exportSource ? domain.exports(exportSource) : Promise.resolve({ items: [] }));
+  const reloadAssets = assets.reload;
+  const reloadMasters = masters.reload;
+  const reloadExports = exports.reload;
+  const reloadStemExports = stemExports.reload;
 
   useEffect(() => {
     if (!masterPending) return;
     const timer = window.setInterval(() => {
-      void masters.reload(); void assets.reload();
+      void reloadMasters(); void reloadAssets();
       if (masterJobId) void apiRequest<{ state: string; error_code: string | null }>(`/jobs/${masterJobId}`).then(job => {
-        if (queuedFailure(job.state)) { setMasterPending(false); setError(`Mastering ${job.state}${job.error_code ? ` (${job.error_code})` : ""}.`); }
+        if (job.state === "succeeded") { setMasterPending(false); setMessage("Master finished. It is a new immutable asset ready for comparison and delivery."); void reloadMasters(); void reloadAssets(); }
+        else if (queuedFailure(job.state)) { setMasterPending(false); setError(`Mastering ${job.state}${job.error_code ? ` (${job.error_code})` : ""}.`); }
       }).catch(() => undefined);
     }, 5000);
     return () => window.clearInterval(timer);
-  }, [masterPending, masterJobId, masters.reload, assets.reload]);
-  useEffect(() => {
-    if (masterPending && masterBaseline !== null && (masters.data?.items.length ?? 0) > masterBaseline) { setMasterPending(false); setMasterBaseline(null); setMessage("Master finished. It is a new immutable asset ready for comparison and delivery."); }
-  }, [masterPending, masterBaseline, masters.data?.items.length]);
+  }, [masterPending, masterJobId, reloadMasters, reloadAssets]);
   useEffect(() => {
     if (!exportPending) return;
     const timer = window.setInterval(() => {
-      void exports.reload();
+      void reloadExports();
       if (exportJobId) void apiRequest<{ state: string; error_code: string | null }>(`/jobs/${exportJobId}`).then(job => {
-        if (queuedFailure(job.state)) { setExportPending(false); setError(`Export ${job.state}${job.error_code ? ` (${job.error_code})` : ""}.`); }
+        if (job.state === "succeeded") { setExportPending(false); setMessage("Export finished. Your delivery file is ready to download."); void reloadExports(); }
+        else if (queuedFailure(job.state)) { setExportPending(false); setError(`Export ${job.state}${job.error_code ? ` (${job.error_code})` : ""}.`); }
       }).catch(() => undefined);
     }, 5000);
     return () => window.clearInterval(timer);
-  }, [exportPending, exportJobId, exports.reload]);
-  useEffect(() => {
-    if (exportPending && exportBaseline !== null && (exports.data?.items.length ?? 0) > exportBaseline) { setExportPending(false); setExportBaseline(null); setMessage("Export finished. Your delivery file is ready to download."); }
-  }, [exportPending, exportBaseline, exports.data?.items.length]);
+  }, [exportPending, exportJobId, reloadExports]);
   useEffect(() => {
     if (!stemsPending) return;
     const timer = window.setInterval(() => {
-      void stemExports.reload();
+      void reloadStemExports();
       if (stemsJobId) void apiRequest<{ state: string; error_code: string | null }>(`/jobs/${stemsJobId}`).then(job => {
-        if (queuedFailure(job.state)) { setStemsPending(false); setError(`Stem package ${job.state}${job.error_code ? ` (${job.error_code})` : ""}.`); }
+        if (job.state === "succeeded") { setStemsPending(false); setMessage("Stem package finished. Your ZIP is ready to download."); void reloadStemExports(); }
+        else if (queuedFailure(job.state)) { setStemsPending(false); setError(`Stem package ${job.state}${job.error_code ? ` (${job.error_code})` : ""}.`); }
       }).catch(() => undefined);
     }, 5000);
     return () => window.clearInterval(timer);
-  }, [stemsPending, stemsJobId, stemExports.reload]);
-  useEffect(() => {
-    if (stemsPending && stemBaseline !== null && (stemExports.data?.items.length ?? 0) > stemBaseline) { setStemsPending(false); setStemBaseline(null); setMessage("Stem package finished. Your ZIP is ready to download."); }
-  }, [stemsPending, stemBaseline, stemExports.data?.items.length]);
+  }, [stemsPending, stemsJobId, reloadStemExports]);
   useEffect(() => () => { sourcePlayer.current?.pause(); masterPlayer.current?.pause(); }, []);
 
   function changeSource(value: string | null) {
@@ -120,7 +115,7 @@ export function MasteringWorkspace() {
   }
   async function createMaster() {
     if (!source) return;
-    setError(null); setMessage(null); setMasterPending(true); setMasterBaseline(masters.data?.items.length ?? 0);
+    setError(null); setMessage(null); setMasterPending(true);
     try {
       const queued = await domain.requestMaster(source.id, { idempotency_key: crypto.randomUUID(), ...(referenceId ? { reference_asset_id: referenceId } : {}), target_lufs: targetLufs, true_peak_dbtp: truePeak }, session?.csrf_token ?? null);
       setMasterJobId(queued.job_id); setMessage("Mastering queued. Your source mix and reference remain unchanged.");
@@ -128,7 +123,7 @@ export function MasteringWorkspace() {
   }
   async function createExport() {
     if (!exportSource) return;
-    setError(null); setMessage(null); setExportPending(true); setExportBaseline(exports.data?.items.length ?? 0);
+    setError(null); setMessage(null); setExportPending(true);
     try {
       const queued = await domain.requestExport(exportSource, { idempotency_key: crypto.randomUUID(), format, ...(format === "wav" ? { bit_depth: bitDepth } : { mp3_bitrate_kbps: bitrate }) }, session?.csrf_token ?? null);
       setExportJobId(queued.job_id); setMessage(`${format.toUpperCase()} export queued. Delivery output will appear below.`);
@@ -136,7 +131,7 @@ export function MasteringWorkspace() {
   }
   async function createStemPackage() {
     if (!selectedStemSet) return;
-    setError(null); setMessage(null); setStemsPending(true); setStemBaseline(stemExports.data?.items.length ?? 0);
+    setError(null); setMessage(null); setStemsPending(true);
     try { const queued = await domain.requestStemSetExport(selectedStemSet.id, crypto.randomUUID(), session?.csrf_token ?? null); setStemsJobId(queued.job_id); setMessage("Stem ZIP package queued. The individual stems remain unchanged."); }
     catch (cause) { setStemsPending(false); setError(cause instanceof Error ? cause.message : "Stem package could not start."); }
   }

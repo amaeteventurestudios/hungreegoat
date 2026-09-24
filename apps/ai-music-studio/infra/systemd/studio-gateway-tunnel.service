@@ -1,0 +1,14 @@
+[Unit]
+Description=Isolated Hungree Goat Studio reverse tunnel to public gateway
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/home/aumanah/.local/share/hg-studio/prod/gateway/studio-tunnel-ed25519
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/ssh -N -T -o BatchMode=yes -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=yes -i /home/aumanah/.local/share/hg-studio/prod/gateway/studio-tunnel-ed25519 -R 127.0.0.1:13211:127.0.0.1:3211 hgstudiotunnel@2.29.28.125
+Restart=always
+RestartSec=15
+
+[Install]
+WantedBy=default.target

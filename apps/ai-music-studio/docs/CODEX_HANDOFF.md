@@ -3,9 +3,9 @@
 ## Current State
 
 - Model / effort: Terra High.
-- Usage: weekly 24% used / 76% remaining at the last live guard; check again before the next batch.
+- Usage: weekly 31% used / 69% remaining at the last live guard; check again before the next batch.
 - Current phase: 14 — Production Hardening and Launch after the Phase 13 checkpoint.
-- Last pushed Studio checkpoint: `a4366a8 feat(studio): add durable stem separation and mixing` (remote `main`); Phase 13 commit/push follows this handoff update.
+- Last Phase 13 checkpoint: `475529e feat(studio): add reference mastering and immutable deliveries` (remote `main`). Inspect `git log` and origin before continuing Phase 14; this handoff includes the verified hardening work intended for the next Studio-only checkpoint.
 
 ## Completed
 
@@ -22,16 +22,17 @@
 - Phase 11 is complete locally: durable `audio.analyze` and `audio.tempo` jobs use the restricted worker, read-only source assets, FFprobe/Librosa/SoundFile/EBU R128 analysis, FFmpeg Rubber Band rendering, lease-bound FLAC intake, immutable tempo versions and lineage. Interrupted deterministic local audio jobs are safely retryable; provider jobs remain outcome-unknown after an ambiguous crash. The real local workflow passed analysis and tempo rendering on an original rhythmic WAV and verified the source SHA-256. API 49 tests, 13 worker-image tests, targeted four-viewport browser tests, and the full 112-test browser regression pass.
 - Phase 12 is complete locally: `audio.separate` and `audio.mix` durable jobs, Demucs 4.0.1 `htdemucs` behind `StemSeparator`, four leased stem intakes, immutable mixes and lineage, and synchronized mixer controls. The real local four-second fixture passed twice, including after the final image rebuild, with four stem lineage checks, four-parent mix lineage, and original SHA-256 preservation. API 50 tests, 14 worker-image tests, full 116-test responsive browser suite, targeted post-rebuild UI test, Alembic drift, lint/typecheck/build and protected-boundary checks pass. Demucs weights are baked into the image and load without network.
 - Phase 13 is complete locally: durable `audio.master`, `audio.export`, and `audio.stems_package` jobs; Matchering with reference or FFmpeg loudnorm without; FLAC master versions, WAV 16/24-bit and MP3 deliveries; dedicated immutable ZIP `StemPackage` manifest and authenticated download. Real leased workflow passed both mastering modes, WAV/MP3, Demucs stem packaging, source/reference lineage, and original SHA-256 preservation. API 56 tests, worker-image 16 tests, full 120-test responsive browser suite, Alembic drift, and boundary checks pass. The Mastering UI includes source/reference choices, pre/post A/B, histories, and downloads.
+- Phase 14 local release gates are verified: 56 PostgreSQL API tests, zero Ruff/ESLint errors, typecheck/build, zero production npm audit findings, 120 browser checks plus eight rebuilt-web targeted checks, authenticated production-origin loopback browser smoke across 12 desktop/three mobile routes, a real mastered-audio job and Studio-only database/API restart recovery, Alembic no drift, nginx syntax checks, encrypted seven-artifact backup/disposable restore, eight-file SHA-256-verified separate-host copy, and unchanged protected-file hashes. Public TLS is not yet live; this is not a completed phase.
 
 ## Runtime
 
-- `studio-api`, `studio-web`, `studio-postgres`, `studio-windmill-postgres`, and `studio-windmill` are running. The migration service exited successfully.
-- `studio-worker` and `studio-dispatcher` are running and healthy.
-- Private orchestration files are outside Git at `/home/aumanah/.local/share/hg-studio/dev/orchestration`; `script-hash` and `windmill-token` are populated mode 0600. Never print their values.
+- Development `hg-studio-dev` remains healthy and separate from broadcast.
+- Production-configured `hg-studio-prod` is running on loopback web `3211`, API `8311`, and private Kuma `3212`; PostgreSQL, Windmill, worker, and dispatcher are internal. It has a production owner and scoped Windmill runtime identity. The live local monitoring probe is healthy, including worker ping and encrypted backup recency. Its public HTTPS Kuma check is down because the shared gateway has no Studio vhost/certificate.
+- Production private configuration, owner/admin credentials, orchestration tokens, audio assets, tunnel key, backup passphrase, and encrypted backups are outside Git under `/home/aumanah/.local/share/hg-studio/prod` with private modes. Never print values. User systemd monitor/backup/off-site/restore timers are enabled. Seven encrypted backup artifacts restored into disposable databases successfully; the complete encrypted set was checksummed on the separate gateway host. The backup passphrase is deliberately not copied with it and needs independent escrow.
 
 ## Current Technical Position
 
-Pinned Windmill OSS v1.817.0 rejects ordinary-user creation through its documented CLI/UI endpoint. This is resolved by the narrowly scoped local database bootstrap described above. Phase 14 must address launch hardening, backup/restore, monitoring, TLS and production verification; live paid-provider generation remains separately dependent on configured provider credentials. The production hostname currently fails TLS handshake (`unrecognized name`) at its configured gateway IP; investigate the Studio-specific Caddy/Vercel/deployment path without disturbing the broadcast stack.
+Pinned Windmill OSS v1.817.0 rejects ordinary-user creation through its documented CLI/UI endpoint. This is resolved by the narrowly scoped local database bootstrap described above, including production. Phase 14 has completed isolated runtime hardening, monitoring, backup/restore, off-host encrypted copy, and local production recovery/browser smoke. The public hostname still fails TLS handshake (`unrecognized name`) at the shared nginx gateway. Its only available SSH identity lacks nginx/user/cert privileges; H14-01 in `docs/HUMAN_BLOCKERS.md` records the exact external action and exhausted safe alternatives. H14-02 records the separate owner-controlled passphrase escrow needed for total-host-loss recovery. The Studio-only tunnel/vhost templates and runbook are ready and syntax-tested. Live paid-provider generation remains separately credential-dependent. Do not claim Phase 14 completion until public TLS/browser/audio-range/broadcast regression passes.
 
 ## Protected Unrelated Work
 
@@ -42,5 +43,5 @@ Pinned Windmill OSS v1.817.0 rejects ordinary-user creation through its document
 ## Resume
 
 1. Run `/home/aumanah/.local/bin/codex-usage-guard` and print the normalized usage line.
-2. Commit and push the verified Phase 13 Studio-only changes, then check usage.
-3. Continue directly into Phase 14 production hardening and launch. Preserve the protected root changes and existing broadcast stack.
+2. Confirm the Phase 14 Studio-only checkpoint is committed/pushed and the protected root changes remain untouched. Do not redo the completed local runtime/backup/browser work.
+3. Continue every safe independent task. Public gateway installation requires the privileged external action in H14-01; after it occurs, verify real HTTPS/session cookies/ranges/browser console/network and unchanged sibling services, then mark launch complete. Independently escrow the backup passphrase per H14-02. Never use Hetzner reset/rescue to bypass the shared gateway boundary.

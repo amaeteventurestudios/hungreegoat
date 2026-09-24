@@ -1,0 +1,8 @@
+[Unit]
+Description=Encrypted backup of isolated Hungree Goat Studio data
+ConditionPathExists=/home/aumanah/.local/share/hg-studio/prod/.env
+
+[Service]
+Type=oneshot
+Environment=STUDIO_COMPOSE_ENV_FILE=/home/aumanah/.local/share/hg-studio/prod/.env
+ExecStart=/usr/bin/python3 /home/aumanah/hungree-goat-src/hungreegoat-canonical/apps/ai-music-studio/scripts/backup-studio.py backup --backup-root /home/aumanah/.local/share/hg-studio/prod/backups --passphrase-file /home/aumanah/.local/share/hg-studio/prod/backup-passphrase

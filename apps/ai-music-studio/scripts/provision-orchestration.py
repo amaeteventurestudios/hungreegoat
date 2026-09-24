@@ -170,12 +170,17 @@ def acceptable(status: int, body: str, values: set[int]) -> bool:
 
 
 def main() -> None:
-    values = dict(line.split("=", 1) for line in (ROOT / ".env").read_text().splitlines()
+    env_file = Path(os.environ.get("STUDIO_COMPOSE_ENV_FILE", str(ROOT / ".env")))
+    if not env_file.is_absolute() or env_file.is_symlink():
+        raise SystemExit("Studio environment path must be an absolute regular file.")
+    values = dict(line.split("=", 1) for line in env_file.read_text().splitlines()
                   if line and not line.startswith("#") and "=" in line)
-    if values.get("STUDIO_ENV") != "development":
-        raise SystemExit("Orchestration provisioning is restricted to local development.")
+    if values.get("STUDIO_ENV") not in {"development", "production"}:
+        raise SystemExit("Orchestration provisioning requires an isolated Studio environment.")
+    if values.get("STUDIO_ENV") == "production" and (values.get("COMPOSE_PROJECT_NAME") != "hg-studio-prod" or values.get("STUDIO_PUBLIC_URL") != "https://studio.hungreegoat.com"):
+        raise SystemExit("Production Studio configuration is not isolated or has the wrong origin.")
     directory = Path(values["STUDIO_ORCHESTRATION_DIRECTORY"])
-    if stat.S_IMODE(directory.stat().st_mode) != 0o700:
+    if directory.is_symlink() or stat.S_IMODE(directory.stat().st_mode) != 0o700:
         raise SystemExit("Private orchestration directory is not mode 0700.")
     try:
         bootstrap = private(directory / "bootstrap-token")

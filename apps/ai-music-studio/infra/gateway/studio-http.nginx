@@ -1,0 +1,13 @@
+# Bootstrap only: ACME challenge is reachable, Studio is not served over HTTP.
+server {
+    listen 80;
+    listen [::]:80;
+    server_name studio.hungreegoat.com;
+
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/hg-studio-acme;
+        try_files $uri =404;
+    }
+
+    location / { return 404; }
+}
