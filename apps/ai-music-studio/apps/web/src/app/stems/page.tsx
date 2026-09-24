@@ -1,2 +1,2 @@
-import { Workstation } from "@/components/workstation";
-export default function Page() { return <Workstation page="stems" />; }
+import { StemsWorkspace } from "@/components/stems-workspace";
+export default function Page() { return <StemsWorkspace />; }

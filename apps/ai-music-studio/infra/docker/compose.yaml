@@ -147,6 +147,7 @@ services:
       FORCE_WORKER_TAGS: studio-ai,dependency
       NUM_WORKERS: 1
       JSON_FMT: 'true'
+      OMP_NUM_THREADS: '2'
     volumes:
       - ${STUDIO_ORCHESTRATION_DIRECTORY}/worker-token:/run/studio-orchestration/worker-token:ro
       - ${STUDIO_ASSET_ROOT}:/var/lib/studio/assets:ro
@@ -157,8 +158,8 @@ services:
       studio-windmill:
         condition: service_started
     restart: unless-stopped
-    mem_limit: 768m
-    cpus: 1.0
+    mem_limit: 3g
+    cpus: 2.0
     pids_limit: 128
     security_opt: [no-new-privileges:true]
     cap_drop: [ALL]

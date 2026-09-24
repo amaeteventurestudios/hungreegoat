@@ -119,3 +119,8 @@ The existing `Arrangement` domain table stores bounded section plans linked to a
 Status: Accepted (Phase 11)
 
 The Studio worker performs bounded FFprobe/Librosa/SoundFile analysis and FFmpeg Rubber Band tempo rendering; the API only schedules jobs and validates/stores results. The worker's immutable asset mount is read-only. Tempo output commits a new FLAC asset, `TempoVersion`, and source lineage atomically under the current lease; a committed result is reused on retry. Analysis metadata is versioned by analyzer identifier. Browser preview changes playback rate only and does not claim pitch/formant fidelity. The API caps sources and outputs at ten minutes and limits speed to 0.5–2× to bound CPU, output size, and audible artifacts.
+
+## ADR-025 — Bounded Four-Stem Separation and Immutable Mixes
+Status: Accepted (Phase 12)
+
+Demucs 4.0.1 `htdemucs` runs in the isolated Studio worker behind `StemSeparator`, with its model cached in the worker image, CPU-only PyTorch, read-only source mount, seven-second chunks, a three-minute input cap, and a 3 GiB worker limit. The model's documented/observed maximum chunk is 7.8 seconds; a ten-second chunk failed the real fixture. Each of vocals, drums, bass, and other is independently leased, format/duration-validated, and atomically recorded as an immutable FLAC asset, `Stem`, and source lineage. Partial committed stems are reused after safe retry. A mix job reads all four stems and renders a separate FLAC `MixVersion` with four parent lineage edges. FFmpeg filters/codec threads are constrained because its default fan-out exceeded the worker's 128-process limit. Neither monitoring controls nor recombination overwrite source or stems.

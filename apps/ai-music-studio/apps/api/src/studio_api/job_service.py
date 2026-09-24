@@ -8,15 +8,16 @@ from sqlalchemy.orm import Session
 
 from studio_api.audio import AudioAnalyzeJobInput, TempoJobInput
 from studio_api.auth import fail
-from studio_api.domain_models import AudioAsset, Generation, Job, JobEvent
+from studio_api.domain_models import AudioAsset, Generation, Job, JobEvent, StemSet
 from studio_api.models import utcnow
 from studio_api.music import MusicGenerationJobInput
 from studio_api.orchestration_models import JobAttempt, JobOutbox
 from studio_api.producer import ProducerJobInput
 from studio_api.schemas import StrictModel
+from studio_api.stems import ENGINE, ENGINE_VERSION, MixInput, SeparateInput
 
 TERMINAL = {"succeeded", "failed", "cancelled"}
-INTERRUPTION_RETRY_KINDS = {"system.verify", "audio.analyze", "audio.tempo"}
+INTERRUPTION_RETRY_KINDS = {"system.verify", "audio.analyze", "audio.tempo", "audio.separate", "audio.mix"}
 LEASE_SECONDS = 90
 
 
@@ -241,6 +242,43 @@ def create_tempo_variant(
     db.flush()
     add_attempt(db, job)
     event(db, job, "Tempo variation queued")
+    db.commit()
+    return job
+
+
+def create_stem_set(db: Session, asset: AudioAsset, idempotency_key: UUID) -> tuple[StemSet, Job]:
+    db.execute(text("SELECT pg_advisory_xact_lock(hashtext(:key))"), {"key": str(idempotency_key)})
+    existing = db.scalar(select(Job).where(Job.workspace_id == asset.workspace_id, Job.idempotency_key == idempotency_key))
+    if existing:
+        if existing.kind != "audio.separate" or existing.project_id != asset.project_id or existing.parameters.get("source_asset_id") != str(asset.id):
+            raise ValueError("Idempotency key already belongs to another request")
+        return db.get(StemSet, existing.parameters["stem_set_id"]), existing
+    stem_set = StemSet(workspace_id=asset.workspace_id, project_id=asset.project_id, source_asset_id=asset.id, engine=ENGINE, engine_version=ENGINE_VERSION)
+    db.add(stem_set)
+    db.flush()
+    inputs = SeparateInput(source_asset_id=asset.id, stem_set_id=stem_set.id)
+    job = Job(workspace_id=asset.workspace_id, project_id=asset.project_id, song_id=asset.song_id, kind="audio.separate", parameters=inputs.model_dump(mode="json"), idempotency_key=idempotency_key)
+    db.add(job)
+    db.flush()
+    add_attempt(db, job)
+    event(db, job, "Stem separation queued")
+    db.commit()
+    return stem_set, job
+
+
+def create_mix(db: Session, stem_set: StemSet, song_id: UUID | None, idempotency_key: UUID, inputs: MixInput) -> Job:
+    db.execute(text("SELECT pg_advisory_xact_lock(hashtext(:key))"), {"key": str(idempotency_key)})
+    existing = db.scalar(select(Job).where(Job.workspace_id == stem_set.workspace_id, Job.idempotency_key == idempotency_key))
+    payload = inputs.model_dump(mode="json")
+    if existing:
+        if existing.kind != "audio.mix" or existing.project_id != stem_set.project_id or existing.parameters != payload:
+            raise ValueError("Idempotency key already belongs to another request")
+        return existing
+    job = Job(workspace_id=stem_set.workspace_id, project_id=stem_set.project_id, song_id=song_id, kind="audio.mix", parameters=payload, idempotency_key=idempotency_key)
+    db.add(job)
+    db.flush()
+    add_attempt(db, job)
+    event(db, job, "Stem mix queued")
     db.commit()
     return job
 

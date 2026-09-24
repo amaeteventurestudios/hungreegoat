@@ -20,8 +20,16 @@ export const domain = {
  analysis:(asset:string)=>apiRequest<{items:AudioAnalysis[]}>(`/assets/${encodeURIComponent(asset)}/analysis`),
  requestAnalysis:(asset:string,key:string,csrf:string|null)=>apiRequest<{job_id:string;state:string}>(`/assets/${encodeURIComponent(asset)}/analysis`,{method:"POST",body:{idempotency_key:key},csrf}),
  tempoVersions:(asset:string)=>apiRequest<{items:TempoVersion[]}>(`/assets/${encodeURIComponent(asset)}/tempo-versions`),
- requestTempo:(asset:string,body:{idempotency_key:string;mode:"time_stretch"|"double_time"|"half_time"|"pitch_tempo";source_bpm:number;target_bpm:number;preserve_pitch:boolean;pitch_semitones:number;preserve_formants:boolean;transients:"crisp"|"mixed"|"smooth"},csrf:string|null)=>apiRequest<{job_id:string;state:string}>(`/assets/${encodeURIComponent(asset)}/tempo-versions`,{method:"POST",body,csrf}),
+  requestTempo:(asset:string,body:{idempotency_key:string;mode:"time_stretch"|"double_time"|"half_time"|"pitch_tempo";source_bpm:number;target_bpm:number;preserve_pitch:boolean;pitch_semitones:number;preserve_formants:boolean;transients:"crisp"|"mixed"|"smooth"},csrf:string|null)=>apiRequest<{job_id:string;state:string}>(`/assets/${encodeURIComponent(asset)}/tempo-versions`,{method:"POST",body,csrf}),
+ stemSets:(asset:string)=>apiRequest<{items:StemSet[]}>(`/assets/${encodeURIComponent(asset)}/stem-sets`),
+ requestStemSet:(asset:string,key:string,csrf:string|null)=>apiRequest<{stem_set_id:string;job_id:string;state:string}>(`/assets/${encodeURIComponent(asset)}/stem-sets`,{method:"POST",body:{idempotency_key:key},csrf}),
+ mixVersions:(stemSet:string)=>apiRequest<{items:MixVersion[]}>(`/stem-sets/${encodeURIComponent(stemSet)}/mix-versions`),
+ requestMix:(stemSet:string,body:{idempotency_key:string;levels:StemLevels},csrf:string|null)=>apiRequest<{job_id:string;state:string}>(`/stem-sets/${encodeURIComponent(stemSet)}/mix-versions`,{method:"POST",body,csrf}),
 };
+export type StemLabel = "vocals" | "drums" | "bass" | "other";
+export type StemLevels = Record<StemLabel, number>;
+export interface StemSet { id:string; source_asset_id:string; engine:string; engine_version:string; stems:{id:string;label:StemLabel;asset_id:string}[]; created_at:string }
+export interface MixVersion { id:string; asset_id:string; version:number; levels:StemLevels; created_at:string }
 export async function uploadAudio(project:string,song:string|null,file:File,csrf:string|null):Promise<AudioAsset> {
  if(file.size>100*1024*1024)throw new Error("Choose an audio file smaller than 100 MiB.");
  const body=new FormData();body.append("file",file);if(song)body.append("song_id",song);

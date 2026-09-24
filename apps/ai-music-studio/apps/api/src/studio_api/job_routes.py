@@ -7,7 +7,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import Field
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 
 from studio_api.audio import AudioAnalysisResult, AudioAnalyzeJobInput, TempoJobInput, TempoResult
 from studio_api.auth import fail
@@ -22,6 +22,9 @@ from studio_api.domain_models import (
     ProductionPlan,
     Project,
     Song,
+    Stem,
+    StemSet,
+    MixVersion,
     TempoVersion,
 )
 from studio_api.domain_routes import DB, JOB_FIELDS, Auth, Limit, Offset, public, scoped, storage
@@ -42,6 +45,7 @@ from studio_api.orchestration_client import OrchestrationError, private_value
 from studio_api.producer import ProducerJobInput, ProducerResult
 from studio_api.provider_routes import config_row, get_secret_store, read_key
 from studio_api.schemas import StrictModel
+from studio_api.stems import LABELS, MixInput, MixResult, SeparateInput, StemResult
 from studio_api.storage import (
     InvalidMedia,
     StorageError,
@@ -57,6 +61,8 @@ SAFE_RETRY_KINDS = {
     "music.generate",
     "audio.analyze",
     "audio.tempo",
+    "audio.separate",
+    "audio.mix",
 }
 
 
@@ -271,6 +277,23 @@ def claim(
             raise fail(409, "invalid_source", "Audio source does not match this job")
         inputs["source_key"] = source.storage_key
         inputs["completed_asset_id"] = str(job.result_asset_id) if job.result_asset_id else None
+    elif job.kind == "audio.separate":
+        inputs = SeparateInput.model_validate(job.parameters).model_dump(mode="json")
+        source = scoped(db, AudioAsset, inputs["source_asset_id"], job.workspace_id)
+        if source.project_id != job.project_id:
+            raise fail(409, "invalid_source", "Audio source does not match this job")
+        inputs["source_key"] = source.storage_key
+        inputs["completed_stems"] = {row.label: str(row.asset_id) for row in db.scalars(select(Stem).where(Stem.stem_set_id == inputs["stem_set_id"], Stem.workspace_id == job.workspace_id))}
+    elif job.kind == "audio.mix":
+        inputs = MixInput.model_validate(job.parameters).model_dump(mode="json")
+        stem_set = scoped(db, StemSet, inputs["stem_set_id"], job.workspace_id)
+        if stem_set.project_id != job.project_id:
+            raise fail(409, "invalid_source", "Stem set does not match this job")
+        stems = db.scalars(select(Stem).where(Stem.stem_set_id == stem_set.id, Stem.workspace_id == job.workspace_id)).all()
+        if {row.label for row in stems} != set(LABELS):
+            raise fail(409, "stems_incomplete", "Stem set is incomplete")
+        inputs["stem_keys"] = {row.label: scoped(db, AudioAsset, row.asset_id, job.workspace_id).storage_key for row in stems}
+        inputs["completed_asset_id"] = str(job.result_asset_id) if job.result_asset_id else None
     else:
         raise fail(409, "unsupported_operation", "No worker handler is enabled for this job")
     db.commit()
@@ -442,6 +465,32 @@ def complete(
             "source_asset_id": str(result.source_asset_id),
             "asset_id": str(result.asset_id),
         }
+        terminal(db, job, attempt, "succeeded")
+    elif job.kind == "audio.separate":
+        if data.outputs:
+            raise fail(422, "unsupported_operation", "Stems use the leased upload endpoint")
+        try:
+            result = StemResult.model_validate(data.result)
+            inputs = SeparateInput.model_validate(job.parameters)
+        except ValueError:
+            raise fail(422, "invalid_result", "Invalid stem result") from None
+        rows = db.scalars(select(Stem).where(Stem.stem_set_id == inputs.stem_set_id, Stem.workspace_id == job.workspace_id)).all()
+        if result.stem_set_id != inputs.stem_set_id or set(result.asset_ids) != set(LABELS) or {row.label: row.asset_id for row in rows} != result.asset_ids:
+            raise fail(422, "invalid_result", "Four stored stems are required")
+        attempt.result = result.model_dump(mode="json")
+        terminal(db, job, attempt, "succeeded")
+    elif job.kind == "audio.mix":
+        if data.outputs:
+            raise fail(422, "unsupported_operation", "Mixes use the leased upload endpoint")
+        try:
+            result = MixResult.model_validate(data.result)
+            inputs = MixInput.model_validate(job.parameters)
+        except ValueError:
+            raise fail(422, "invalid_result", "Invalid mix result") from None
+        version = db.scalar(select(MixVersion).where(MixVersion.asset_id == result.asset_id, MixVersion.stem_set_id == inputs.stem_set_id, MixVersion.workspace_id == job.workspace_id))
+        if result.stem_set_id != inputs.stem_set_id or job.result_asset_id != result.asset_id or version is None:
+            raise fail(422, "invalid_result", "Stored mix does not match this job")
+        attempt.result = result.model_dump(mode="json")
         terminal(db, job, attempt, "succeeded")
     elif job.kind == "producer.plan":
         if data.outputs:
@@ -748,6 +797,106 @@ async def upload_tempo_output(
         raise fail(413, "output_too_large", "Derived audio exceeds 100 MiB") from None
     except InvalidMedia:
         raise fail(422, "invalid_output", "Derived output is unsupported audio") from None
+    except (StorageError, OSError):
+        raise fail(503, "storage_unavailable", "Audio storage is unavailable") from None
+    finally:
+        if not committed:
+            db.rollback()
+            if key:
+                try:
+                    storage(request).delete_uncommitted(key)
+                except (StorageError, OSError):
+                    pass
+
+
+@router.put(INTERNAL + "/stems/{label}")
+async def upload_stem_output(
+    job_id: UUID, number: int, label: str, request: Request, service: Service, db: DB
+) -> dict:
+    job, _ = leased(db, job_id, number, request)
+    if job.kind != "audio.separate" or job.state in TERMINAL or label not in LABELS:
+        raise fail(409, "output_unavailable", "This job cannot accept a stem")
+    inputs = SeparateInput.model_validate(job.parameters)
+    stem_set = scoped(db, StemSet, inputs.stem_set_id, job.workspace_id)
+    existing = db.scalar(select(Stem).where(Stem.stem_set_id == stem_set.id, Stem.label == label, Stem.workspace_id == job.workspace_id))
+    if existing:
+        return {"asset_id": existing.asset_id, "already_present": True}
+    if request.headers.get("content-type", "").split(";", 1)[0].lower() != "audio/flac":
+        raise fail(422, "invalid_output", "Stem output must be FLAC audio")
+    source = scoped(db, AudioAsset, inputs.source_asset_id, job.workspace_id)
+    key = None
+    committed = False
+    try:
+        store = storage(request)
+        key, size, digest = store.save_upload(io.BytesIO(await request.body()))
+        media = probe_audio(store.path_for(key))
+        if media["media_type"] != "audio/flac" or abs(media["duration_seconds"] - source.duration_seconds) > max(1, source.duration_seconds * 0.02):
+            raise fail(422, "invalid_output", "Stem duration or format does not match its source")
+        asset = AudioAsset(workspace_id=job.workspace_id, project_id=job.project_id, song_id=source.song_id, kind="stem", original_filename=safe_filename(f"{label}-{stem_set.id}.flac"), storage_key=key, byte_size=size, sha256=digest, **media)
+        db.add(asset)
+        db.flush()
+        db.add(AssetLineage(workspace_id=job.workspace_id, project_id=job.project_id, parent_asset_id=source.id, child_asset_id=asset.id, operation="stem.separate", parameters={"engine": inputs.engine, "engine_version": inputs.engine_version, "label": label, "stem_set_id": str(stem_set.id)}))
+        db.add(Stem(workspace_id=job.workspace_id, project_id=job.project_id, stem_set_id=stem_set.id, asset_id=asset.id, label=label))
+        db.commit()
+        committed = True
+        return {"asset_id": asset.id, "already_present": False}
+    except UploadTooLarge:
+        raise fail(413, "output_too_large", "Stem exceeds 100 MiB") from None
+    except InvalidMedia:
+        raise fail(422, "invalid_output", "Stem is unsupported audio") from None
+    except (StorageError, OSError):
+        raise fail(503, "storage_unavailable", "Audio storage is unavailable") from None
+    finally:
+        if not committed:
+            db.rollback()
+            if key:
+                try:
+                    storage(request).delete_uncommitted(key)
+                except (StorageError, OSError):
+                    pass
+
+
+@router.put(INTERNAL + "/mix-audio")
+async def upload_mix_output(
+    job_id: UUID, number: int, request: Request, service: Service, db: DB
+) -> dict:
+    job, _ = leased(db, job_id, number, request)
+    if job.kind != "audio.mix" or job.state in TERMINAL:
+        raise fail(409, "output_unavailable", "This job cannot accept a mix")
+    if job.result_asset_id:
+        return {"asset_id": job.result_asset_id, "already_present": True}
+    if request.headers.get("content-type", "").split(";", 1)[0].lower() != "audio/flac":
+        raise fail(422, "invalid_output", "Mix output must be FLAC audio")
+    inputs = MixInput.model_validate(job.parameters)
+    stem_set = scoped(db, StemSet, inputs.stem_set_id, job.workspace_id)
+    source = scoped(db, AudioAsset, stem_set.source_asset_id, job.workspace_id)
+    stems = db.scalars(select(Stem).where(Stem.stem_set_id == stem_set.id, Stem.workspace_id == job.workspace_id)).all()
+    if {row.label for row in stems} != set(LABELS):
+        raise fail(409, "stems_incomplete", "Four stems are required")
+    key = None
+    committed = False
+    try:
+        store = storage(request)
+        key, size, digest = store.save_upload(io.BytesIO(await request.body()))
+        media = probe_audio(store.path_for(key))
+        if media["media_type"] != "audio/flac" or abs(media["duration_seconds"] - source.duration_seconds) > max(1, source.duration_seconds * 0.02):
+            raise fail(422, "invalid_output", "Mix duration or format does not match its source")
+        db.execute(text("SELECT pg_advisory_xact_lock(hashtext(:key))"), {"key": str(stem_set.id)})
+        version = (db.scalar(select(func.max(MixVersion.version)).where(MixVersion.stem_set_id == stem_set.id)) or 0) + 1
+        asset = AudioAsset(workspace_id=job.workspace_id, project_id=job.project_id, song_id=source.song_id, kind="mix", original_filename=safe_filename(f"mix-{stem_set.id}-v{version}.flac"), storage_key=key, byte_size=size, sha256=digest, **media)
+        db.add(asset)
+        db.flush()
+        for stem in stems:
+            db.add(AssetLineage(workspace_id=job.workspace_id, project_id=job.project_id, parent_asset_id=stem.asset_id, child_asset_id=asset.id, operation="stem.mix", parameters={"stem_set_id": str(stem_set.id), "version": version, "levels": inputs.levels}))
+        db.add(MixVersion(workspace_id=job.workspace_id, project_id=job.project_id, stem_set_id=stem_set.id, asset_id=asset.id, version=version, levels=inputs.levels))
+        job.result_asset_id = asset.id
+        db.commit()
+        committed = True
+        return {"asset_id": asset.id, "already_present": False}
+    except UploadTooLarge:
+        raise fail(413, "output_too_large", "Mix exceeds 100 MiB") from None
+    except InvalidMedia:
+        raise fail(422, "invalid_output", "Mix is unsupported audio") from None
     except (StorageError, OSError):
         raise fail(503, "storage_unavailable", "Audio storage is unavailable") from None
     finally:

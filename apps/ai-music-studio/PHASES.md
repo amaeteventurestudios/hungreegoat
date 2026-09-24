@@ -34,7 +34,7 @@ Missing provider credentials block only the live provider call requiring them. B
 
 ## Current Status
 
-Phases 00–11 are verified. Phase 06 uses a restricted local OSS runtime identity;
+Phases 00–12 are verified locally. Phase 06 uses a restricted local OSS runtime identity;
 Phase 07 has provider-neutral structured-plan adapters; and Phase 08 has a
 provider-neutral durable generation contract, ElevenLabs worker adapter, bounded
 leased audio intake, immutable generated assets and responsive Version A–D UI.
@@ -42,7 +42,7 @@ Fixture coverage verifies the paid-provider path without issuing a paid request.
 Phase 09 adds authenticated WaveSurfer A/B review and durable, mutually exclusive
 approval/rejection decisions. Phase 10 adds non-destructive section timelines and
 immutable arrangement revisions. Phase 11 adds real leased audio analysis and
-lineage-linked tempo/pitch variants. Phase 12 is the next dependency-ready checkpoint. See the active execution record
+lineage-linked tempo/pitch variants. Phase 12 adds real Demucs four-stem separation, a synchronized mixer, and immutable lineage-linked mix versions. Phase 13 is the next dependency-ready checkpoint. See the active execution record
 for current evidence.
 
 ## Completion

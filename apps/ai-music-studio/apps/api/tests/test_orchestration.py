@@ -834,3 +834,60 @@ def test_unknown_outcome_blocks_retry_and_worker_secrets_are_private(orchestrati
     assert browser.post(f"/api/v1/jobs/{id}/retry").status_code == 409
     alljobs = browser.get("/api/v1/jobs?state=failed").json()["items"]
     assert alljobs[0]["id"] == str(id)
+
+
+def test_stem_separation_and_mix_are_leased_immutable_and_scoped(orchestration, tmp_path):
+    browser, _, engine, diagnostic_id, _ = orchestration
+    project_id = browser.get(f"/api/v1/jobs/{diagnostic_id}").json()["project_id"]
+    song = browser.post(f"/api/v1/projects/{project_id}/songs", json={"title": "Stem test"}).json()
+    original = wav_bytes()
+    source = browser.post(f"/api/v1/projects/{project_id}/assets/upload", files={"file": ("source.wav", original, "audio/wav")}, data={"song_id": song["id"]}).json()
+    url = f"/api/v1/assets/{source['id']}/stem-sets"
+    key = str(uuid4())
+    queued = browser.post(url, json={"idempotency_key": key})
+    assert queued.status_code == 202, queued.text
+    assert browser.post(url, json={"idempotency_key": key}).json()["job_id"] == queued.json()["job_id"]
+    job_id = UUID(queued.json()["job_id"])
+    stem_set_id = queued.json()["stem_set_id"]
+    with Session(engine) as db:
+        attempt = db.scalar(select(JobAttempt).where(JobAttempt.job_id == job_id))
+    lease = claim(browser, job_id, attempt.execution_id)
+    base = f"/api/v1/internal/jobs/{job_id}/attempts/1"
+    flac_path = tmp_path / "stem.flac"
+    subprocess.run(["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "anullsrc=r=22050:cl=mono", "-t", "0.8", "-c:a", "flac", str(flac_path)], check=True, timeout=20)
+    flac = flac_path.read_bytes()
+    browser.headers.pop("Origin")
+    stems = {}
+    for label in ("vocals", "drums", "bass", "other"):
+        uploaded = browser.put(base + f"/stems/{label}", content=flac, headers={**worker_headers(lease), "Content-Type": "audio/flac"})
+        assert uploaded.status_code == 200, uploaded.text
+        stems[label] = uploaded.json()["asset_id"]
+        assert browser.put(base + f"/stems/{label}", content=b"bad", headers={**worker_headers(lease), "Content-Type": "audio/flac"}).json()["asset_id"] == stems[label]
+    completed = browser.post(base + "/complete", headers=worker_headers(lease), json={"outputs": [], "result": {"stem_set_id": stem_set_id, "asset_ids": stems}})
+    assert completed.status_code == 200, completed.text
+    browser.headers["Origin"] = ORIGIN
+    listed = browser.get(url).json()["items"]
+    assert len(listed) == 1 and len(listed[0]["stems"]) == 4
+    assert all(browser.get(f"/api/v1/assets/{asset_id}/lineage").json()["items"][0]["parent_asset_id"] == source["id"] for asset_id in stems.values())
+    mix_url = f"/api/v1/stem-sets/{stem_set_id}/mix-versions"
+    levels = {"vocals": 0.8, "drums": 1.0, "bass": 0.4, "other": 0.0}
+    assert browser.post(mix_url, json={"idempotency_key": str(uuid4()), "levels": {"vocals": 1.0}}).status_code == 422
+    mix_job = browser.post(mix_url, json={"idempotency_key": str(uuid4()), "levels": levels})
+    assert mix_job.status_code == 202, mix_job.text
+    mix_id = UUID(mix_job.json()["job_id"])
+    with Session(engine) as db:
+        mix_attempt = db.scalar(select(JobAttempt).where(JobAttempt.job_id == mix_id))
+    mix_lease = claim(browser, mix_id, mix_attempt.execution_id)
+    mix_base = f"/api/v1/internal/jobs/{mix_id}/attempts/1"
+    browser.headers.pop("Origin")
+    mixed = browser.put(mix_base + "/mix-audio", content=flac, headers={**worker_headers(mix_lease), "Content-Type": "audio/flac"})
+    assert mixed.status_code == 200, mixed.text
+    mix_asset = mixed.json()["asset_id"]
+    done = browser.post(mix_base + "/complete", headers=worker_headers(mix_lease), json={"outputs": [], "result": {"stem_set_id": stem_set_id, "asset_id": mix_asset}})
+    assert done.status_code == 200, done.text
+    browser.headers["Origin"] = ORIGIN
+    versions = browser.get(mix_url).json()["items"]
+    assert len(versions) == 1 and versions[0]["asset_id"] == mix_asset and versions[0]["levels"] == levels
+    parents = {row["parent_asset_id"] for row in browser.get(f"/api/v1/assets/{mix_asset}/lineage").json()["items"]}
+    assert parents == set(stems.values())
+    assert browser.get(f"/api/v1/assets/{source['id']}/stream").content == original

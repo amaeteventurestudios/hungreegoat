@@ -350,3 +350,32 @@ invalid-output paths. API: 45 tests; worker: 8 tests; lint/typecheck/build pass;
 the rebuilt local stack passed the no-credential Producer browser flow. No provider
 credential exists locally, so no paid request was made; Phase 08 continues with
 the same fixture-first rule.
+
+### Phase 08–11 accepted checkpoints (2026-09-23)
+
+Phase 08 added durable provider-neutral generations with four immutable outputs,
+the ElevenLabs leased adapter, bounded audio intake, and safe/unknown retry
+semantics. Phase 09 added authenticated WaveSurfer A/B review with durable
+favorite/approve/reject/notes decisions. Phase 10 added optimistic immutable
+arrangement plans linked to approved versions, with an honest metadata-only
+fallback where section-targeted audio regeneration is unsupported. Phase 11
+added real Librosa/FFmpeg analysis and Rubber Band tempo/pitch FLAC variants.
+All four checkpoints passed their API/worker/browser gates and were pushed to
+`origin/main`; Phase 11 is commit `a0de5ce`. The real local Phase 11 workflow
+verified source SHA-256 preservation and lineage.
+
+### Phase 12 implementation and acceptance (2026-09-23)
+
+`audio.separate` creates a four-label `StemSet` through the leased worker.
+Demucs 4.0.1 `htdemucs` runs CPU-only on a normalized source with seven-second
+segments; weights are baked into the worker image to remove first-use network
+dependency. Each FLAC stem commits atomically with source lineage, and retry
+resumes committed labels. `audio.mix` renders a new version from all four stems
+with gain levels, four parent lineage edges, and serialized version numbers.
+FFmpeg threads are explicitly bounded after the real worker exposed a process
+limit failure. The browser mixer supports synchronized playback, mute, solo,
+gain, stem downloads, and immutable mix history. The real local fixture passed
+all four stems and mix, source checksum unchanged; 50 API tests, 14 worker-image
+tests, full 116-test browser regression, offline model load, build, schema-drift,
+and protected-boundary checks passed. The final post-image rebuild fixture also
+passed; commit this checkpoint and proceed to Phase 13.

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import sys
 import time
 from typing import Any
 from uuid import UUID, uuid4
@@ -17,6 +18,7 @@ from studio_worker.runtime import (
     WorkerContext,
     WorkerFailure,
 )
+from studio_worker.stems import LABELS, StemSeparator, mix_stems
 
 
 def diagnostic(context: WorkerContext) -> dict[str, Any]:
@@ -177,6 +179,44 @@ def tempo_version(context: WorkerContext) -> dict[str, Any]:
     return {"source_asset_id": source_id, "asset_id": asset_id}
 
 
+def separate_stems(context: WorkerContext) -> dict[str, Any]:
+    inputs = context.claim["inputs"]
+    if inputs.get("engine_version") != StemSeparator.version or not isinstance(inputs.get("source_key"), str):
+        raise WorkerFailure("invalid_stem_input", "Stem separation inputs are invalid")
+    completed = inputs.get("completed_stems", {})
+    if not isinstance(completed, dict) or not set(completed).issubset(LABELS):
+        raise WorkerFailure("invalid_stem_input", "Stem separation inputs are invalid")
+    if set(completed) != set(LABELS):
+        context.progress(10, "separating")
+        rendered = StemSeparator().separate(source_path(inputs["source_key"]), context.check_cancelled)
+        for index, label in enumerate(LABELS):
+            context.check_cancelled()
+            if label not in completed:
+                context.progress(70 + index * 5, "uploading")
+                uploaded = context.client.upload_derived_audio(rendered[label], f"/stems/{label}")
+                completed[label] = uploaded["asset_id"]
+    context.progress(95, "finishing")
+    return {"stem_set_id": inputs["stem_set_id"], "asset_ids": completed}
+
+
+def render_mix(context: WorkerContext) -> dict[str, Any]:
+    inputs = context.claim["inputs"]
+    if not isinstance(inputs.get("stem_set_id"), str):
+        raise WorkerFailure("invalid_mix_input", "Mix inputs are invalid")
+    if inputs.get("completed_asset_id"):
+        return {"stem_set_id": inputs["stem_set_id"], "asset_id": inputs["completed_asset_id"]}
+    keys = inputs.get("stem_keys")
+    if not isinstance(keys, dict) or set(keys) != set(LABELS):
+        raise WorkerFailure("invalid_mix_input", "Four stems are required")
+    context.progress(15, "mixing")
+    audio = mix_stems({label: source_path(keys[label]) for label in LABELS}, inputs["levels"], context.check_cancelled)
+    context.check_cancelled()
+    context.progress(85, "uploading")
+    uploaded = context.client.upload_derived_audio(audio, "/mix-audio")
+    context.progress(95, "finishing")
+    return {"stem_set_id": inputs["stem_set_id"], "asset_id": uploaded["asset_id"]}
+
+
 def execute(job_id: str, attempt: int) -> dict[str, Any]:
     client = WorkerClient(job_id, attempt)
     execution_id = str(UUID(os.environ["WM_JOB_ID"]))
@@ -221,6 +261,10 @@ def execute(job_id: str, attempt: int) -> dict[str, Any]:
             result = audio_analysis(context)
         elif claim["kind"] == "audio.tempo":
             result = tempo_version(context)
+        elif claim["kind"] == "audio.separate":
+            result = separate_stems(context)
+        elif claim["kind"] == "audio.mix":
+            result = render_mix(context)
         else:
             raise WorkerFailure(
                 "unsupported_job", "This worker does not support the requested job"
@@ -245,13 +289,15 @@ def execute(job_id: str, attempt: int) -> dict[str, Any]:
         raise RuntimeError(
             "Studio worker connection interrupted; reconciliation is required"
         ) from None
-    except Exception:  # noqa: BLE001 - sanitize every unexpected adapter failure
+    except Exception as error:  # noqa: BLE001 - sanitize every unexpected adapter failure
+        print(f"Studio worker unexpected failure: {claim['kind']} {type(error).__name__}", file=sys.stderr)
         failure = WorkerFailure(
             "worker_failed", "Worker could not complete the operation"
         )
     finally:
         context.stop()
     if failure:
+        print(f"Studio worker failure: {claim['kind']} {failure.code}", file=sys.stderr)
         try:
             failed = client.call(
                 "/fail",

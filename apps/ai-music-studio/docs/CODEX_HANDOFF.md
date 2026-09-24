@@ -3,9 +3,9 @@
 ## Current State
 
 - Model / effort: Terra High.
-- Usage: weekly 15% used / 85% remaining at the last live guard; check again before the next batch.
-- Current phase: 12 — Stem Separation and Mixing.
-- Last committed Studio checkpoint before Phase 11: `7f2c602 feat(studio): add immutable arrangement revisions` (pushed to `origin/main`).
+- Usage: weekly 19% used / 81% remaining at the last live guard; check again before the next batch.
+- Current phase: 13 — Mastering and Export after the Phase 12 checkpoint.
+- Last pushed Studio checkpoint before Phase 12: `a0de5ce feat(studio): add durable audio analysis and tempo variants` (remote `main`).
 
 ## Completed
 
@@ -20,6 +20,7 @@
 - Phase 09 is complete: authenticated WaveSurfer A/B waveform playback and seeking, position-preserving exclusive switching, persistent favorite/notes/approve/reject review, provider metadata, and an explicit Generate-more link. Migration `0007_review_rejection` adds a mutually exclusive rejection decision. API 46 tests, web lint/typecheck/build, real migration check, four-viewport targeted browser playback/review, and the full 104-test browser regression pass.
 - Phase 10 is complete locally: approved ready generated versions can own immutable section-plan revisions. The Studio API validates sections and serializes saves with a source-version lock and optimistic base revision. The timeline inspector supports section duration, energy, instrumentation, production/vocal notes, add/remove/reorder, and restoration of history as a new revision. No source audio is modified or paid regeneration implied. API 46 tests, targeted four-viewport browser revision tests, and the full 108-test browser regression pass.
 - Phase 11 is complete locally: durable `audio.analyze` and `audio.tempo` jobs use the restricted worker, read-only source assets, FFprobe/Librosa/SoundFile/EBU R128 analysis, FFmpeg Rubber Band rendering, lease-bound FLAC intake, immutable tempo versions and lineage. Interrupted deterministic local audio jobs are safely retryable; provider jobs remain outcome-unknown after an ambiguous crash. The real local workflow passed analysis and tempo rendering on an original rhythmic WAV and verified the source SHA-256. API 49 tests, 13 worker-image tests, targeted four-viewport browser tests, and the full 112-test browser regression pass.
+- Phase 12 is complete locally: `audio.separate` and `audio.mix` durable jobs, Demucs 4.0.1 `htdemucs` behind `StemSeparator`, four leased stem intakes, immutable mixes and lineage, and synchronized mixer controls. The real local four-second fixture passed twice, including after the final image rebuild, with four stem lineage checks, four-parent mix lineage, and original SHA-256 preservation. API 50 tests, 14 worker-image tests, full 116-test responsive browser suite, targeted post-rebuild UI test, Alembic drift, lint/typecheck/build and protected-boundary checks pass. Demucs weights are baked into the image and load without network.
 
 ## Runtime
 
@@ -29,7 +30,7 @@
 
 ## Current Technical Position
 
-Pinned Windmill OSS v1.817.0 rejects ordinary-user creation through its documented CLI/UI endpoint. This is resolved by the narrowly scoped local database bootstrap described above. Phase 12 can build on the existing `StemSet`, `Stem`, and `MixVersion` tables and immutable asset lineage; live paid-provider generation remains separately dependent on configured provider credentials. The production hostname currently fails TLS handshake (`unrecognized name`) at its configured gateway IP; this remains Phase 14 deployment work, not a reason to idle local phases.
+Pinned Windmill OSS v1.817.0 rejects ordinary-user creation through its documented CLI/UI endpoint. This is resolved by the narrowly scoped local database bootstrap described above. Phase 13 can build on the existing `Master` entity and immutable asset lineage; live paid-provider generation remains separately dependent on configured provider credentials. The production hostname currently fails TLS handshake (`unrecognized name`) at its configured gateway IP; this remains Phase 14 deployment work, not a reason to idle local phases.
 
 ## Protected Unrelated Work
 
@@ -40,5 +41,5 @@ Pinned Windmill OSS v1.817.0 rejects ordinary-user creation through its document
 ## Resume
 
 1. Run `/home/aumanah/.local/bin/codex-usage-guard` and print the normalized usage line.
-2. Read the current Phase 12 stem separation and mixing document and execution-plan records.
-3. Implement the next dependency-ready Phase 12 slice; keep stems and mix revisions durable, non-destructive, and lineage-tracked.
+2. Commit and push the verified Phase 12 Studio-only changes, then check usage.
+3. Continue directly into Phase 13 mastering and export. Preserve source, reference, stems, and mix assets.
