@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from studio_api.audio import AudioAnalyzeJobInput, TempoJobInput
 from studio_api.auth import fail
 from studio_api.domain_models import AudioAsset, Generation, Job, JobEvent, StemSet
+from studio_api.mastering import ExportInput, MasterInput
 from studio_api.models import utcnow
 from studio_api.music import MusicGenerationJobInput
 from studio_api.orchestration_models import JobAttempt, JobOutbox
@@ -17,7 +18,16 @@ from studio_api.schemas import StrictModel
 from studio_api.stems import ENGINE, ENGINE_VERSION, MixInput, SeparateInput
 
 TERMINAL = {"succeeded", "failed", "cancelled"}
-INTERRUPTION_RETRY_KINDS = {"system.verify", "audio.analyze", "audio.tempo", "audio.separate", "audio.mix"}
+INTERRUPTION_RETRY_KINDS = {
+    "system.verify",
+    "audio.analyze",
+    "audio.tempo",
+    "audio.separate",
+    "audio.mix",
+    "audio.master",
+    "audio.export",
+    "audio.stems_package",
+}
 LEASE_SECONDS = 90
 
 
@@ -248,16 +258,37 @@ def create_tempo_variant(
 
 def create_stem_set(db: Session, asset: AudioAsset, idempotency_key: UUID) -> tuple[StemSet, Job]:
     db.execute(text("SELECT pg_advisory_xact_lock(hashtext(:key))"), {"key": str(idempotency_key)})
-    existing = db.scalar(select(Job).where(Job.workspace_id == asset.workspace_id, Job.idempotency_key == idempotency_key))
+    existing = db.scalar(
+        select(Job).where(
+            Job.workspace_id == asset.workspace_id, Job.idempotency_key == idempotency_key
+        )
+    )
     if existing:
-        if existing.kind != "audio.separate" or existing.project_id != asset.project_id or existing.parameters.get("source_asset_id") != str(asset.id):
+        if (
+            existing.kind != "audio.separate"
+            or existing.project_id != asset.project_id
+            or existing.parameters.get("source_asset_id") != str(asset.id)
+        ):
             raise ValueError("Idempotency key already belongs to another request")
         return db.get(StemSet, existing.parameters["stem_set_id"]), existing
-    stem_set = StemSet(workspace_id=asset.workspace_id, project_id=asset.project_id, source_asset_id=asset.id, engine=ENGINE, engine_version=ENGINE_VERSION)
+    stem_set = StemSet(
+        workspace_id=asset.workspace_id,
+        project_id=asset.project_id,
+        source_asset_id=asset.id,
+        engine=ENGINE,
+        engine_version=ENGINE_VERSION,
+    )
     db.add(stem_set)
     db.flush()
     inputs = SeparateInput(source_asset_id=asset.id, stem_set_id=stem_set.id)
-    job = Job(workspace_id=asset.workspace_id, project_id=asset.project_id, song_id=asset.song_id, kind="audio.separate", parameters=inputs.model_dump(mode="json"), idempotency_key=idempotency_key)
+    job = Job(
+        workspace_id=asset.workspace_id,
+        project_id=asset.project_id,
+        song_id=asset.song_id,
+        kind="audio.separate",
+        parameters=inputs.model_dump(mode="json"),
+        idempotency_key=idempotency_key,
+    )
     db.add(job)
     db.flush()
     add_attempt(db, job)
@@ -266,21 +297,109 @@ def create_stem_set(db: Session, asset: AudioAsset, idempotency_key: UUID) -> tu
     return stem_set, job
 
 
-def create_mix(db: Session, stem_set: StemSet, song_id: UUID | None, idempotency_key: UUID, inputs: MixInput) -> Job:
+def create_mix(
+    db: Session, stem_set: StemSet, song_id: UUID | None, idempotency_key: UUID, inputs: MixInput
+) -> Job:
     db.execute(text("SELECT pg_advisory_xact_lock(hashtext(:key))"), {"key": str(idempotency_key)})
-    existing = db.scalar(select(Job).where(Job.workspace_id == stem_set.workspace_id, Job.idempotency_key == idempotency_key))
+    existing = db.scalar(
+        select(Job).where(
+            Job.workspace_id == stem_set.workspace_id, Job.idempotency_key == idempotency_key
+        )
+    )
     payload = inputs.model_dump(mode="json")
     if existing:
-        if existing.kind != "audio.mix" or existing.project_id != stem_set.project_id or existing.parameters != payload:
+        if (
+            existing.kind != "audio.mix"
+            or existing.project_id != stem_set.project_id
+            or existing.parameters != payload
+        ):
             raise ValueError("Idempotency key already belongs to another request")
         return existing
-    job = Job(workspace_id=stem_set.workspace_id, project_id=stem_set.project_id, song_id=song_id, kind="audio.mix", parameters=payload, idempotency_key=idempotency_key)
+    job = Job(
+        workspace_id=stem_set.workspace_id,
+        project_id=stem_set.project_id,
+        song_id=song_id,
+        kind="audio.mix",
+        parameters=payload,
+        idempotency_key=idempotency_key,
+    )
     db.add(job)
     db.flush()
     add_attempt(db, job)
     event(db, job, "Stem mix queued")
     db.commit()
     return job
+
+
+def _create_derived_job(
+    db: Session, asset: AudioAsset, idempotency_key: UUID, kind: str, payload: dict, message: str
+) -> Job:
+    db.execute(text("SELECT pg_advisory_xact_lock(hashtext(:key))"), {"key": str(idempotency_key)})
+    existing = db.scalar(
+        select(Job).where(
+            Job.workspace_id == asset.workspace_id, Job.idempotency_key == idempotency_key
+        )
+    )
+    if existing:
+        if (
+            existing.kind != kind
+            or existing.project_id != asset.project_id
+            or existing.parameters != payload
+        ):
+            raise ValueError("Idempotency key already belongs to another request")
+        return existing
+    job = Job(
+        workspace_id=asset.workspace_id,
+        project_id=asset.project_id,
+        song_id=asset.song_id,
+        kind=kind,
+        parameters=payload,
+        idempotency_key=idempotency_key,
+    )
+    db.add(job)
+    db.flush()
+    add_attempt(db, job)
+    event(db, job, message)
+    db.commit()
+    return job
+
+
+def create_master(
+    db: Session, asset: AudioAsset, idempotency_key: UUID, inputs: MasterInput
+) -> Job:
+    return _create_derived_job(
+        db,
+        asset,
+        idempotency_key,
+        "audio.master",
+        inputs.model_dump(mode="json"),
+        "Mastering queued",
+    )
+
+
+def create_export(
+    db: Session, asset: AudioAsset, idempotency_key: UUID, inputs: ExportInput
+) -> Job:
+    return _create_derived_job(
+        db,
+        asset,
+        idempotency_key,
+        "audio.export",
+        inputs.model_dump(mode="json"),
+        "Audio export queued",
+    )
+
+
+def create_stem_package_job(db: Session, stem_set: StemSet, idempotency_key: UUID) -> Job:
+    source = db.get(AudioAsset, stem_set.source_asset_id)
+    return _create_derived_job(
+        db,
+        source,
+        idempotency_key,
+        "audio.stems_package",
+        {"stem_set_id": str(stem_set.id)},
+        "Stem package queued",
+    )
 
 
 def locked_job(db: Session, job_id: UUID, workspace_id: UUID | None = None) -> Job:

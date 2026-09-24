@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import os
 import sys
 import time
+import zipfile
 from typing import Any
 from uuid import UUID, uuid4
 
 from studio_worker.audio import analyze_audio, render_tempo, source_path
+from studio_worker.mastering import render_export, render_master
 from studio_worker.music import request_music
 from studio_worker.producer import create_plan
 from studio_worker.runtime import (
@@ -181,19 +184,25 @@ def tempo_version(context: WorkerContext) -> dict[str, Any]:
 
 def separate_stems(context: WorkerContext) -> dict[str, Any]:
     inputs = context.claim["inputs"]
-    if inputs.get("engine_version") != StemSeparator.version or not isinstance(inputs.get("source_key"), str):
+    if inputs.get("engine_version") != StemSeparator.version or not isinstance(
+        inputs.get("source_key"), str
+    ):
         raise WorkerFailure("invalid_stem_input", "Stem separation inputs are invalid")
     completed = inputs.get("completed_stems", {})
     if not isinstance(completed, dict) or not set(completed).issubset(LABELS):
         raise WorkerFailure("invalid_stem_input", "Stem separation inputs are invalid")
     if set(completed) != set(LABELS):
         context.progress(10, "separating")
-        rendered = StemSeparator().separate(source_path(inputs["source_key"]), context.check_cancelled)
+        rendered = StemSeparator().separate(
+            source_path(inputs["source_key"]), context.check_cancelled
+        )
         for index, label in enumerate(LABELS):
             context.check_cancelled()
             if label not in completed:
                 context.progress(70 + index * 5, "uploading")
-                uploaded = context.client.upload_derived_audio(rendered[label], f"/stems/{label}")
+                uploaded = context.client.upload_derived_audio(
+                    rendered[label], f"/stems/{label}"
+                )
                 completed[label] = uploaded["asset_id"]
     context.progress(95, "finishing")
     return {"stem_set_id": inputs["stem_set_id"], "asset_ids": completed}
@@ -204,17 +213,114 @@ def render_mix(context: WorkerContext) -> dict[str, Any]:
     if not isinstance(inputs.get("stem_set_id"), str):
         raise WorkerFailure("invalid_mix_input", "Mix inputs are invalid")
     if inputs.get("completed_asset_id"):
-        return {"stem_set_id": inputs["stem_set_id"], "asset_id": inputs["completed_asset_id"]}
+        return {
+            "stem_set_id": inputs["stem_set_id"],
+            "asset_id": inputs["completed_asset_id"],
+        }
     keys = inputs.get("stem_keys")
     if not isinstance(keys, dict) or set(keys) != set(LABELS):
         raise WorkerFailure("invalid_mix_input", "Four stems are required")
     context.progress(15, "mixing")
-    audio = mix_stems({label: source_path(keys[label]) for label in LABELS}, inputs["levels"], context.check_cancelled)
+    audio = mix_stems(
+        {label: source_path(keys[label]) for label in LABELS},
+        inputs["levels"],
+        context.check_cancelled,
+    )
     context.check_cancelled()
     context.progress(85, "uploading")
     uploaded = context.client.upload_derived_audio(audio, "/mix-audio")
     context.progress(95, "finishing")
     return {"stem_set_id": inputs["stem_set_id"], "asset_id": uploaded["asset_id"]}
+
+
+def master_audio(context: WorkerContext) -> dict[str, Any]:
+    inputs = context.claim["inputs"]
+    source_id, source_key = inputs.get("source_asset_id"), inputs.get("source_key")
+    if not isinstance(source_id, str) or not isinstance(source_key, str):
+        raise WorkerFailure("invalid_master_input", "Master source is invalid")
+    if inputs.get("completed_asset_id"):
+        return {"source_asset_id": source_id, "asset_id": inputs["completed_asset_id"]}
+    reference_key = inputs.get("reference_key")
+    if reference_key is not None and not isinstance(reference_key, str):
+        raise WorkerFailure("invalid_master_input", "Master reference is invalid")
+    context.progress(15, "mastering")
+    audio = render_master(
+        source_path(source_key),
+        source_path(reference_key) if reference_key else None,
+        inputs,
+        context.check_cancelled,
+    )
+    context.check_cancelled()
+    context.progress(85, "uploading")
+    uploaded = context.client.upload_derived_audio(audio, "/master-audio")
+    context.progress(95, "finishing")
+    return {"source_asset_id": source_id, "asset_id": uploaded["asset_id"]}
+
+
+def export_audio(context: WorkerContext) -> dict[str, Any]:
+    inputs = context.claim["inputs"]
+    source_id, source_key = inputs.get("source_asset_id"), inputs.get("source_key")
+    if not isinstance(source_id, str) or not isinstance(source_key, str):
+        raise WorkerFailure("invalid_export_input", "Export source is invalid")
+    if inputs.get("completed_asset_id"):
+        return {
+            "source_asset_id": source_id,
+            "asset_id": inputs["completed_asset_id"],
+            "format": inputs["format"],
+        }
+    context.progress(20, "exporting")
+    audio = render_export(source_path(source_key), inputs, context.check_cancelled)
+    context.check_cancelled()
+    context.progress(85, "uploading")
+    media = "audio/wav" if inputs["format"] == "wav" else "audio/mpeg"
+    uploaded = context.client.upload_derived_audio(audio, "/export-audio", media)
+    context.progress(95, "finishing")
+    return {
+        "source_asset_id": source_id,
+        "asset_id": uploaded["asset_id"],
+        "format": inputs["format"],
+    }
+
+
+def package_stems(context: WorkerContext) -> dict[str, Any]:
+    inputs = context.claim["inputs"]
+    stem_set_id, keys = inputs.get("stem_set_id"), inputs.get("stem_keys")
+    if (
+        not isinstance(stem_set_id, str)
+        or not isinstance(keys, dict)
+        or set(keys) != set(LABELS)
+    ):
+        raise WorkerFailure("invalid_package_input", "Four stems are required")
+    if inputs.get("completed_package_id"):
+        return {
+            "stem_set_id": stem_set_id,
+            "package_id": inputs["completed_package_id"],
+        }
+    context.progress(20, "packaging")
+    output = io.BytesIO()
+    with zipfile.ZipFile(
+        output, "w", compression=zipfile.ZIP_STORED, allowZip64=False
+    ) as archive:
+        for label in LABELS:
+            context.check_cancelled()
+            path = source_path(keys[label])
+            with (
+                path.open("rb") as handle,
+                archive.open(f"{label}.flac", "w") as member,
+            ):
+                while chunk := handle.read(1024 * 1024):
+                    member.write(chunk)
+                    if output.tell() > 100 * 1024 * 1024:
+                        raise WorkerFailure(
+                            "package_too_large", "Stem package exceeds 100 MiB"
+                        )
+    context.check_cancelled()
+    context.progress(85, "uploading")
+    uploaded = context.client.upload_derived_audio(
+        output.getvalue(), "/stem-package", "application/zip"
+    )
+    context.progress(95, "finishing")
+    return {"stem_set_id": stem_set_id, "package_id": uploaded["package_id"]}
 
 
 def execute(job_id: str, attempt: int) -> dict[str, Any]:
@@ -265,6 +371,12 @@ def execute(job_id: str, attempt: int) -> dict[str, Any]:
             result = separate_stems(context)
         elif claim["kind"] == "audio.mix":
             result = render_mix(context)
+        elif claim["kind"] == "audio.master":
+            result = master_audio(context)
+        elif claim["kind"] == "audio.export":
+            result = export_audio(context)
+        elif claim["kind"] == "audio.stems_package":
+            result = package_stems(context)
         else:
             raise WorkerFailure(
                 "unsupported_job", "This worker does not support the requested job"
@@ -290,7 +402,10 @@ def execute(job_id: str, attempt: int) -> dict[str, Any]:
             "Studio worker connection interrupted; reconciliation is required"
         ) from None
     except Exception as error:  # noqa: BLE001 - sanitize every unexpected adapter failure
-        print(f"Studio worker unexpected failure: {claim['kind']} {type(error).__name__}", file=sys.stderr)
+        print(
+            f"Studio worker unexpected failure: {claim['kind']} {type(error).__name__}",
+            file=sys.stderr,
+        )
         failure = WorkerFailure(
             "worker_failed", "Worker could not complete the operation"
         )

@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import (
     CheckConstraint,
     DateTime,
+    ForeignKey,
     ForeignKeyConstraint,
     Index,
     String,
@@ -323,6 +324,38 @@ class Stem(Identity, ProjectScope, Base):
     stem_set_id: Mapped[UUID]
     asset_id: Mapped[UUID]
     label: Mapped[str] = mapped_column(String(64))
+
+
+class StemPackage(Identity, ProjectScope, Base):
+    """An immutable ZIP delivery artifact for the four members of a stem set.
+
+    This is intentionally not an ``AudioAsset``: its bytes are an archive rather
+    than audio media, while ``manifest`` permanently records the source assets
+    that were packaged.
+    """
+
+    __tablename__ = "stem_packages"
+    __table_args__ = (
+        project_scope(),
+        ForeignKeyConstraint(
+            ["stem_set_id", "project_id", "workspace_id"],
+            ["stem_sets.id", "stem_sets.project_id", "stem_sets.workspace_id"],
+        ),
+        UniqueConstraint("job_id"),
+        UniqueConstraint("storage_key"),
+        CheckConstraint(
+            "byte_size > 0 AND byte_size <= 104857600", name="stem_package_size_range"
+        ),
+    )
+    stem_set_id: Mapped[UUID]
+    # One durable package target per export job; package IDs cannot use Job.result_asset_id.
+    job_id: Mapped[UUID] = mapped_column(ForeignKey("jobs.id"))
+    # Private object-store identifier. It must never be exposed by public routes.
+    storage_key: Mapped[str] = mapped_column(String(80))
+    byte_size: Mapped[int]
+    sha256: Mapped[str] = mapped_column(String(64), index=True)
+    # {label: {"asset_id": "...", "sha256": "..."}} for the immutable source stems.
+    manifest: Mapped[dict] = mapped_column(JSONB)
 
 
 class MixVersion(Identity, ProjectScope, Base):

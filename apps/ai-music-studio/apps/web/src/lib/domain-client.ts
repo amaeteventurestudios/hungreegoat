@@ -24,12 +24,21 @@ export const domain = {
  stemSets:(asset:string)=>apiRequest<{items:StemSet[]}>(`/assets/${encodeURIComponent(asset)}/stem-sets`),
  requestStemSet:(asset:string,key:string,csrf:string|null)=>apiRequest<{stem_set_id:string;job_id:string;state:string}>(`/assets/${encodeURIComponent(asset)}/stem-sets`,{method:"POST",body:{idempotency_key:key},csrf}),
  mixVersions:(stemSet:string)=>apiRequest<{items:MixVersion[]}>(`/stem-sets/${encodeURIComponent(stemSet)}/mix-versions`),
- requestMix:(stemSet:string,body:{idempotency_key:string;levels:StemLevels},csrf:string|null)=>apiRequest<{job_id:string;state:string}>(`/stem-sets/${encodeURIComponent(stemSet)}/mix-versions`,{method:"POST",body,csrf}),
+  requestMix:(stemSet:string,body:{idempotency_key:string;levels:StemLevels},csrf:string|null)=>apiRequest<{job_id:string;state:string}>(`/stem-sets/${encodeURIComponent(stemSet)}/mix-versions`,{method:"POST",body,csrf}),
+  masters:(asset:string)=>apiRequest<{items:MasterVersion[]}>(`/assets/${encodeURIComponent(asset)}/masters`),
+  requestMaster:(asset:string,body:{idempotency_key:string;reference_asset_id?:string;target_lufs:number;true_peak_dbtp:number},csrf:string|null)=>apiRequest<{job_id:string;state:string}>(`/assets/${encodeURIComponent(asset)}/masters`,{method:"POST",body,csrf}),
+  exports:(asset:string)=>apiRequest<{items:ExportVersion[]}>(`/assets/${encodeURIComponent(asset)}/exports`),
+  requestExport:(asset:string,body:{idempotency_key:string;format:"wav"|"mp3";bit_depth?:16|24;mp3_bitrate_kbps?:128|192|256|320},csrf:string|null)=>apiRequest<{job_id:string;state:string}>(`/assets/${encodeURIComponent(asset)}/exports`,{method:"POST",body,csrf}),
+  stemSetExports:(stemSet:string)=>apiRequest<{items:StemSetExport[]}>(`/stem-sets/${encodeURIComponent(stemSet)}/exports`),
+  requestStemSetExport:(stemSet:string,key:string,csrf:string|null)=>apiRequest<{job_id:string;state:string}>(`/stem-sets/${encodeURIComponent(stemSet)}/exports`,{method:"POST",body:{idempotency_key:key},csrf}),
 };
 export type StemLabel = "vocals" | "drums" | "bass" | "other";
 export type StemLevels = Record<StemLabel, number>;
 export interface StemSet { id:string; source_asset_id:string; engine:string; engine_version:string; stems:{id:string;label:StemLabel;asset_id:string}[]; created_at:string }
 export interface MixVersion { id:string; asset_id:string; version:number; levels:StemLevels; created_at:string }
+export interface MasterVersion { id:string; source_asset_id:string; reference_asset_id:string|null; asset_id:string; engine:string; settings:{target_lufs?:number;true_peak_dbtp?:number}; created_at:string }
+export interface ExportVersion { id:string; source_asset_id:string; asset_id:string; format:"wav"|"mp3"; settings:{bit_depth?:number;mp3_bitrate_kbps?:number}; created_at:string }
+export interface StemSetExport { id:string; stem_set_id:string; byte_size:number; sha256:string; manifest:Record<StemLabel,{asset_id:string;sha256:string}>; created_at:string }
 export async function uploadAudio(project:string,song:string|null,file:File,csrf:string|null):Promise<AudioAsset> {
  if(file.size>100*1024*1024)throw new Error("Choose an audio file smaller than 100 MiB.");
  const body=new FormData();body.append("file",file);if(song)body.append("song_id",song);

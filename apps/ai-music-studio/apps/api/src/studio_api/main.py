@@ -18,7 +18,6 @@ from starlette.formparsers import MultiPartException
 
 from studio_api.arrangement_routes import router as arrangement_router
 from studio_api.audio_routes import router as audio_router
-from studio_api.stem_routes import router as stem_router
 from studio_api.auth import require_session
 from studio_api.auth import router as auth_router
 from studio_api.config import Settings
@@ -27,10 +26,13 @@ from studio_api.domain_routes import router as domain_router
 from studio_api.job_routes import router as job_router
 from studio_api.job_routes import service_auth
 from studio_api.logging import configure_logging
+from studio_api.mastering_routes import router as mastering_router
 from studio_api.music_routes import router as music_router
 from studio_api.producer_routes import router as producer_router
 from studio_api.provider_routes import router as provider_router
 from studio_api.settings_routes import router as settings_router
+from studio_api.stem_package_routes import router as stem_package_router
+from studio_api.stem_routes import router as stem_router
 from studio_api.storage import MAX_MULTIPART, UploadTooLarge
 
 logger = logging.getLogger("studio.api")
@@ -75,6 +77,8 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
     app.include_router(arrangement_router)
     app.include_router(audio_router)
     app.include_router(stem_router)
+    app.include_router(stem_package_router)
+    app.include_router(mastering_router)
     app.include_router(settings_router)
     app.include_router(provider_router)
     app.include_router(producer_router)
@@ -146,7 +150,7 @@ def create_app(settings: Settings | None = None, engine: Engine | None = None) -
                     r"/api/v1/projects/[^/]+/assets/upload", request.url.path
                 )
                 worker_output = request.method == "PUT" and re.fullmatch(
-                    r"/api/v1/internal/jobs/[^/]+/attempts/[1-9][0-9]*/(?:outputs/[1-4]|derived-audio|stems/(?:vocals|drums|bass|other)|mix-audio)",
+                    r"/api/v1/internal/jobs/[^/]+/attempts/[1-9][0-9]*/(?:outputs/[1-4]|derived-audio|stems/(?:vocals|drums|bass|other)|mix-audio|master-audio|export-audio|stem-package)",
                     request.url.path,
                 )
                 if upload or worker_output:

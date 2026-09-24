@@ -188,10 +188,22 @@ class WorkerClient:
         except (ValueError, UnicodeError):
             raise ProtocolFailure(502, "invalid_worker_response") from None
 
-    def upload_derived_audio(self, audio: bytes, endpoint: str = "/derived-audio") -> dict[str, Any]:
+    def upload_derived_audio(
+        self,
+        audio: bytes,
+        endpoint: str = "/derived-audio",
+        media_type: str = "audio/flac",
+    ) -> dict[str, Any]:
         if not audio or len(audio) > 100 * 1024 * 1024:
             raise WorkerFailure("invalid_derived_audio", "Derived audio is invalid")
-        headers = {"Authorization": "Bearer " + self.token, "Content-Type": "audio/flac"}
+        if media_type not in {
+            "audio/flac",
+            "audio/wav",
+            "audio/mpeg",
+            "application/zip",
+        }:
+            raise WorkerFailure("invalid_derived_audio", "Delivery type is invalid")
+        headers = {"Authorization": "Bearer " + self.token, "Content-Type": media_type}
         if self.lease:
             headers["X-Job-Lease"] = self.lease
         request = urllib.request.Request(

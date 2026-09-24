@@ -158,7 +158,7 @@ services:
       studio-windmill:
         condition: service_started
     restart: unless-stopped
-    mem_limit: 3g
+    mem_limit: 4g
     cpus: 2.0
     pids_limit: 128
     security_opt: [no-new-privileges:true]
