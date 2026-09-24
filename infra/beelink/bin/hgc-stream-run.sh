@@ -7,6 +7,8 @@
 # where the box is otherwise idle. GPU passthrough: /dev/dri/renderD128 + the
 # host's render group so the VAAPI decode/encode path in streamer.py works.
 set -euo pipefail
+# Media root: the data drive. Override with HGC_MEDIA (the systemd units set it explicitly).
+MEDIA="${HGC_MEDIA:-/srv/ai-node/storage/data}"
 SID="${1:?station id}"
 HG="$HOME/hungree-goat"
 IMAGE="hungree-goat/hgc:latest"
@@ -18,8 +20,8 @@ exec docker run --rm --name "$NAME" --network host --user 1000:1000 \
   --memory 640m --memory-reservation 192m --cpu-shares 1024 \
   --log-driver json-file --log-opt max-size=5m --log-opt max-file=3 \
   -v "$HG:$HG" \
-  -v /media/hungree-goat:/media/hungree-goat \
-  -e HOME=/tmp -e HGC_HOME="$HG" -e HGC_MEDIA=/media/hungree-goat \
+  -v "$MEDIA:$MEDIA" \
+  -e HOME=/tmp -e HGC_HOME="$HG" -e HGC_MEDIA="$MEDIA" \
   -e HGC_HW_BACKEND=vaapi -e HGC_VAAPI_DEVICE=/dev/dri/renderD128 \
   -w "$HG/app" \
   "$IMAGE" /srv/hgc/venv/bin/python -m hgc stream "$SID"

@@ -7,6 +7,7 @@ StartLimitBurst=8
 
 [Service]
 Type=simple
+Environment=HGC_MEDIA=/srv/ai-node/storage/data
 ExecStartPre=%h/hungree-goat/bin/hgc-wait-media.sh
 ExecStartPre=%h/hungree-goat/bin/hgc-wait-docker.sh
 ExecStartPre=%h/hungree-goat/bin/hgc-wait-backend.sh

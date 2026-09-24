@@ -81,7 +81,7 @@ main_dyn = request.dynamic(id="main", prefetch=2, retry_delay=2., next_track)
 main = main_dyn
 
 # Static backup playlist (independent of the backend), then an emergency loop of
-# whatever is in /media/hungree-goat/fallback, then generated silence-safe tone-free blank.
+# whatever is in /srv/ai-node/storage/data/fallback, then generated silence-safe tone-free blank.
 # Source tags travel inside the request (annotate:) — no metadata.map wrapper, which
 # crashed with Source.Unavailable when pulled while its child had an empty queue.
 backup_pl = playlist(id="backup", mode="randomize", reload=300, reload_mode="seconds",

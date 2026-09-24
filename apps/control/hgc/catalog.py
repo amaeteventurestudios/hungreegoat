@@ -2,9 +2,9 @@
 loudness analysis and square artwork cache generation.
 
 Artwork resolution order (never fails a track):
-  1. matching external artwork in /media/hungree-goat/artwork
+  1. matching external artwork in /srv/ai-node/storage/data/artwork
   2. embedded artwork inside the audio file
-  3. /media/hungree-goat/artwork/default.jpg
+  3. /srv/ai-node/storage/data/artwork/default.jpg
 """
 from __future__ import annotations
 import io

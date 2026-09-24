@@ -1,4 +1,5 @@
 #!/bin/bash
+MEDIA="${HGC_MEDIA:-/srv/ai-node/storage/data}"
 # Endurance monitor (Beelink/x86_64 variant): one line per 30s + any new kernel
 # USB/ext4 lines. Same shape as the Pi's version but temperature comes from
 # k10temp/amdgpu hwmon instead of vcgencmd (no vcgencmd on this box), and both
@@ -31,7 +32,7 @@ while true; do
   CTL=$(docker stats --no-stream --format "{{.CPUPerc}} {{.MemUsage}}" hgc-control 2>/dev/null | awk '{printf "ctl cpu=%s mem=%s", $1, $2}'); [ -z "$CTL" ] && CTL="ctl NONE"
   STR=$(docker stats --no-stream --format "{{.CPUPerc}} {{.MemUsage}}" hgc-stream-lofi 2>/dev/null | awk '{printf "strm cpu=%s mem=%s", $1, $2}'); [ -z "$STR" ] && STR="strm NONE"
   ST=$(python3 -c "import json;d=json.load(open('$HOME/hungree-goat/run/stream-lofi.json'));print(f\"state={d['state']} fps={d['fps']} speed={d['speed']} kbps={d['bitrate_kbps']} dup={d['dup_frames']} drop={d['drop_frames']} up={d['uptime_sec']} restarts={d['restarts']}\")" 2>/dev/null)
-  MNT=$(grep " /media/hungree-goat " /proc/mounts | awk '{print $1" "$4}'); W=$(touch /media/hungree-goat/.mon 2>/dev/null && rm /media/hungree-goat/.mon && echo w+ || echo W-FAIL)
+  MNT=$(grep " $MEDIA " /proc/mounts | awk '{print $1" "$4}'); W=$(touch $MEDIA/.mon 2>/dev/null && rm $MEDIA/.mon && echo w+ || echo W-FAIL)
   echo "$T cputemp=${CPUTEMP}C gputemp=${GPUTEMP}C load=$LOAD mem=$MEM | $FF | $LQ | $CTL | $STR | $ST | $MNT $W" >> "$LOG"
   NOW=$(date +%s); journalctl -k --no-pager -o short-iso --since "@$LAST" 2>/dev/null | grep -iE "usb|sd[a-z]|ext4|reset|i/o error|voltage" >> "$KLOG"; LAST=$NOW
   sleep 30

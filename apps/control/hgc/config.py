@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 
 HOME = Path(os.environ.get("HGC_HOME", str(Path.home() / "hungree-goat")))
-MEDIA = Path(os.environ.get("HGC_MEDIA", "/media/hungree-goat"))
+MEDIA = Path(os.environ.get("HGC_MEDIA", "/srv/ai-node/storage/data"))
 
 APP_DIR = HOME / "app"
 STATIC_DIR = APP_DIR / "static"

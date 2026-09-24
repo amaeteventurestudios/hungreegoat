@@ -4,7 +4,7 @@
 # (stale ext4 "shutdown" mount on the old device node). Never reformats.
 set -u
 UUID=7d12ed26-3a1f-45c6-a1ce-37c5097c3d11
-MNT=/media/hungree-goat
+MNT="${HGC_MEDIA:-/srv/ai-node/storage/data}"
 [ "$(id -u)" = 0 ] || { echo "run with sudo"; exit 1; }
 echo "== current state"; findmnt -rn "$MNT" || echo "not mounted"
 DEV=$(blkid -U "$UUID" || true)

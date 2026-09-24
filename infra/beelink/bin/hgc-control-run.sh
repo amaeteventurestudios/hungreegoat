@@ -18,6 +18,8 @@
 # anti-spoofing check, independent of the socket connect + SASL auth (which
 # succeed fine without it) — confirmed by testing.
 set -euo pipefail
+# Media root: the data drive. Override with HGC_MEDIA (the systemd units set it explicitly).
+MEDIA="${HGC_MEDIA:-/srv/ai-node/storage/data}"
 HG="$HOME/hungree-goat"
 IMAGE="hungree-goat/hgc:latest"
 NAME="hgc-control"
@@ -36,10 +38,10 @@ exec docker run --rm --name "$NAME" --network host --pid host --user 1000:1000 \
   --memory 768m --memory-reservation 256m \
   --log-driver json-file --log-opt max-size=5m --log-opt max-file=3 \
   -v "$HG:$HG" \
-  -v /media/hungree-goat:/media/hungree-goat \
+  -v "$MEDIA:$MEDIA" \
   -v /run/user/1000:/run/user/1000 \
   "${YT_MOUNT_ARGS[@]}" \
-  -e HOME=/tmp -e HGC_HOME="$HG" -e HGC_MEDIA=/media/hungree-goat \
+  -e HOME=/tmp -e HGC_HOME="$HG" -e HGC_MEDIA="$MEDIA" \
   -e XDG_RUNTIME_DIR=/run/user/1000 -e DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus \
   -w "$HG/app" \
   "$IMAGE" /srv/hgc/venv/bin/python -m hgc serve

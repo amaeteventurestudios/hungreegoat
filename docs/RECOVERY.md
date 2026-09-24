@@ -16,7 +16,7 @@ from* — never the values themselves.
      key, the internal callback token. Mode 600/0700; treat this backup itself as sensitive.
    - `~/hungree-goat/data/hungree-goat.sqlite3*` — the database: track catalog, play
      history, schedules, settings, alerts/events.
-   - `/media/hungree-goat/` — your actual music library, artwork, broadcast-visual clips,
+   - `/srv/ai-node/storage/data/` — your actual music library, artwork, broadcast-visual clips,
      fallback/jingle audio, and playlists.
    - (Optional but useful) `~/hungree-goat/logs/` — historical logs, not required for a
      working restore.
@@ -38,7 +38,7 @@ not enough — it has no application code. You need both.
    above) — mode 700 on the directory, 600 on the files. Do this *before* first start; the
    app will otherwise generate a fresh operator account and you'll need to reconcile the two.
 6. **Restore the database** into `~/hungree-goat/data/` from your private backup.
-7. **Mount or restore your music library** at `/media/hungree-goat/` (or point `HGC_MEDIA`
+7. **Mount or restore your music library** at `/srv/ai-node/storage/data/` (or point `HGC_MEDIA`
    at wherever you restored it).
 8. Install the systemd units (`infra/beelink/systemd/*.service`) and start them —
    `hungree-goat-control` first, then `hungree-goat-liquidsoap@<station>` and

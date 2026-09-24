@@ -10,7 +10,7 @@ enable/disable, reorder, set default, edit, upload assets, and — this is the p
 design — delete. Deleting a former "built-in" is real and permanent, exactly like deleting
 a custom skin.
 
-Assets (video/image/thumbnail) live on the media drive under /media/hungree-goat/skins/
+Assets (video/image/thumbnail) live on the media drive under /srv/ai-node/storage/data/skins/
 and are served publicly via /v1/skins/assets/<file>. A stored `video`/`image` value is
 EITHER a bare filename living in that directory (a managed upload — gets the
 /v1/skins/assets/ prefix and is safe to delete when superseded/removed) OR an absolute

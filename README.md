@@ -170,7 +170,7 @@ docker build -f infra/beelink/Dockerfile -t hungree-goat/hgc:latest .
 
 Then follow the full installation section below — you still need to lay out `~/hungree-goat/`
 on the host (app code + a `secrets/` directory you create yourself + your music), point a
-media mount at `/media/hungree-goat`, and install the systemd units before anything actually
+media mount at `/srv/ai-node/storage/data`, and install the systemd units before anything actually
 runs.
 
 ## Installing HUNGREE Goat on a New Computer
@@ -197,7 +197,7 @@ take to rebuild HUNGREE Goat from GitHub plus a private backup of your own data 
    cp infra/beelink/bin/*.sh infra/pi/bin/*.sh ~/hungree-goat/bin/ && chmod +x ~/hungree-goat/bin/*.sh
    chmod 700 ~/hungree-goat/secrets
    ```
-5. **Attach or copy your music library** to `/media/hungree-goat/` (see [Music
+5. **Attach or copy your music library** to `/srv/ai-node/storage/data/` (see [Music
    library](#music-library) below for the expected layout) — from a backup, an external
    drive, or by copying files in directly.
 6. **Add your private secrets locally** — never from this repo. See
@@ -230,11 +230,11 @@ disaster-recovery-focused version of this same checklist.
 
 ## Music library
 
-Music lives **outside Git**, under a media mount at `/media/hungree-goat/` (configurable via
+Music lives **outside Git**, under a media mount at `/srv/ai-node/storage/data/` (configurable via
 the `HGC_MEDIA` environment variable — see `apps/control/hgc/config.py`):
 
 ```
-/media/hungree-goat/
+/srv/ai-node/storage/data/
 ├── music/          per-station subfolders; this is what the library scanner walks
 ├── artwork/        cover art
 ├── animation/      looping background-visual source clips
@@ -424,10 +424,10 @@ Before you'd ever need it, back these up separately and privately:
 |---|---|---|
 | Database | `~/hungree-goat/data/hungree-goat.sqlite3*` | tracks, play history, settings, schedules |
 | Secrets | `~/hungree-goat/secrets/` | stream keys, operator credentials, session key — **never in Git** |
-| Music library | `/media/hungree-goat/music/` | your actual audio files |
-| Artwork | `/media/hungree-goat/artwork/` | |
-| Broadcast visuals | `/media/hungree-goat/animation/` | |
-| Playlists/metadata | `/media/hungree-goat/playlists/` and the database above | |
+| Music library | `/srv/ai-node/storage/data/music/` | your actual audio files |
+| Artwork | `/srv/ai-node/storage/data/artwork/` | |
+| Broadcast visuals | `/srv/ai-node/storage/data/animation/` | |
+| Playlists/metadata | `/srv/ai-node/storage/data/playlists/` and the database above | |
 | YouTube OAuth token | `~/hungree-goat/secrets/youtube-oauth-token.json` | only if you've connected an account — see [YouTube streaming](#youtube-streaming) |
 | Monitoring config | `~/hungree-goat/secrets/ntfy-topic.txt`, `infra/monitoring/*.sh` deployed on the two monitoring hosts | low-sensitivity but not public — see `docs/security.md` |
 | Logs | `~/hungree-goat/logs/` | optional — useful for troubleshooting, not required for recovery |

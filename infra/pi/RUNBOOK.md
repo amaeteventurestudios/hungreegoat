@@ -1,5 +1,8 @@
 # HUNGREE Goat Control — operations runbook (pi-node-01)
 
+> **Media path (2026-09-24):** the shared scripts now default to the Beelink data drive, `/srv/ai-node/storage/data`. On the Raspberry Pi set `HGC_MEDIA=/media/hungree-goat` in the units/environment; the paths below describe the Pi layout.
+
+
 Everything lives in `~/hungree-goat` for user `aumanah`. Nothing runs as root except the
 optional USB repair helper (`/usr/local/sbin/hgc-usb-repair`, sudoers-scoped).
 
