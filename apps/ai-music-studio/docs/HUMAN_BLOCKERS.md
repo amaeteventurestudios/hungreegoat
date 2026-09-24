@@ -26,7 +26,9 @@ Do not record an API/CLI error, OSS limitation, local-user/token task, version m
 
 ## Current Status
 
-Windmill runtime identity is solved technically and is not a blocker. The items below block public HTTPS acceptance, total-host-loss key recovery, inspection of the separately connected Vercel project, and live paid-provider proof; isolated production verification and every other safe Studio task continue independently.
+Windmill runtime identity is solved technically and is not a blocker. The items below block public HTTPS acceptance, total-host-loss key recovery, and live paid-provider proof; isolated production verification and every other safe Studio task continue independently.
+
+The former H14-03 (Vercel project build diagnostics) is closed, not open: the owner decided on 2026-09-23 to drop the Vercel path entirely in favor of the canonical Compose/nginx production stack (see ADR-029 in `DECISIONS.md`). Do not re-open it without a new owner request.
 
 ## H14-01 — Privileged access to the shared public gateway
 
@@ -52,7 +54,7 @@ Windmill runtime identity is solved technically and is not a blocker. The items 
 8. **Why alternatives cannot satisfy safely now:** Local-only material disappears with the node; gateway co-location or Git would weaken the secret boundary; Dropbox upload is not authorized without an explicit file/destination request; no other authenticated vault exists. Independent owner escrow is the narrow required action.
 9. **Independent work:** Encrypted local and off-host copies, checksum verification, daily copy timer, backup-age monitoring, and isolated restore tests operate now. Gateway/public HTTPS work and all remaining Studio-only verification continue regardless of this escrow action.
 
-## H14-03 — Connected Vercel Studio project's private build diagnostics
+## H14-03 — Connected Vercel Studio project's private build diagnostics (CLOSED 2026-09-23, see ADR-029)
 
 1. **Blocked requirement:** Determine and repair the failing `hungreegoat-ai-music-studio` Vercel deployment if Vercel delivery remains desired in addition to the canonical Compose/nginx production path.
 2. **Exact external action:** An authorized Vercel team member must provide a scoped Vercel token/session or expose the Studio project's build log and Root Directory/Build/Output settings. The latest checked failed deployment is `dpl_CHbJ186BUG1vBG6UkSrbwtPUtJED` for Studio commit `6acffb2`.
