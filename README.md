@@ -322,6 +322,12 @@ not one: heartbeat recency, a first-heartbeat-never-arrived case, and — the on
 was missing — whether `frame`/`out_time` are actually advancing. See
 `apps/control/tests/test_streamer_stall.py` for the regression coverage.
 
+The recurring live-lock that watchdog kept catching every ~6h21m (22,865 s of FFmpeg runtime)
+was traced on 2026-09-25 to the WAV header on Liquidsoap's loopback audio mount declaring a
+fixed length, and fixed with `-ignore_length 1` — full evidence in
+[docs/streaming/FFMPEG_STALL_INVESTIGATION.md](docs/streaming/FFMPEG_STALL_INVESTIGATION.md),
+operating steps in [docs/streaming/RUNBOOK.md](docs/streaming/RUNBOOK.md).
+
 ## Monitoring & Alerts
 
 Full architecture in **[docs/monitoring-alerts.md](docs/monitoring-alerts.md)** — this is a
@@ -546,6 +552,10 @@ pi-node-01 (LAN) ── cron ── checks Beelink directly over LAN ───�
   usually CPU/GPU contention on the host, or software encoding without hardware
   acceleration available; check Advanced Settings → Diagnostics for the actual encoder
   in use.
+- **Stream drops/restarts ("FFmpeg stall detected", YouTube gaps)** — follow
+  [docs/streaming/RUNBOOK.md](docs/streaming/RUNBOOK.md): it shows how to tell a network or
+  YouTube problem from an audio, video, GPU or FFmpeg one using `logs/ffmpeg-<station>.log`
+  (timestamped FFmpeg errors + stall snapshots) and `logs/netprobe.log`.
 - **Where are the logs** — `~/hungree-goat/logs/` on the host, or the Control dashboard's
   Logs page (Events / Audio engine / Video / Stream service / Control / Kernel).
 - **How to restart only the right thing** — see [Start / stop / restart](#start--stop--restart)

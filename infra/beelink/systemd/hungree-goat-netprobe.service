@@ -1,0 +1,13 @@
+[Unit]
+Description=HUNGREE Goat network-correlation probe (gateway/DNS/YouTube RTMPS/Internet, 30s) [Beelink]
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/hungree-goat/bin/hgc-netprobe.sh
+Restart=always
+RestartSec=10
+Nice=10
+
+[Install]
+WantedBy=default.target

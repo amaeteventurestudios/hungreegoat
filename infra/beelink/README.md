@@ -23,6 +23,10 @@ but works.
   execute; read them before changing resource limits.
 - `bin/hgc-monitor.sh` — endurance/health monitor variant for this hardware (reads CPU/GPU
   temperature from `k10temp`/`amdgpu` hwmon, since there's no `vcgencmd` here).
+- `bin/hgc-netprobe.sh` + `systemd/hungree-goat-netprobe.service` — 30 s network-correlation
+  probe (gateway, DNS, YouTube RTMPS TCP, Internet, FFmpeg output Send-Q) to
+  `~/hungree-goat/logs/netprobe.log`; see `docs/streaming/RUNBOOK.md`. Deploy with
+  `cp bin/hgc-netprobe.sh ~/hungree-goat/bin/`.
 - `systemd/*.service` — the real, currently-running systemd **user** units (`systemctl
   --user`), portable via `%h` (systemd's home-directory specifier) — no hardcoded paths or
   usernames. Install with `cp infra/beelink/systemd/*.service ~/.config/systemd/user/ && systemctl --user daemon-reload`.

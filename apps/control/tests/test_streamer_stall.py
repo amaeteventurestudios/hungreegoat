@@ -98,3 +98,43 @@ class TestNoFirstProgressStall(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestWavInputIgnoresDeclaredLength(unittest.TestCase):
+    """Root cause of the ~22,865 s live-lock (2026-09-21..25): Liquidsoap's endless WAV mount
+    declares a fixed 4,026,531,803-byte data chunk (22,826 s at 44.1 kHz s16 stereo); without
+    -ignore_length FFmpeg's wav demuxer stops delivering audio there and the encode freezes.
+    See docs/streaming/FFMPEG_STALL_INVESTIGATION.md."""
+
+    def _cmd(self, backend: str) -> list[str]:
+        from hgc import config, streamer
+        s = streamer.Streamer.__new__(streamer.Streamer)
+        s.sid = "lofi"
+        s.st = {"video_bitrate_k": 3000, "audio_bitrate_k": 192, "harbor_port": 8100}
+        old = config.HW_BACKEND
+        config.HW_BACKEND = backend
+        try:
+            return s.ffmpeg_cmd(["-f", "null", "-"], Path("/tmp/bg.fifo"))
+        finally:
+            config.HW_BACKEND = old
+
+    def test_wav_input_ignores_declared_length(self):
+        for backend in ("vaapi", "v4l2m2m", "software"):
+            cmd = self._cmd(backend)
+            url = cmd.index("http://127.0.0.1:8100/lofi.wav")
+            wav = max(i for i in range(url) if cmd[i:i + 2] == ["-f", "wav"])
+            opts = cmd[wav:url]
+            self.assertIn("-ignore_length", opts, backend)
+            self.assertEqual(opts[opts.index("-ignore_length") + 1], "1", backend)
+
+
+class TestProcSnapshot(unittest.TestCase):
+    def test_snapshot_of_self_lists_threads_and_io(self):
+        from hgc.streamer import proc_snapshot
+        snap = proc_snapshot(os.getpid())
+        self.assertIn("rchar=", snap)
+        self.assertIn("threads=[", snap)
+
+    def test_snapshot_of_missing_pid_does_not_raise(self):
+        from hgc.streamer import proc_snapshot
+        self.assertIn("unavailable", proc_snapshot(2**22 + 12345))

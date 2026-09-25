@@ -512,7 +512,19 @@ class Streamer:
             # loopback-only leg (127.0.0.1, never exposed externally) instead of AAC,
             # which has no such parsing edge case. The real AAC encode for actual
             # YouTube delivery still happens right here, just fed clean PCM instead.
-            "-f", "wav",
+            #
+            # -ignore_length 1: Liquidsoap's %wav header on this endless HTTP mount
+            # declares a FIXED data-chunk size (0xEFFFFFDB = 4,026,531,803 bytes; at
+            # 44.1 kHz s16 stereo = 176,400 B/s that is 22,826 s ~= 6h20m). FFmpeg's wav
+            # demuxer honours it: once that many bytes are read it tries to parse the
+            # following PCM as RIFF chunk headers ("Invalid PCM packet"/"Decoding error:
+            # Invalid data"), audio stops, and the encode live-locks with the -progress
+            # heartbeat still ticking. That was every "live-locked" stall at ran_for
+            # ~22,865 s (22,826 s + the 30 s StallDetector threshold) from 2026-09-21 on,
+            # reproduced with this exact FFmpeg build and a scaled-down header — see
+            # docs/streaming/FFMPEG_STALL_INVESTIGATION.md. Ignoring the declared length
+            # treats the data chunk as unbounded, which is what this live stream is.
+            "-f", "wav", "-ignore_length", "1",
             "-thread_queue_size", "1024", "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5",
             "-i", audio_url,
             "-filter_complex", overlay_filter,
@@ -558,9 +570,12 @@ class Streamer:
                 pass
 
     def stderr_reader(self, stderr, lf, secret: str | None) -> None:
-        """FFmpeg echoes the full output URL in its errors; the stream key must never reach the log."""
+        """FFmpeg echoes the full output URL in its errors; the stream key must never reach the log.
+        Each line gets a timestamp prefix: FFmpeg's own lines carry none, which made it
+        impossible to tell from the log alone whether an error (e.g. the audio input's
+        "Invalid PCM packet") came seconds or hours before the stall it caused."""
         for raw in iter(stderr.readline, b""):
-            line = raw.decode(errors="replace")
+            line = f"[{_ts()}] [ffmpeg] " + raw.decode(errors="replace")
             if secret and len(secret) > 4:
                 line = line.replace(secret, "<redacted>")
             try:
@@ -703,6 +718,7 @@ class Streamer:
                     reason = stall_detector.check(self.progress, time.time())
                     if reason:
                         self._log("supervisor", f"stall detected: {reason}, restarting ffmpeg")
+                        self._log("supervisor", f"stall snapshot: {proc_snapshot(proc.pid)}")
                         # Automated-recovery attempts belong in Incident History (see
                         # docs/monitoring-alerts.md), not only the ffmpeg log file — this is
                         # exactly the kind of "encoder restart storm" signal a monitor needs.
@@ -789,6 +805,38 @@ class Streamer:
             self.write_status()
         except Exception:
             pass
+
+
+def proc_snapshot(pid: int) -> str:
+    """What a live-locked FFmpeg is waiting on, captured just before it is killed, from
+    /proc only (no ptrace, nothing that can disturb the process): per-thread
+    name/state/kernel wait channel, grouped, plus cumulative bytes read/written. Two
+    snapshots of the same failure mode should look alike; a different one points at a
+    different blocker (e.g. every thread in a socket send wait = output back-pressure)."""
+    base = Path(f"/proc/{pid}")
+    try:
+        counts: dict[str, int] = {}
+        for task in sorted((base / "task").iterdir()):
+            try:
+                comm = (task / "comm").read_text().strip()
+                state = (task / "stat").read_text().rsplit(")", 1)[1].split()[0]
+                wchan = (task / "wchan").read_text().strip() or "-"
+            except OSError:
+                continue
+            key = f"{comm}:{state}:{wchan}"
+            counts[key] = counts.get(key, 0) + 1
+        io = {}
+        try:
+            for ln in (base / "io").read_text().splitlines():
+                k, v = ln.split(":", 1)
+                if k in ("rchar", "wchar"):
+                    io[k] = int(v)
+        except OSError:
+            pass
+        threads = " ".join(f"{k}x{n}" for k, n in sorted(counts.items()))
+        return f"pid={pid} rchar={io.get('rchar')} wchar={io.get('wchar')} threads=[{threads}]"
+    except OSError as e:
+        return f"pid={pid} unavailable ({e})"
 
 
 def _kbps(v) -> float | None:
