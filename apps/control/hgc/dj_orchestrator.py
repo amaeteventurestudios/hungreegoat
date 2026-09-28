@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import re
 import subprocess
 import sys
@@ -41,6 +42,17 @@ from pathlib import Path
 from . import auth, config, db, dj
 
 BASE_URL = f"http://127.0.0.1:{config.API_PORT}"
+
+
+def _launch_args(*extra: str) -> list[str]:
+    """Chromium's own sandbox needs privileges (a setuid helper / user namespaces)
+    that a container normally doesn't grant, and won't otherwise run in one — set
+    HGC_CHROMIUM_NO_SANDBOX=1 (done automatically in the Beelink container image)
+    to disable it. Unset/0 elsewhere (e.g. bare-metal on the Pi) leaves the sandbox on."""
+    args = ["--autoplay-policy=no-user-gesture-required", *extra]
+    if os.environ.get("HGC_CHROMIUM_NO_SANDBOX") == "1":
+        args.append("--no-sandbox")
+    return args
 
 MASTERING_PRESETS = {
     # preset -> (target integrated LUFS, true-peak ceiling dBTP)
@@ -67,7 +79,7 @@ async def _analyze(station: str, playlist: str) -> int:
 
     n_ok = 0
     async with async_playwright() as p:
-        browser = await p.chromium.launch(args=["--autoplay-policy=no-user-gesture-required"])
+        browser = await p.chromium.launch(args=_launch_args())
         page = await browser.new_page()
         await page.goto(f"{BASE_URL}/dj/tools/analyze.html")
         await page.wait_for_function("window.__hgcReady === true", timeout=15000)
@@ -249,7 +261,7 @@ async def _generate(mid: int, station: str, playlist: str, duration: float,
         # browser produces real, audible, correctly-paced playback. Real-time recording is
         # inherently wall-clock-bound and CPU-sensitive — this stage is the one place in the
         # pipeline that actually needs it.
-        browser = await p.chromium.launch(channel="chromium", args=["--autoplay-policy=no-user-gesture-required"])
+        browser = await p.chromium.launch(channel="chromium", args=_launch_args())
         context = await browser.new_context(accept_downloads=True)
         # dj/Library.js (the real, unmodified-behavior Aurdour loader) fetches
         # /api/dj/manifest, an ordinary Depends(current_user) route like the rest of
@@ -355,7 +367,7 @@ async def _generate(mid: int, station: str, playlist: str, duration: float,
     target_lufs, ceiling_db = MASTERING_PRESETS.get(m.get("mastering_preset") or "", (-14.0, -1.0))
     source_url = f"{BASE_URL}/__dj_orchestrator_raw_source__/{mid}.wav"
     async with async_playwright() as p:
-        browser = await p.chromium.launch(args=["--autoplay-policy=no-user-gesture-required"])
+        browser = await p.chromium.launch(args=_launch_args())
         context = await browser.new_context(accept_downloads=True)
         page = await context.new_page()
         downloads: list = []
