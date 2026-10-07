@@ -586,3 +586,20 @@ table.tbl .spark{width:64px;height:20px;vertical-align:middle}
   .mgmt-row{flex-wrap:wrap;row-gap:4px}.mgmt-row .lbl{flex:1 1 calc(100% - 110px)!important}
   .mgmt-src{display:none}.mgmt-tgs{flex:1 1 100%;justify-content:flex-end}.mgmt-l{width:auto!important}
 }
+/* ---- Broadcast Visuals: drag-to-reorder the numbered cards ---- */
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.bco-bar{display:flex;align-items:center;gap:10px 14px;flex-wrap:wrap;margin:-2px 0 10px;min-height:22px}
+.bco-pick{display:flex;align-items:center;gap:8px;font-weight:600}.bco-pick .sel{height:34px;max-width:min(320px,70vw)}
+.bco-hint{flex:1 1 260px;min-width:0}
+.bco-status{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;margin-left:auto}.bco-status svg{width:14px;height:14px}
+.bco-card{cursor:grab;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:pan-y;transition:box-shadow .15s,border-color .15s,transform .15s}
+.bco-card:hover{border-color:var(--line-gold)}
+.bco-card:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.bco-card img{-webkit-user-drag:none;pointer-events:none}
+.bco-card.bco-press{transform:scale(.98);border-color:var(--gold)}
+.bco-lift{cursor:grabbing;border-color:var(--gold)!important;box-shadow:0 22px 48px rgba(0,0,0,.6),0 0 0 1px var(--gold),0 0 26px rgba(242,193,78,.25);transition:none}
+.bco-ph{border:2px dashed var(--gold);border-radius:var(--r);background:rgba(242,193,78,.07);box-shadow:inset 0 0 22px rgba(242,193,78,.08)}
+body.bco-dragging,body.bco-dragging *{cursor:grabbing!important;user-select:none!important;-webkit-user-select:none!important}
+@media (hover:none){.bco-card:hover{border-color:var(--line)}}
+@media (prefers-reduced-motion:reduce){.bco-card,.bco-lift{transition:none!important}}
+@media (max-width:600px){.bco-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px}.bco-grid .panel-b{padding:8px 10px}.bco-grid .panel-b b{font-size:11.5px!important}}

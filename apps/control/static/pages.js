@@ -1659,7 +1659,7 @@ function collEditOpen(c, eligible){ c=c||{}; Object.assign(COLL_EDIT,{active:tru
   order:c.order||'sequential',video_ids:[...(c.video_ids||[])],eligible,saving:false});
   modal(()=>collEditorHtml()); }
 function collEditorHtml(){ const c=COLL_EDIT; const byId=Object.fromEntries(c.eligible.map(v=>[v.id,v]));
-  const chosen=c.video_ids.filter(id=>byId[id]); const avail=c.eligible.filter(v=>!c.video_ids.includes(v.id));
+  const chosen=c.video_ids.filter(id=>byId[id]).map(id=>byId[id]); const avail=c.eligible.filter(v=>!c.video_ids.includes(v.id));
   return `<h3>${I.film} ${c.isNew?'New':'Edit'} collection<button class="btn xs ghost icon x" data-act="close-modal">${I.x}</button></h3>
   <div class="form" style="gap:14px">
     <label class="wide">Collection name<input class="inp" id="coll-name" value="${h(c.name)}" placeholder="Rainy Nights" data-input="coll-field" data-key="name"></label>
@@ -1671,6 +1671,144 @@ function collEditorHtml(){ const c=COLL_EDIT; const byId=Object.fromEntries(c.el
       :(c.eligible.length===0?`<div class="wide small muted">No videos are marked "Also use for YouTube broadcast" yet — enable that on a skin's Publishing section first (<a class="link" href="#/skins">Player Skins</a>).</div>`:'')}
   </div>
   <div class="row-actions" style="position:sticky;bottom:-16px;background:var(--panel2);padding:12px 0 2px;margin-top:14px"><button type="button" class="btn" data-act="close-modal">Cancel</button><button type="button" class="btn gold" data-act="coll-save" ${c.saving?'disabled':''}>${c.saving?'Saving…':'Save Collection'}</button></div>`; }
+
+/* ---- Direct drag-and-drop ordering of the numbered Broadcast Visual cards. The order IS the
+   collection's video_ids in broadcast.json — the exact list broadcast.active_pool() hands to
+   the sequential rotation — saved through PUT /api/broadcast/collections/{id}/order on every
+   drop. No edit mode: the grid is the reorder surface. Mouse/pen pick a card up after a few
+   pixels of movement; touch needs a short press-and-hold first, so an ordinary swipe still
+   scrolls the page. Saves are chained one after another (newest always lands last), the page
+   shows the dropped order immediately, and a failed save reloads the server's order. ---- */
+const BCO={coll:null, optimistic:{}, optAt:{}, pending:0, chain:Promise.resolve(), seq:0, status:null, drag:null, live:''};
+const BCO_HOLD_MS=260, BCO_MOUSE_SLOP=5, BCO_TOUCH_SLOP=8, BCO_EDGE=80;
+function bcoColl(d){ const ids=d.collections.map(c=>c.id);
+  if(!BCO.coll||!ids.includes(BCO.coll)) BCO.coll=ids.includes(d.active_collection)?d.active_collection:(ids[0]||null);
+  return d.collections.find(c=>c.id===BCO.coll)||null; }
+// The playable, numbered order for a collection — a pending (not yet confirmed) drop wins over
+// whatever the last poll returned, so the cards never jump back while a save is in flight.
+// A just-confirmed order is also held for a few seconds, because a poll that left before the
+// save landed can still arrive after it with the previous order.
+function bcoOrder(d,c){ const elig=new Set(d.eligible_visuals.map(v=>v.id));
+  if(BCO.optimistic[c.id]&&!BCO.pending&&Date.now()-(BCO.optAt[c.id]||0)>8000) delete BCO.optimistic[c.id];
+  return (BCO.optimistic[c.id]||c.video_ids||[]).filter(id=>elig.has(id)); }
+function bcoStatusHtml(){ const s=BCO.status; if(!s) return '';
+  if(s.kind==='saving') return `<span class="bco-status muted">Saving order…</span>`;
+  if(s.kind==='saved'&&Date.now()-s.at<4500) return `<span class="bco-status green">${I.check} Order saved</span>`;
+  if(s.kind==='error') return `<span class="bco-status red">Could not save visual order. <button type="button" class="btn xs" data-act="bco-retry">${I.restart} Retry</button></span>`;
+  return ''; }
+function bcoGridHtml(d,cur){
+  const c=bcoColl(d), order=c?bcoOrder(d,c):[];
+  const byId=Object.fromEntries(d.eligible_visuals.map(v=>[v.id,v]));
+  const rest=d.eligible_visuals.filter(v=>!order.includes(v.id));
+  const onAir=c&&d.mode==='rotation'&&c.id===d.active_collection;
+  const card=(v,pos)=>{ const isNow=cur&&cur.id===v.id;
+    const inner=`<div class="preview" style="aspect-ratio:16/9;border-radius:16px 16px 0 0;border:0;position:relative">${v.thumbnail?`<img class="bg" src="${h(v.thumbnail)}" alt="" draggable="false">`:`<div class="ph small">No thumbnail</div>`}${pos?`<span class="lbl bco-pos" style="background:rgba(7,13,24,.85)">#${pos}</span>`:''}${isNow?`<span class="lbl" style="left:auto;right:8px;background:var(--gold);color:#1a1204">${I.play} NOW PLAYING</span>`:''}</div><div class="panel-b"><b style="font:800 12.5px var(--display)">${h(v.name)}</b>${!pos?`<div class="small muted" style="margin-top:2px">Not in this collection</div>`:''}</div>`;
+    return pos
+      ?`<div class="panel bco-card" data-key="bco-${v.id}" data-bco-id="${v.id}" tabindex="0" role="listitem" aria-roledescription="draggable visual" aria-label="#${pos} ${h(v.name)}. Drag, or use the arrow keys, to change its place in the rotation." style="${isNow?'border-color:var(--gold)':''}">${inner}</div>`
+      :`<div data-key="bco-out-${v.id}" style="opacity:.55"><div class="panel">${inner}</div></div>`; };
+  const pick=d.collections.length>1?`<label class="bco-pick small muted">Rotation order for<select class="sel" data-change="bco-coll">${d.collections.map(x=>`<option value="${h(x.id)}" ${c&&x.id===c.id?'selected':''}>${h(x.name)}${x.id===d.active_collection&&d.mode==='rotation'?' — on air':''}</option>`).join('')}</select></label>`:'';
+  return `<h3 style="margin:0 0 8px;font:800 15px var(--display)">${ic(I.image,'blue')}ALL ELIGIBLE VISUALS (${d.eligible_visuals.length})${help('Every video currently flagged for broadcast use. Numbered cards are in the collection shown, in rotation order — drag one to move it; the change saves by itself and the rotation follows it from the next track change. The gold "NOW PLAYING" card is the one on air right now. Dimmed cards are eligible but not in this collection, so they never play from it.')}</h3>
+  <div class="bco-bar">${pick}${c&&order.length>1?`<span class="small muted2 bco-hint">Drag a card to reorder${c.order==='shuffle'?' (this collection plays in shuffle, so order only matters if you switch it to sequential)':onAir?' — the live rotation follows the new order from the next song':''}. On touch: press, hold, then drag.</span>`:''}${bcoStatusHtml()}</div>
+  <div class="sr-only" aria-live="polite">${h(BCO.live)}</div>
+  <div class="grid eq bco-grid" role="list" data-bco-grid="${c?h(c.id):''}" style="grid-template-columns:repeat(auto-fill,minmax(min(200px,100%),1fr))">${d.eligible_visuals.length?[...order.map((id,i)=>card(byId[id],i+1)),...rest.map(v=>card(v,null))].join(''):`<div class="panel"><div class="panel-b">${empty(I.film,'No eligible visuals yet','Upload a video on Player Skins and turn on "Also use for YouTube broadcast".',`<a class="btn sm gold" href="#/skins">${I.image} Player Skins</a>`)}</div></div>`}</div>`; }
+
+function bcoApplyServer(c){ const d=state.pageData.broadcast; if(!d) return; const x=d.collections.find(y=>y.id===c.id); if(x) x.video_ids=c.video_ids; }
+function bcoCommit(cid, order){
+  BCO.optimistic[cid]=order; BCO.optAt[cid]=Date.now(); BCO.status={kind:'saving'}; const my=++BCO.seq; BCO.pending++;
+  BCO.chain=BCO.chain.then(async()=>{
+    try{ const c=await put(`/api/broadcast/collections/${encodeURIComponent(cid)}/order`,{video_ids:order}); bcoApplyServer(c);
+      if(my===BCO.seq){ BCO.optAt[cid]=Date.now(); BCO.status={kind:'saved',at:Date.now()}; } }
+    catch(e){ if(my===BCO.seq){ delete BCO.optimistic[cid]; BCO.status={kind:'error',msg:e.message,cid,order}; toast(`Could not save visual order: ${e.message}`,'err');
+      // Show the server's real order again rather than a list that was never saved.
+      try{ state.pageData.broadcast=await api('/api/broadcast'); }catch(_){} } }
+    finally{ BCO.pending--; }
+    render(); });
+  render(); return BCO.chain; }
+
+/* ---- the drag engine ---- */
+function bcoCards(grid){ return [...grid.querySelectorAll(':scope > [data-bco-id]')]; }
+function bcoBegin(dr){
+  const card=dr.card, grid=card.parentElement, r=card.getBoundingClientRect();
+  dr.active=true; dr.grid=grid; dr.dx=dr.x0-r.left; dr.dy=dr.y0-r.top; dr.w=r.width; dr.h=r.height;
+  dr.before=bcoCards(grid).map(x=>x.dataset.bcoId);
+  state.dragLock=true; document.body.classList.add('bco-dragging');
+  try{ document.documentElement.setPointerCapture(dr.id); }catch(_){}
+  const ph=document.createElement('div'); ph.className='bco-ph'; ph.style.height=r.height+'px'; dr.ph=ph;
+  card.replaceWith(ph); document.body.appendChild(card);
+  card.classList.remove('bco-press'); card.classList.add('bco-lift');
+  Object.assign(card.style,{position:'fixed',left:'0px',top:'0px',width:r.width+'px',height:r.height+'px',margin:'0',zIndex:'70',pointerEvents:'none'});
+  bcoPlace(dr); if(navigator.vibrate&&dr.type==='touch') try{ navigator.vibrate(12); }catch(_){}
+  bcoRenumber(dr); dr.raf=requestAnimationFrame(()=>bcoTick(dr)); }
+function bcoPlace(dr){ dr.card.style.transform=`translate3d(${dr.x-dr.dx}px,${dr.y-dr.dy}px,0) scale(1.03)`; }
+// Where would the card land? Count the other cards that come before the pointer in reading
+// order (rows top-to-bottom, then left-to-right within the pointer's row).
+// Uses each card's resting slot, not where its reflow animation happens to have it this frame.
+function bcoRest(o){ const r=o.getBoundingClientRect(), t=getComputedStyle(o).transform;
+  if(!t||t==='none') return r; const m=new DOMMatrixReadOnly(t); return new DOMRect(r.left-m.m41, r.top-m.m42, r.width, r.height); }
+function bcoTarget(dr){ const others=bcoCards(dr.grid); let idx=0;
+  for(const o of others){ const r=bcoRest(o), cx=r.left+r.width/2;
+    const sameRow=dr.y>=r.top&&dr.y<=r.bottom; if(r.bottom<dr.y||(sameRow&&cx<dr.x)) idx++; }
+  return idx; }
+function bcoMovePh(dr){ const others=bcoCards(dr.grid), idx=bcoTarget(dr);
+  const curIdx=[...dr.grid.children].filter(n=>n===dr.ph||n.dataset.bcoId).indexOf(dr.ph);
+  if(idx===curIdx) return;
+  const first=new Map(others.map(o=>[o,o.getBoundingClientRect()]));
+  if(idx>=others.length) (others[others.length-1]||dr.ph).after(dr.ph); else others[idx].before(dr.ph);
+  for(const o of others){ const a=first.get(o), b=o.getBoundingClientRect(); const dx=a.left-b.left, dy=a.top-b.top; if(!dx&&!dy) continue;
+    o.style.transition='none'; o.style.transform=`translate(${dx}px,${dy}px)`; o.getBoundingClientRect();
+    o.style.transition='transform .18s cubic-bezier(.2,.8,.2,1)'; o.style.transform=''; }
+  bcoRenumber(dr); }
+function bcoRenumber(dr){ let n=0; for(const node of dr.grid.children){ if(node===dr.ph){ n++; const l=dr.card.querySelector('.bco-pos'); if(l) l.textContent='#'+n; continue; } if(!node.dataset.bcoId) continue; n++; const l=node.querySelector('.bco-pos'); if(l) l.textContent='#'+n; } }
+function bcoTick(dr){ if(!dr.active) return;
+  const vh=window.innerHeight, bottomEdge=vh-(parseFloat(getComputedStyle(document.body).getPropertyValue('--player-h'))||0);
+  let v=0; if(dr.y<BCO_EDGE) v=-Math.ceil((BCO_EDGE-dr.y)/BCO_EDGE*22); else if(dr.y>bottomEdge-BCO_EDGE) v=Math.ceil((dr.y-(bottomEdge-BCO_EDGE))/BCO_EDGE*22);
+  if(v){ const before=window.scrollY; window.scrollBy(0,v); if(window.scrollY!==before) bcoMovePh(dr); }
+  dr.raf=requestAnimationFrame(()=>bcoTick(dr)); }
+function bcoEnd(dr, commit){
+  cancelAnimationFrame(dr.raf); dr.active=false; BCO.drag=null;
+  const card=dr.card, ph=dr.ph, to=ph.getBoundingClientRect();
+  // Cancel also drops the card into the placeholder; the re-render below then puts every
+  // card back in the saved order (the data never changed).
+  const finish=()=>{ card.removeAttribute('style'); card.classList.remove('bco-lift'); ph.replaceWith(card);
+    for(const o of bcoCards(dr.grid)){ o.style.transition=''; o.style.transform=''; }
+    document.body.classList.remove('bco-dragging'); state.dragLock=false;
+    const after=bcoCards(dr.grid).map(x=>x.dataset.bcoId), cid=dr.grid.dataset.bcoGrid;
+    if(commit&&cid&&after.join('|')!==dr.before.join('|')){ const pos=after.indexOf(card.dataset.bcoId)+1;
+      BCO.live=`${card.querySelector('.panel-b b')?.textContent||'Visual'} moved to position ${pos} of ${after.length}.`; bcoCommit(cid, after); }
+    else { state.renderDeferred=false; render(); } };
+  if(commit){ card.style.transition='transform .14s ease-out'; card.style.transform=`translate3d(${to.left}px,${to.top}px,0) scale(1)`; setTimeout(finish,140); }
+  else finish(); }
+document.addEventListener('pointerdown', e=>{
+  const card=e.target.closest('[data-bco-id]'); if(!card||BCO.drag||(e.pointerType==='mouse'&&e.button!==0)) return;
+  if(e.target.closest('button,a,input,select,textarea')) return;
+  const dr={card, id:e.pointerId, type:e.pointerType, x0:e.clientX, y0:e.clientY, x:e.clientX, y:e.clientY, active:false};
+  BCO.drag=dr;
+  if(e.pointerType==='touch'){ card.classList.add('bco-press'); dr.timer=setTimeout(()=>{ if(BCO.drag===dr) bcoBegin(dr); },BCO_HOLD_MS); }
+});
+document.addEventListener('pointermove', e=>{ const dr=BCO.drag; if(!dr||e.pointerId!==dr.id) return; dr.x=e.clientX; dr.y=e.clientY;
+  if(!dr.active){ const dist=Math.hypot(dr.x-dr.x0,dr.y-dr.y0);
+    if(dr.type==='touch'){ if(dist>BCO_TOUCH_SLOP){ clearTimeout(dr.timer); dr.card.classList.remove('bco-press'); BCO.drag=null; } return; }   // it's a scroll, not a hold
+    if(dist<BCO_MOUSE_SLOP) return; e.preventDefault(); bcoBegin(dr); }
+  e.preventDefault(); bcoPlace(dr); bcoMovePh(dr); }, {passive:false});
+const bcoUp=(e, commit)=>{ const dr=BCO.drag; if(!dr||e.pointerId!==dr.id) return; clearTimeout(dr.timer); dr.card.classList.remove('bco-press');
+  if(dr.active) bcoEnd(dr, commit); else BCO.drag=null; };
+document.addEventListener('pointerup', e=>bcoUp(e,true));
+document.addEventListener('pointercancel', e=>bcoUp(e,false));
+// Once a touch drag is live the page must not scroll under the finger (before that, it may).
+document.addEventListener('touchmove', e=>{ if(BCO.drag&&BCO.drag.active) e.preventDefault(); }, {passive:false});
+document.addEventListener('contextmenu', e=>{ if(e.target.closest&&e.target.closest('[data-bco-id]')) e.preventDefault(); });
+document.addEventListener('keydown', e=>{
+  if(e.key==='Escape'&&BCO.drag&&BCO.drag.active){ bcoEnd(BCO.drag,false); return; }
+  const card=e.target.closest&&e.target.closest('[data-bco-id]'); if(!card||BCO.drag) return;
+  const delta={ArrowLeft:-1,ArrowUp:-1,ArrowRight:1,ArrowDown:1}[e.key]; const grid=card.parentElement, cid=grid.dataset.bcoGrid;
+  const ids=bcoCards(grid).map(x=>x.dataset.bcoId), i=ids.indexOf(card.dataset.bcoId);
+  let j=e.key==='Home'?0:e.key==='End'?ids.length-1:delta!=null?i+delta:null; if(j==null) return; e.preventDefault();
+  j=Math.max(0,Math.min(ids.length-1,j)); if(j===i||!cid) return;
+  ids.splice(j,0,ids.splice(i,1)[0]); BCO.live=`${card.querySelector('.panel-b b')?.textContent||'Visual'} moved to position ${j+1} of ${ids.length}.`;
+  bcoCommit(cid, ids).then(()=>{}); requestAnimationFrame(()=>{ const again=document.querySelector(`[data-bco-id="${CSS.escape(card.dataset.bcoId)}"]`); if(again) again.focus(); });
+});
+Object.assign(ACTIONS, { 'bco-retry': ()=>{ const s=BCO.status; if(s&&s.kind==='error') bcoCommit(s.cid, s.order); } });
+Object.assign(CHANGES, { 'bco-coll': (el)=>{ BCO.coll=el.value; render(); } });
 
 pages.broadcast = { live:true, async load(){ return api('/api/broadcast'); }, view(d){
   const s=st(); const np=(s&&s.now_playing)||{}; const modeCard=(id,icon,title,desc,active)=>`<button type="button" class="panel bcmode ${active?'active':''}" data-act="bc-mode-${id}" style="text-align:left;padding:16px;cursor:pointer;border-color:${active?'var(--gold)':''}"><div style="display:flex;align-items:center;gap:10px"><span class="ic ${active?'gold':''}" style="width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:${active?'rgba(242,193,78,.16)':'rgba(128,168,214,.08)'}">${icon}</span><b style="font:800 14px var(--display)">${title}</b>${active?pill('gold','ACTIVE'):''}</div><p class="small muted" style="margin:8px 0 0">${desc}</p></button>`;
@@ -1695,14 +1833,7 @@ pages.broadcast = { live:true, async load(){ return api('/api/broadcast'); }, vi
     <div class="grid eq" style="grid-template-columns:repeat(auto-fill,minmax(min(260px,100%),1fr));margin-bottom:18px">${d.collections.length?d.collections.map(c=>`<div class="panel" data-key="coll-${c.id}"><div class="panel-b"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><b style="font:800 15px var(--display);flex:1;min-width:0">${h(c.name)}</b>${c.id===d.active_collection?pill('gold','ACTIVE'):''}${pill('slate',c.order)}</div>
       <div class="chips" style="margin-top:8px">${c.videos.slice(0,4).map(v=>`<span class="chip slate">${h(v.name)}</span>`).join('')}${c.count>4?`<span class="chip slate">+${c.count-4} more</span>`:''}${!c.count?'<span class="small muted">No videos yet</span>':''}</div></div>
       <div class="panel-f"><button class="btn xs ${c.id===d.active_collection?'gold':''}" data-act="bc-activate-collection" data-id="${c.id}">${c.id===d.active_collection?'Active ✓':'Activate'}</button><button class="btn xs" data-act="coll-edit" data-id="${c.id}">${I.edit} Edit</button><button class="btn xs icon red" data-act="coll-del" data-id="${c.id}" style="margin-left:auto">${I.trash}</button></div></div>`).join(''):`<div class="panel"><div class="panel-b">${empty(I.film,'No collections yet','Group eligible visuals into a named set — Rainy Nights, Christmas, Lagos — then activate it.',`<button class="btn sm gold" data-act="coll-new">${I.plus} New Collection</button>`)}</div></div>`}</div>
-    ${(()=>{ const activeColl=d.collections.find(c=>c.id===d.active_collection);
-      const order=(activeColl?.video_ids||[]).filter(id=>d.eligible_visuals.some(v=>v.id===id));
-      const inRotation=order.map((id,i)=>({v:d.eligible_visuals.find(v=>v.id===id),pos:i+1}));
-      const notInRotation=d.eligible_visuals.filter(v=>!order.includes(v.id));
-      const card=(v,pos)=>{ const isNow=cur&&cur.id===v.id;
-        return `<div class="panel" style="${isNow?'border-color:var(--gold)':''}"><div class="preview" style="aspect-ratio:16/9;border-radius:16px 16px 0 0;border:0;position:relative">${v.thumbnail?`<img class="bg" src="${h(v.thumbnail)}" alt="">`:`<div class="ph small">No thumbnail</div>`}${pos?`<span class="lbl" style="background:rgba(7,13,24,.85)">#${pos}</span>`:''}${isNow?`<span class="lbl" style="left:auto;right:8px;background:var(--gold);color:#1a1204">${I.play} NOW PLAYING</span>`:''}</div><div class="panel-b"><b style="font:800 12.5px var(--display)">${h(v.name)}</b>${!pos?`<div class="small muted" style="margin-top:2px">Not in active collection</div>`:''}</div></div>`; };
-      return `<h3 style="margin:0 0 8px;font:800 15px var(--display)">${ic(I.image,'blue')}ALL ELIGIBLE VISUALS (${d.eligible_visuals.length})${help('Every video currently flagged for broadcast use. Numbered cards are in the active collection, in rotation order — the gold "NOW PLAYING" card is the one on air right now. Unnumbered, dimmed cards are eligible but not added to the active collection, so they never play.')}</h3>
-    <div class="grid eq" style="grid-template-columns:repeat(auto-fill,minmax(min(200px,100%),1fr))">${d.eligible_visuals.length?[...inRotation.map(({v,pos})=>card(v,pos)),...notInRotation.map(v=>`<div style="opacity:.55">${card(v,null)}</div>`)].join(''):`<div class="panel"><div class="panel-b">${empty(I.film,'No eligible visuals yet','Upload a video on Player Skins and turn on "Also use for YouTube broadcast".',`<a class="btn sm gold" href="#/skins">${I.image} Player Skins</a>`)}</div></div>`}</div>`; })()}`}`; } };
+    ${bcoGridHtml(d,cur)}`}`; } };
 Object.assign(ACTIONS, {
   'bc-mode-single': async()=>{ await act(()=>post('/api/broadcast/mode',{mode:'single'}),'Switched to Single Visual'); delete state.pageData.broadcast; render(); },
   'bc-mode-rotation': async()=>{ await act(()=>post('/api/broadcast/mode',{mode:'rotation'}),'Switched to Rotation'); delete state.pageData.broadcast; render(); },

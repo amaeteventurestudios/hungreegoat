@@ -2482,6 +2482,24 @@ def broadcast_collection_add(cid: str, body: BroadcastCollectionAdd, user: str =
     return c
 
 
+class BroadcastCollectionOrder(BaseModel):
+    video_ids: list[str]
+
+
+@app.put("/api/broadcast/collections/{cid}/order")
+def broadcast_collection_order(cid: str, body: BroadcastCollectionOrder, user: str = Depends(current_user)):
+    """Drag-and-drop reorder on Broadcast Visuals: replaces the collection's rotation order
+    in one atomic write (see broadcast.set_order). 409 if the page was stale."""
+    try:
+        c = broadcast_mod.set_order(cid, body.video_ids)
+    except KeyError:
+        raise HTTPException(404, "no such collection")
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    db.log_event("info", "system", f"Broadcast collection reordered: {c.get('name') or cid}")
+    return c
+
+
 @app.delete("/api/broadcast/collections/{cid}")
 def broadcast_collection_delete(cid: str, user: str = Depends(current_user)):
     try:

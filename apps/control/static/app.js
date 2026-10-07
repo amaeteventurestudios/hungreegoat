@@ -241,6 +241,10 @@ function alertsDrawer(){ const A=state.alerts; const sev={critical:'err',error:'
 let nowArtUrl = null;
 function swapArt(){ const box=document.getElementById('np-art'); const s=st(); if(!box||!s) return; const url = s.now_playing.track_id ? artUrl(s.now_playing) : ASSET.defaultArtBig; if (url===nowArtUrl) return; nowArtUrl=url; const img=new Image(); img.alt=''; img.onload=()=>{ const old=box.querySelector('img'); box.appendChild(img); if(old){ old.classList.add('out'); setTimeout(()=>old.remove(),400); } }; img.onerror=()=>{ img.src=ASSET.defaultArtBig; }; img.src=url; }
 async function render(){ const root=$('#root');
+  // A drag in progress owns the DOM it is moving (Broadcast Visuals reorder): a background
+  // poll morphing it mid-gesture would yank cards out from under the pointer. Defer, and
+  // the drag's own drop/cancel renders once it lets go.
+  if(state.dragLock){ state.renderDeferred=true; return; }
   if(!state.user){ setHTML(root, loginView(state._loginErr||'')); const pf=$('#login input[name=password]'); if(pf && document.activeElement!==pf && !state._loginErr) pf.focus(); return; }
   if(!state.overview){ setHTML(root, '<div class="scene"></div><div class="login"><div class="panel" style="padding:30px">Connecting to HUNGREE Goat Control…</div></div>'); return; }
   const pg=HGC.pages[state.page]||HGC.pages.dashboard; let content='';
@@ -455,6 +459,9 @@ Object.assign(FORMS, {
 (async () => {
   delegate(); initAudio();
   try { const me = await api('/api/me'); state.user = me.user; } catch { state.user = null; }
+  // pages.js registers the pages; if /api/me answers before it has executed, a deep link
+  // like #/broadcast would fall back to the dashboard. Both scripts have run by DOMContentLoaded.
+  if (document.readyState === 'loading') await new Promise(r => document.addEventListener('DOMContentLoaded', r, { once: true }));
   route();
   if (state.user) await refresh(true);
   setInterval(() => { if (state.user && !state.modal && !document.hidden) refresh(); }, 5000);

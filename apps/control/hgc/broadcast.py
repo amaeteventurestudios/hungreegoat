@@ -282,6 +282,31 @@ def add_to_collection(cid: str, video_ids: list[str]) -> dict:
 
 
 @_locked
+def set_order(cid: str, ordered_ids: list[str]) -> dict:
+    """Reorder a collection's playable visuals — the same list active_pool() hands to
+    _pick_next(), so this IS the sequential rotation order, not a display preference.
+    `ordered_ids` must be exactly the collection's currently-eligible members (the numbered
+    cards on Broadcast Visuals), each once; anything else means the page is stale and the
+    request is refused rather than guessed at. Members that aren't eligible right now (e.g.
+    a skin whose video was removed) keep their slots, so they come back where they were if
+    they become eligible again. The rotation cursor is untouched: playback continues from
+    the visual on air now, then follows the new order at the next track change."""
+    d = load()
+    cur = next((c for c in d["collections"] if c["id"] == cid), None)
+    if cur is None:
+        raise KeyError(cid)
+    members = list(cur.get("video_ids") or [])
+    elig = {s["id"] for s in eligible_visuals()}
+    playable = [i for i in members if i in elig]
+    if len(set(ordered_ids)) != len(ordered_ids) or sorted(ordered_ids) != sorted(playable):
+        raise ValueError("this collection changed since the page loaded — reload and try again")
+    it = iter(ordered_ids)
+    cur["video_ids"] = [next(it) if i in elig else i for i in members]
+    save(d)
+    return cur
+
+
+@_locked
 def forget_visual(skin_id: str) -> None:
     """Called by skins.delete(): remove a deleted skin from every collection's list."""
     d = load()
