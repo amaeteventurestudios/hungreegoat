@@ -533,3 +533,56 @@ table.tbl .spark{width:64px;height:20px;vertical-align:middle}
 .log-menu button:hover{background:rgba(127,176,255,.14)}
 .log-menu-sep{height:1px;background:var(--line2);margin:5px 2px}
 @media (max-width:767px){.logs-toolbar .search{flex:1 1 100%}.logs-toolbar .sel{flex:1 1 140px}}
+
+/* ---- Player Skins: Batch Upload (New Skin → Batch Upload) ---- */
+.bsk-mode{margin:0 0 12px}.bsk-mode button[disabled]{opacity:.45;cursor:not-allowed}
+.bsk-drops{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.bsk-drop{display:flex;flex-direction:column;align-items:center;gap:6px;padding:16px 12px;font-size:12.5px}
+.bsk-notice{display:flex;align-items:flex-start;gap:8px;padding:9px 10px;border-radius:10px;margin-bottom:8px;font-size:12.5px;border:1px solid rgba(255,90,106,.4);background:rgba(255,90,106,.08);color:var(--red2)}
+.bsk-notice.warn{border-color:rgba(255,180,84,.4);background:rgba(255,180,84,.08);color:var(--amber)}
+.bsk-notice svg{width:16px;height:16px;flex:none;margin-top:1px}.bsk-notice span{flex:1;min-width:0;overflow-wrap:anywhere}.bsk-notice .btn{margin:-4px -4px 0 0}
+.bsk-all{margin:10px 0}.bsk-all .panel-b{padding:12px 14px}
+.bsk-all .rule .lbl small{white-space:normal}
+.bsk-coll{display:flex;flex-direction:column;gap:5px;margin-top:6px;font-weight:600}.bsk-coll .sel{width:100%;max-width:420px}
+.bsk-defaults{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:12px;padding-top:10px;border-top:1px solid rgba(128,168,214,.07)}
+.bsk-unm{margin:10px 0;border-color:rgba(255,180,84,.35)}.bsk-unm .panel-b{padding:10px 12px;gap:6px}
+.bsk-unm-row{display:flex;align-items:center;gap:8px;min-width:0}.bsk-unm-row img{width:54px;height:30px;object-fit:cover;border-radius:6px;flex:none}
+.bsk-unm-row span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}.bsk-unm-row .sel{height:34px;max-width:46%}
+.bsk-prog{margin:10px 0}
+.bsk-rows{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.bsk-row{display:grid;grid-template-columns:120px minmax(0,1fr) auto auto;gap:12px;align-items:start;padding:10px;border:1px solid var(--line);border-radius:14px;background:rgba(8,14,26,.55)}
+.bsk-row.complete{border-color:rgba(46,204,138,.35)}.bsk-row.failed{border-color:rgba(255,90,106,.45)}
+.bsk-row.uploading,.bsk-row.processing,.bsk-row.creating,.bsk-row.saving{border-color:var(--line-gold)}
+.bsk-th{width:120px;aspect-ratio:16/9;border-radius:10px;overflow:hidden;background:rgba(255,255,255,.04);border:1px solid var(--line)}
+.bsk-th img{width:100%;height:100%;object-fit:cover;display:block}
+.bsk-th .ph{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--muted2);text-align:center;padding:4px}.bsk-th .ph svg{width:18px;height:18px}.bsk-th .ph small{font-size:10px;line-height:1.2}
+.bsk-main{display:flex;flex-direction:column;gap:6px;min-width:0}
+.bsk-name{width:100%;font-weight:700}
+.bsk-file{font-size:11px;color:var(--muted2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.bsk-file svg{width:12px;height:12px;vertical-align:-2px}
+.bsk-tsel{width:100%;height:34px;font-size:12px}
+.bsk-st{display:flex;align-items:center;gap:7px;font-size:12px}.bsk-st b{font-weight:700}
+.bsk-msg{font-size:11.5px;line-height:1.4;overflow-wrap:anywhere}
+.bsk-tg{display:grid;grid-template-columns:repeat(4,auto);gap:8px 12px}
+.bsk-tg label{display:flex;flex-direction:column;align-items:center;gap:5px;font-size:10.5px;font-weight:700;color:var(--muted);letter-spacing:.03em;text-transform:uppercase}
+.bsk-act{display:flex;flex-direction:column;gap:6px;align-items:flex-end;min-width:34px}
+.bsk-foot{position:sticky;bottom:-16px;background:var(--panel2);padding:12px 0 2px;margin-top:14px;flex-wrap:wrap;z-index:2}
+@media (max-width:900px){
+  .bsk-row{grid-template-columns:96px minmax(0,1fr) auto}.bsk-th{width:96px}
+  .bsk-tg{grid-column:1/-1;grid-row:2;grid-template-columns:repeat(4,minmax(0,1fr));padding-top:8px;border-top:1px solid rgba(128,168,214,.07)}
+  .bsk-act{grid-column:3;grid-row:1}
+}
+@media (max-width:600px){
+  .bsk-drops{grid-template-columns:1fr}.bsk-defaults{grid-template-columns:1fr}
+  .bsk-row{grid-template-columns:72px minmax(0,1fr) auto;gap:10px}.bsk-th{width:72px}.bsk-th .ph small{display:none}
+  .bsk-unm-row{flex-wrap:wrap}.bsk-unm-row .sel{max-width:none;flex:1 1 100%;order:3}
+  .bsk-foot .btn{flex:1 1 auto;justify-content:center}.bsk-foot .btn.gold{flex-basis:100%;order:-1}
+}
+.bsk-foot{display:flex;gap:8px;justify-content:flex-end}
+.bsk-drop.full{opacity:.6;border-style:solid}
+/* Player Skins → Manage visibility: on phones the two labelled toggles drop to their own
+   line instead of pushing the row (and with it the whole page) wider than the screen. */
+.mgmt-tgs{display:flex;align-items:center;gap:10px;flex:none}.mgmt-l{text-align:center;flex:none}
+@media (max-width:600px){
+  .mgmt-row{flex-wrap:wrap;row-gap:4px}.mgmt-row .lbl{flex:1 1 calc(100% - 110px)!important}
+  .mgmt-src{display:none}.mgmt-tgs{flex:1 1 100%;justify-content:flex-end}.mgmt-l{width:auto!important}
+}

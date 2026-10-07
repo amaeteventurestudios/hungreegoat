@@ -296,6 +296,7 @@ document.addEventListener('drop', e=>{ const z=e.target.closest('[data-drop]'); 
   const dropKind=z.dataset.dropKind; const files=[...e.dataTransfer.files]; if(!files.length) return;
   if(dropKind==='skin-visual'){ const f=files[0]; skinUploadAsset(f, f.type.startsWith('video')?'video':'image'); return; }
   if(dropKind==='skin-thumbnail'){ skinUploadAsset(files[0], 'thumbnail'); return; }
+  if(dropKind==='batch'){ bAddFiles(files); return; }
   queueFiles(files); });
 
 /* ======================= PLAYLISTS ======================= */
@@ -922,13 +923,13 @@ function skinManageTableHtml(list){
   const e=SKIN_MGMT; const rows=list;
   const allChecked=rows.length>0 && rows.every(s=>e.selected.has(s.id));
   const row=(s)=>{ const bc=skinCanBroadcast(s);
-    return `<div class="rule" data-key="mgmt-${s.id}" style="align-items:center">
+    return `<div class="rule mgmt-row" data-key="mgmt-${s.id}" style="align-items:center">
       <input type="checkbox" data-act="skin-mgmt-sel" data-id="${s.id}" ${e.selected.has(s.id)?'checked':''} style="width:16px;height:16px;flex:none">
       <span class="preview" style="width:56px;height:35px;flex:none;border-radius:8px;overflow:hidden;position:relative">${(s.thumbnail||s.image)?`<img class="bg" src="${h(s.thumbnail||s.image)}" alt="" style="width:100%;height:100%;object-fit:cover">`:''}</span>
       <span class="lbl" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700">${h(s.name)}${s.default?` ${pill('gold','default')}`:''}</span>
-      ${pill(s.source==='built-in'?'blue':'gold',s.source==='built-in'?'built-in':'custom')}
-      <span class="small muted" style="width:76px;text-align:center;flex:none">Player</span><span class="toggle ${s.enabled?'on':''}" data-act="skin-toggle" data-id="${s.id}" title="Visible in Player"></span>
-      <span class="small muted" style="width:86px;text-align:center;flex:none">Broadcast</span><span class="toggle ${s.broadcast_eligible?'on':''} ${bc?'':'disabled'}" data-act="skin-toggle-bc" data-id="${s.id}" title="${bc?'Use in YouTube broadcast rotation':'Needs a managed uploaded video (not an image, not externally-hosted) to be broadcast-eligible'}"></span>
+      <span class="mgmt-src">${pill(s.source==='built-in'?'blue':'gold',s.source==='built-in'?'built-in':'custom')}</span>
+      <span class="mgmt-tgs"><span class="small muted mgmt-l" style="width:76px">Player</span><span class="toggle ${s.enabled?'on':''}" data-act="skin-toggle" data-id="${s.id}" title="Visible in Player"></span>
+      <span class="small muted mgmt-l" style="width:86px">Broadcast</span><span class="toggle ${s.broadcast_eligible?'on':''} ${bc?'':'disabled'}" data-act="skin-toggle-bc" data-id="${s.id}" title="${bc?'Use in YouTube broadcast rotation':'Needs a managed uploaded video (not an image, not externally-hosted) to be broadcast-eligible'}"></span></span>
     </div>`; };
   return `<div class="panel" style="margin-bottom:18px">
     <div class="panel-h" style="cursor:pointer" data-act="skin-mgmt-open"><h3 style="margin:0">${ic(I.image,'cyan')}Manage visibility${help('Quickly control which skins are visible in the Player and which are eligible for the YouTube broadcast rotation, across every skin at once — no need to open each one individually.')}</h3><button class="btn xs ghost icon" data-act="skin-mgmt-open">${e.open?I.up:I.down}</button></div>
@@ -1233,6 +1234,7 @@ function skinEditorHtml(){ const e=SKIN_EDIT; const visUrl=e.video||e.image; con
   const addable=AMBLIST.filter(([k])=>!(k in e.ambience));
   const previewSrc=(()=>{ if(e.time_mode==='variants'){ const v=e.time_variants[e.previewTime]; if(v&&(v.video||v.image)) return v.video||v.image; } return visUrl; })();
   return `<h3>${I.image} ${e.isNew?'New':'Edit'} skin<button class="btn xs ghost icon x" data-act="skin-cancel">${I.x}</button></h3>
+  ${e.isNew?`<div class="seg bsk-mode" role="tablist"><button type="button" class="active">Single Skin</button><button type="button" data-act="skin-mode-batch">Batch Upload</button></div>`:''}
   <div class="form" style="gap:16px">
     <div class="wide"><b style="font:700 12px var(--display);color:var(--gold3)">1 · SKIN IDENTITY</b></div>
     <label class="wide">Skin name<input class="inp" id="skin-name" value="${h(e.name)}" placeholder="Lagos rooftop" data-input="skin-field" data-key="name"></label>
@@ -1292,7 +1294,9 @@ function skinEditorHtml(){ const e=SKIN_EDIT; const visUrl=e.video||e.image; con
   </div>
   <div class="row-actions" style="position:sticky;bottom:-16px;background:var(--panel2);padding:12px 0 2px;margin-top:14px"><button type="button" class="btn" data-act="skin-cancel">Cancel</button><button type="button" class="btn gold" data-act="skin-save" ${e.saving?'disabled':''}>${e.saving?'Saving…':'Save Skin'}</button></div>`; }
 Object.assign(ACTIONS, {
-  'skin-new': async()=>{ const draft=await post('/api/skins/draft'); skinEditOpen(draft,true); },
+  // A batch in progress (or with videos waiting) reopens where it was; otherwise New Skin
+  // starts in Single Skin mode exactly as before.
+  'skin-new': async()=>{ if(BATCH.running||BATCH.rows.length){ await batchOpen(); return; } const draft=await post('/api/skins/draft'); skinEditOpen(draft,true); },
   'skin-edit': (el)=>skinEditOpen(state.pageData.skins.skins.find(x=>x.id===el.dataset.id),false),
   'skin-preview': (el)=>{ const s=state.pageData.skins.skins.find(x=>x.id===el.dataset.id); modal(()=>{ const src=s.video||s.image; return `<h3>${I.eye} Preview — ${h(s.name)}<button class="btn xs ghost icon x" data-act="close-modal">${I.x}</button></h3><div class="preview" style="aspect-ratio:16/9">${src?(s.video?`<video src="${h(src)}" autoplay muted loop playsinline></video>`:`<img class="bg" src="${h(src)}" alt="">`):`<div class="ph">No visual uploaded yet</div>`}</div><div class="chips" style="margin-top:10px">${pill(s.source==='built-in'?'blue':'gold',s.source)}${pill(s.enabled?'on':'off',s.enabled?'enabled':'disabled')}${s.default?pill('gold','default'):''}${s.broadcast_eligible?pill('cyan','broadcast-eligible'):''}</div>`; }); },
   'skin-toggle': async(el)=>{ const s=state.pageData.skins.skins.find(x=>x.id===el.dataset.id); await act(()=>put(`/api/skins/${s.id}`,{name:s.name,description:s.description,enabled:!s.enabled,accent:s.accent,ambience:s.ambience,order:s.order,time_mode:s.time_mode,time_variants:s.time_variants,broadcast_eligible:s.broadcast_eligible}), s.enabled?'Skin disabled':'Skin enabled'); delete state.pageData.skins; render(); },
@@ -1362,6 +1366,286 @@ Object.assign(CHANGES, {
   'skin-amb-vol': (el)=>{ SKIN_EDIT.ambience[el.dataset.key]=Number(el.value); const b=el.nextElementSibling; if(b) b.textContent=el.value+'%'; },
   'skin-accent': (el)=>{ SKIN_EDIT.accent=el.value; const hex=document.querySelector('[data-input="skin-accent-hex"]'); if(hex) hex.value=el.value; },
   'skin-accent-hex': (el)=>{ if(/^#[0-9a-f]{6}$/i.test(el.value)){ SKIN_EDIT.accent=el.value; const c=document.querySelector('[data-input="skin-accent"]'); if(c) c.value=el.value; } },
+});
+
+/* ---- Batch Upload: up to 10 new skins at once (Player Skins → New Skin → Batch Upload).
+   Deliberately NOT a second skin-creation path: every row runs the exact server sequence the
+   Single Skin form uses — POST /api/skins/draft → asset upload(s) → PUT /api/skins/{id}
+   (finalize) — so Enabled, YouTube broadcast eligibility, id/slug generation and duplicate
+   suffixing are all decided by hgc/skins.py exactly as they are for one skin. Each row
+   records which of those steps already succeeded, so Retry resumes where it stopped and
+   never re-creates a skin or re-uploads a file the server already has. Rows run two at a
+   time; one row failing never touches the others. ---- */
+const BATCH_MAX=10, BATCH_CONC=2, BATCH_MAX_BYTES=120*1024*1024;   // 120 MB = the server's per-asset limit (main.py skins_asset)
+const BVID_EXT=/\.(mp4|webm)$/i, BIMG_EXT=/\.(jpe?g|png|webp)$/i;   // = skins.py VIDEO_EXTS / IMAGE_EXTS
+const BATCH={rows:[],images:[],notices:[],settings:{enabled:true,broadcast:true,rotation:true},accent:'#f2c14e',defaultKey:null,collection:null,running:false,ctx:null};
+const bStem=(n)=>n.replace(/\.[^.]+$/,'');
+// Filename matching key: case, spaces, underscores and hyphens are ignored — nothing else.
+// "QA_Mango-Motion.png" matches "QA Mango Motion.mp4"; "Mango Motion 2.png" does not.
+const bNorm=(n)=>bStem(n).toLowerCase().replace(/[\s_\-]+/g,' ').trim();
+const bSlug=(n)=>(n.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40))||'skin';   // = skins.py slug()
+const bKey=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const bEditable=(r)=>r.status==='pending'||(r.status==='failed'&&!r.done.final);
+// Not started, or failed before the skin was saved: everything is still changeable (a failed
+// row's settings are only sent at the finalize step). Once saved, a row is read-only.
+const bLocked=(r)=>!bEditable(r);
+const B_STATUS={pending:['off','Not started'],waiting:['off','Waiting'],creating:['blue','Creating'],uploading:['cyan','Uploading'],processing:['blue','Processing'],saving:['blue','Saving'],complete:['on','Complete'],failed:['err','Failed']};
+const batchModal=()=>batchHtml();
+function bPaint(){ if(state.modal&&state.modal.html===batchModal) render(); }
+function bImg(key){ return key?BATCH.images.find(i=>i.key===key):null; }
+function bCollections(){ return (BATCH.ctx&&BATCH.ctx.broadcast.collections)||[]; }
+
+function bIssue(r){
+  if(!bEditable(r)) return null;
+  const name=r.name.trim(); if(!name) return 'Needs a name';
+  const sl=bSlug(name), low=name.toLowerCase();
+  const clash=(BATCH.ctx?BATCH.ctx.skins:[]).find(s=>s.id===sl||bSlug(s.name)===sl||s.name.trim().toLowerCase()===low);
+  if(clash) return `"${clash.name}" already exists — rename this one`;
+  const done=BATCH.rows.find(o=>o!==r&&o.result&&(o.result.id===sl||bSlug(o.result.name)===sl));
+  if(done) return `"${done.result.name}" was just created in this batch — rename this one`;
+  if(BATCH.rows.some(o=>o!==r&&bEditable(o)&&bSlug(o.name.trim())===sl)) return 'Same name as another video in this batch — rename one of them';
+  return null;
+}
+const bReady=()=>BATCH.rows.filter(r=>r.status==='pending'&&!bIssue(r));
+
+function bAddFiles(files){
+  if(BATCH.running){ toast('Wait for the current batch to finish before adding files','err'); return; }
+  const rejected=[], tooBig=[], dup=[], over=[];
+  for(const f of files){
+    const isVid=BVID_EXT.test(f.name), isImg=BIMG_EXT.test(f.name);
+    if(!isVid&&!isImg){ rejected.push(f.name); continue; }
+    if(f.size>BATCH_MAX_BYTES){ tooBig.push(f.name); continue; }
+    if(isVid){
+      if(BATCH.rows.some(r=>r.file.name===f.name&&r.file.size===f.size)){ dup.push(f.name); continue; }
+      if(BATCH.rows.length>=BATCH_MAX){ over.push(f.name); continue; }
+      const s=BATCH.settings;
+      BATCH.rows.push({key:bKey(),file:f,name:bStem(f.name).trim(),thumb:null,thumbAuto:false,enabled:s.enabled,broadcast:s.broadcast,rotation:s.rotation,
+        status:'pending',stage:null,pct:0,error:null,warn:null,draftId:null,done:{thumb:false,video:false,final:false,def:false,rot:false},result:null});
+    } else {
+      if(BATCH.images.some(i=>i.file.name===f.name&&i.file.size===f.size)){ dup.push(f.name); continue; }
+      BATCH.images.push({key:bKey(),file:f,url:URL.createObjectURL(f)});
+    }
+  }
+  const N=BATCH.notices; const list=(a)=>a.slice(0,6).join(', ')+(a.length>6?` and ${a.length-6} more`:'');
+  if(over.length) N.push({cls:'err',text:`A batch holds at most ${BATCH_MAX} videos. Not added (${over.length}): ${list(over)}. Create this batch first, then start another.`});
+  if(rejected.length) N.push({cls:'err',text:`Not a supported video (MP4 / WebM) or image (JPG / PNG / WebP): ${list(rejected)}`});
+  if(tooBig.length) N.push({cls:'err',text:`Larger than the 120 MB per-file limit: ${list(tooBig)}`});
+  if(dup.length) N.push({cls:'warn',text:`Already in this batch: ${list(dup)}`});
+  bAutoMatch(); bPaint();
+}
+// Pair each not-yet-assigned image with the one editable row whose VIDEO filename has the same
+// normalized stem. No candidate, or a row that already has a thumbnail → stays unmatched.
+function bAutoMatch(){
+  for(const img of BATCH.images){
+    if(BATCH.rows.some(r=>r.thumb===img.key)) continue;
+    const k=bNorm(img.file.name);
+    const cands=BATCH.rows.filter(r=>bEditable(r)&&!r.done.thumb&&!r.thumb&&bNorm(r.file.name)===k);
+    if(cands.length===1){ cands[0].thumb=img.key; cands[0].thumbAuto=true; }
+  }
+}
+function bSetThumb(row, imgKey){
+  for(const r of BATCH.rows) if(r!==row&&imgKey&&r.thumb===imgKey&&bEditable(r)&&!r.done.thumb){ r.thumb=null; r.thumbAuto=false; }
+  row.thumb=imgKey||null; row.thumbAuto=false; row.done.thumb=false;
+}
+
+async function batchOpen(){
+  try{ const [sk,bc]=await Promise.all([api('/api/skins'),api('/api/broadcast')]); BATCH.ctx={skins:sk.skins,broadcast:bc}; }
+  catch(e){ toast(e.message,'err'); return; }
+  const colls=bCollections();
+  if(!BATCH.collection||!colls.some(c=>c.id===BATCH.collection)) BATCH.collection=BATCH.ctx.broadcast.active_collection&&colls.some(c=>c.id===BATCH.ctx.broadcast.active_collection)?BATCH.ctx.broadcast.active_collection:(colls[0]||{}).id||null;
+  if(!colls.length){ BATCH.settings.rotation=false; for(const r of BATCH.rows) if(bEditable(r)) r.rotation=false; }
+  modal(batchModal,{wide:true});
+}
+function batchReset(){ for(const i of BATCH.images) URL.revokeObjectURL(i.url); Object.assign(BATCH,{rows:[],images:[],notices:[],defaultKey:null,running:false}); }
+
+function bUpload(row, kind, file){
+  return new Promise((res,rej)=>{
+    const fd=new FormData(); fd.append('file',file,file.name);
+    const x=new XMLHttpRequest(); x.open('POST',`/api/skins/${encodeURIComponent(row.draftId)}/asset/${kind}`);
+    row.stage=kind; row.status='uploading'; row.pct=0; bPaint();
+    x.upload.onprogress=e=>{ if(!e.lengthComputable) return; row.pct=Math.round(e.loaded/e.total*100);
+      const el=document.querySelector(`[data-key="brow-${row.key}"] .bsk-st b`); if(el) el.textContent=`Uploading ${kind==='video'?'video':'thumbnail'} ${row.pct}%`; };
+    // Bytes are all sent; the server is now validating (ffprobe / image decode) and storing it.
+    x.upload.onload=()=>{ row.status='processing'; bPaint(); };
+    x.onload=()=>{ let j=null; try{ j=JSON.parse(x.responseText); }catch(_){}
+      if(x.status>=200&&x.status<300) return res(j);
+      const err=new Error(x.status===401?'Not signed in':(j&&j.detail?(typeof j.detail==='string'?j.detail:JSON.stringify(j.detail)):`HTTP ${x.status}`)); err.status=x.status; rej(err); };
+    x.onerror=()=>rej(new Error('Network error — the upload did not reach the server'));
+    x.send(fd);
+  });
+}
+async function bRunRow(row){
+  const cid=BATCH.collection;
+  try{
+    if(!row.draftId){ row.status='creating'; bPaint(); const d=await post('/api/skins/draft'); row.draftId=d.id; }
+    // Thumbnail before video: the server only auto-generates a still frame when a video
+    // lands on a skin with no thumbnail, so this order skips a wasted ffmpeg run.
+    const img=bImg(row.thumb);
+    if(img&&!row.done.thumb){ await bUpload(row,'thumbnail',img.file); row.done.thumb=true; }
+    if(!row.done.video){ await bUpload(row,'video',row.file); row.done.video=true; }
+    if(!row.done.final){ row.status='saving'; bPaint();
+      const body={name:row.name.trim(),description:'',enabled:row.enabled,accent:BATCH.accent,ambience:{},time_mode:'always',time_variants:{},broadcast_eligible:row.broadcast};
+      row.result=await put(`/api/skins/${encodeURIComponent(row.draftId)}`,body); row.done.final=true; }
+    if(row.broadcast&&!row.result.broadcast_eligible) row.warn='Saved, but the server did not mark it broadcast-eligible (its video is not a local uploaded file).';
+    if(BATCH.defaultKey===row.key&&!row.done.def){ row.status='saving'; bPaint(); await post(`/api/skins/${encodeURIComponent(row.result.id)}/default`); row.done.def=true; }
+    if(row.rotation&&row.broadcast&&row.result.broadcast_eligible&&cid&&!row.done.rot){ row.status='saving'; bPaint();
+      await post(`/api/broadcast/collections/${encodeURIComponent(cid)}/videos`,{video_ids:[row.result.id]}); row.done.rot=true; }
+    row.status='complete'; row.error=null;
+  }catch(e){
+    row.status='failed';
+    row.error=row.done.final?`Skin created, but a follow-up step failed: ${e.message}`:e.message;
+    // The draft vanished (deleted elsewhere, or swept as stale): start this row over cleanly.
+    if(!row.done.final&&(e.status===404||e.message==='Not Found')){ row.draftId=null; row.done.thumb=row.done.video=false; }
+  }
+  bPaint();
+}
+async function bRun(rows){
+  if(BATCH.running||!rows.length) return;
+  BATCH.running=true; for(const r of rows){ r.status='waiting'; r.error=null; r.pct=0; } bPaint();
+  const queue=[...rows];
+  await Promise.all(Array.from({length:Math.min(BATCH_CONC,queue.length)},async()=>{ while(queue.length) await bRunRow(queue.shift()); }));
+  BATCH.running=false;
+  try{ const sk=await api('/api/skins'); BATCH.ctx.skins=sk.skins; }catch(_){}
+  delete state.pageData.skins;
+  const ok=rows.filter(r=>r.status==='complete').length, bad=rows.length-ok;
+  toast(bad?`${ok} skin${ok===1?'':'s'} created, ${bad} failed — use Retry`:`${ok} skin${ok===1?'':'s'} created`, bad?'err':'ok');
+  if(state.modal&&state.modal.html===batchModal) render(); else refresh(true);
+}
+
+function batchHtml(){
+  const B=BATCH, rows=B.rows, colls=bCollections(), bc=B.ctx?B.ctx.broadcast:{};
+  const editable=rows.filter(bEditable), ready=bReady();
+  const used=new Set(rows.map(r=>r.thumb).filter(Boolean));
+  const unmatched=B.images.filter(i=>!used.has(i.key));
+  const matched=rows.filter(r=>r.thumb).length, missing=rows.length-matched;
+  const started=rows.filter(r=>r.status!=='pending'), complete=rows.filter(r=>r.status==='complete').length, failed=rows.filter(r=>r.status==='failed');
+  const all=(k)=>{ const pool=k==='rotation'?editable.filter(r=>r.broadcast):editable; const n=pool.filter(r=>r[k]).length; return {on:pool.length?n===pool.length:B.settings[k], n, total:pool.length, mixed:n>0&&n<pool.length}; };
+  const coll=colls.find(c=>c.id===B.collection);
+  const collNote=!colls.length?'There are no Broadcast Visuals collections yet — create one on the Broadcast Visuals page first.'
+    :bc.mode!=='rotation'?'Broadcast is in Single-visual mode right now, so collection membership only takes effect once you switch to Rotation.'
+    :B.collection===bc.active_collection?'This is the active collection — new skins join the live YouTube rotation from the next track change.'
+    :'This collection is not the active one, so nothing changes on air until you activate it.';
+  const tg=(on,act,attrs='',dis=false,title='')=>`<span class="toggle ${on?'on':''} ${dis?'disabled':''}" data-act="${act}" ${attrs} role="switch" aria-checked="${!!on}" ${title?`title="${h(title)}"`:''}></span>`;
+  const allRow=(k,label,sub,dis=false)=>{ const a=all(k); return `<div class="rule"><span class="lbl">${label}<small>${a.mixed?`${a.n} of ${a.total} — tap to set all`:sub}</small></span>${tg(a.on&&!dis,'batch-all',`data-k="${k}"`,dis)}</div>`; };
+
+  const thumbCell=(r)=>{ const img=bImg(r.thumb);
+    return `<div class="bsk-th">${img?`<img src="${h(img.url)}" alt="">`:`<span class="ph">${I.film}<small>Frame from video</small></span>`}</div>`; };
+  const thumbSel=(r)=>`<select class="sel bsk-tsel" data-change="batch-thumb" data-key="${r.key}" ${bLocked(r)||r.done.thumb?'disabled':''} aria-label="Thumbnail for ${h(r.name||r.file.name)}">
+      <option value="" ${!r.thumb?'selected':''}>No thumbnail — generate from video</option>
+      ${B.images.map(i=>{ const other=rows.find(o=>o!==r&&o.thumb===i.key); return `<option value="${i.key}" ${r.thumb===i.key?'selected':''}>${h(i.file.name)}${other?` (now on ${h(other.name||other.file.name)})`:''}</option>`; }).join('')}
+    </select>`;
+  const statusCell=(r)=>{ const iss=bIssue(r); const [cls,lbl]=B_STATUS[r.status]||['off',r.status];
+    const label=r.status==='uploading'?`Uploading ${r.stage==='video'?'video':'thumbnail'} ${r.pct}%`:r.status==='processing'?`Processing ${r.stage==='video'?'video':'thumbnail'}`:r.status==='saving'?'Saving skin':lbl;
+    return `<div class="bsk-st"><span class="led ${cls==='off'?'':cls}"></span><b>${h(label)}</b></div>
+      ${iss&&r.status==='pending'?`<div class="bsk-msg amber">${h(iss)}</div>`:''}
+      ${r.error?`<div class="bsk-msg red">${h(r.error)}</div>`:''}${r.warn?`<div class="bsk-msg amber">${h(r.warn)}</div>`:''}
+      ${r.status==='complete'&&r.result?`<div class="bsk-msg muted2">Created as <span class="mono">${h(r.result.id)}</span> · Player ${r.result.enabled?'on':'off'} · YouTube ${r.result.broadcast_eligible?'on':'off'}${r.done.rot?` · in ${h(coll?coll.name:'collection')}`:''}${r.done.def?' · default scene':''}</div>`:''}`; };
+  const row=(r)=>{ const lock=bLocked(r), canRot=!!colls.length&&r.broadcast;
+    return `<div class="bsk-row ${r.status}" data-key="brow-${r.key}">
+      ${thumbCell(r)}
+      <div class="bsk-main">
+        <input class="inp bsk-name" value="${h(r.name)}" data-input="batch-name" data-key="${r.key}" ${!bEditable(r)?'disabled':''} aria-label="Skin name" placeholder="Skin name">
+        <div class="bsk-file mono" title="${h(r.file.name)}">${I.film} ${h(r.file.name)} · ${fmtBytes(r.file.size)}</div>
+        ${thumbSel(r)}
+        ${statusCell(r)}
+      </div>
+      <div class="bsk-tg">
+        <label>Player ${tg(r.enabled,'batch-row',`data-key="${r.key}" data-k="enabled"`,lock,'Enabled — visible in the player\'s scene picker')}</label>
+        <label>YouTube ${tg(r.broadcast,'batch-row',`data-key="${r.key}" data-k="broadcast"`,lock,'Also use for YouTube broadcast')}</label>
+        <label>Rotation ${tg(r.rotation&&canRot,'batch-row',`data-key="${r.key}" data-k="rotation"`,lock||!canRot,canRot?'Add to Broadcast Visual rotation':colls.length?'Needs "Also use for YouTube broadcast"':'No Broadcast Visuals collection exists yet')}</label>
+        <label>Default ${tg(B.defaultKey===r.key,'batch-default',`data-key="${r.key}"`,lock,'Set as default scene (only one skin can be the default)')}</label>
+      </div>
+      <div class="bsk-act">
+        ${r.status==='failed'?`<button class="btn xs" data-act="batch-retry-row" data-key="${r.key}" ${B.running?'disabled':''}>${I.restart} Retry</button>`:''}
+        ${r.status==='pending'||(r.status==='failed'&&!r.done.final)?`<button class="btn xs icon ghost" data-act="batch-remove" data-key="${r.key}" title="Remove from batch" aria-label="Remove ${h(r.name||r.file.name)} from batch" ${B.running?'disabled':''}>${I.x}</button>`:''}
+      </div>
+    </div>`; };
+
+  const pickers=`<div class="bsk-drops">
+      <label class="dropzone bsk-drop ${rows.length>=BATCH_MAX?'full':''}" data-drop data-drop-kind="batch">${I.upload}<div>${rows.length>=BATCH_MAX?`<b>Batch full</b> — ${BATCH_MAX} of ${BATCH_MAX} videos`:`<b>Add videos</b> — tap to choose or drop here`}</div><div class="small muted2">MP4 / WebM · up to ${BATCH_MAX} per batch · 120 MB each${rows.length&&rows.length<BATCH_MAX?` · ${BATCH_MAX-rows.length} more allowed`:''}</div><input type="file" multiple accept="video/mp4,video/webm,.mp4,.webm" class="hidden" data-change="batch-files"></label>
+      <label class="dropzone bsk-drop" data-drop data-drop-kind="batch">${I.image}<div><b>Add thumbnails</b> — tap to choose or drop here</div><div class="small muted2">JPG / PNG / WebP · matched to videos by filename</div><input type="file" multiple accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" class="hidden" data-change="batch-files"></label>
+    </div>`;
+  const sumChips=rows.length||B.images.length?`<div class="chips">${pill('blue',`${rows.length} video${rows.length===1?'':'s'}`)}${pill(matched?'on':'off',`${matched} thumbnail${matched===1?'':'s'} matched`)}${missing?pill('warn',`${missing} thumbnail${missing===1?'':'s'} missing`):''}${unmatched.length?pill('err',`${unmatched.length} unmatched image${unmatched.length===1?'':'s'}`):''}</div>
+    ${missing?`<div class="small muted">A skin without a thumbnail gets one generated automatically from a still frame of its video — the same thing the single-skin editor does.</div>`:''}`:'';
+  const unmatchedHtml=unmatched.length?`<div class="panel bsk-unm"><div class="panel-b"><b class="small" style="color:var(--amber)">${I.alert} Unmatched images — no video has the same filename</b>
+      ${unmatched.map(i=>`<div class="bsk-unm-row" data-key="bunm-${i.key}"><img src="${h(i.url)}" alt=""><span class="mono" title="${h(i.file.name)}">${h(i.file.name)}</span>
+        <select class="sel" data-change="batch-assign" data-img="${i.key}" aria-label="Assign ${h(i.file.name)} to a video"><option value="">Assign to…</option>${rows.filter(r=>bEditable(r)&&!r.done.thumb).map(r=>`<option value="${r.key}">${h(r.name||r.file.name)}${r.thumb?' (replace its thumbnail)':''}</option>`).join('')}</select>
+        <button class="btn xs icon ghost" data-act="batch-img-remove" data-img="${i.key}" title="Remove image" aria-label="Remove ${h(i.file.name)}">${I.x}</button></div>`).join('')}</div></div>`:'';
+  const settings=`<div class="panel bsk-all"><div class="panel-b">
+      <b style="font:700 12px var(--display);color:var(--gold3)">APPLY TO ALL</b>
+      <div class="small muted" style="margin-top:2px">Sets every row below; you can still change any single row afterwards.</div>
+      <div class="rules">
+        ${allRow('enabled','Enabled in Player','Visible in the player\'s scene picker')}
+        ${allRow('broadcast','Also use for YouTube broadcast','Makes each video selectable in Broadcast Visuals — on its own it does not put it on air')}
+        ${allRow('rotation','Add to Broadcast Visual rotation',colls.length?'Appends each new skin to the collection below':'No collection to add to',!colls.length)}
+      </div>
+      ${colls.length?`<label class="bsk-coll small muted">Collection<select class="sel" data-change="batch-coll" ${B.running?'disabled':''}>${colls.map(c=>`<option value="${h(c.id)}" ${c.id===B.collection?'selected':''}>${h(c.name)} (${c.count} video${c.count===1?'':'s'})${c.id===bc.active_collection&&bc.mode==='rotation'?' — on air':''}</option>`).join('')}</select></label>`:''}
+      <div class="small ${colls.length&&bc.mode==='rotation'&&B.collection===bc.active_collection?'amber':'muted2'}" style="margin-top:4px">${h(collNote)}</div>
+      <div class="bsk-defaults">
+        <div><span class="small muted">Accent colour</span><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px"><input type="color" value="${h(B.accent)}" data-input="batch-accent" style="width:40px;height:32px;padding:2px;border-radius:8px" aria-label="Accent colour">${ACCENT_PRESETS.map(([n,c])=>`<button type="button" class="btn xs ${B.accent===c?'gold':''}" data-act="batch-accent-preset" data-c="${c}" title="${n}"><span style="display:inline-block;width:11px;height:11px;border-radius:50%;background:${c}"></span></button>`).join('')}</div></div>
+        <div><span class="small muted">Time behaviour</span><div class="small" style="margin-top:6px"><b>Same scene all day</b> <span class="muted2">— per-time variants can be added later by editing a skin</span></div></div>
+        <div><span class="small muted">Ambience</span><div class="small" style="margin-top:6px"><b>None</b> <span class="muted2">— same default as a new single skin</span></div></div>
+      </div>
+    </div></div>`;
+  const progress=started.length?`<div class="note bsk-prog"><b>${B.running?'Creating skins':'Batch results'}</b> — ${complete} of ${started.length} complete${failed.length?` · <span class="red">${failed.length} failed</span>`:''}${B.running?' · keep this tab open until it finishes':''}</div>`:'';
+  const n=ready.length;
+  return `<h3>${I.image} New skin<button class="btn xs ghost icon x" data-act="batch-close" aria-label="Close">${I.x}</button></h3>
+  <div class="seg bsk-mode" role="tablist"><button type="button" data-act="skin-mode-single" ${B.running?'disabled':''}>Single Skin</button><button type="button" class="active">Batch Upload</button></div>
+  ${B.notices.map((x,i)=>`<div class="bsk-notice ${x.cls}" data-key="bnot-${i}">${x.cls==='err'?I.alert:I.info}<span>${h(x.text)}</span><button class="btn xs ghost icon" data-act="batch-notice-x" data-i="${i}" aria-label="Dismiss">${I.x}</button></div>`).join('')}
+  ${!B.running?pickers:''}
+  ${sumChips}
+  ${rows.length?settings:''}
+  ${unmatchedHtml}
+  ${progress}
+  <div class="bsk-rows">${rows.map(row).join('')}</div>
+  ${!rows.length?`<div class="small muted2" style="margin-top:8px">Each video becomes one skin, named after its file ("Floating Barbershop.mp4" → "Floating Barbershop"). Names stay editable before you create them.</div>`:''}
+  <div class="row-actions bsk-foot">
+    <button type="button" class="btn" data-act="batch-close">${B.running?'Hide (keeps running)':started.length&&!editable.length?'Done':started.length&&!rows.some(r=>r.status==='pending')?'Close':'Cancel'}</button>
+    ${failed.length&&!B.running?`<button type="button" class="btn" data-act="batch-retry">${I.restart} Retry Failed (${failed.length})</button>`:''}
+    ${B.running||rows.some(r=>r.status==='pending')||!started.length?`<button type="button" class="btn gold" data-act="batch-create" ${n&&!B.running?'':'disabled'}>${B.running?`Creating… ${complete} of ${started.length}`:`Create ${n} Skin${n===1?'':'s'}`}</button>`:''}
+  </div>`;
+}
+
+Object.assign(ACTIONS, {
+  'skin-mode-batch': async()=>{ const e=SKIN_EDIT;
+    if((e.video||e.image||e.thumbnail)&&!(await confirmDlg('Switch to Batch Upload? The media you uploaded to this unsaved skin will be discarded.','Switch',true))){ modal(()=>skinEditorHtml()); return; }
+    closeModal(); if(e.isNew&&e.id){ try{ await del(`/api/skins/${e.id}`); }catch(_){} } await batchOpen(); },
+  'skin-mode-single': async()=>{ if(BATCH.running) return; const draft=await act(()=>post('/api/skins/draft'),null,{noRefresh:true}); if(draft) skinEditOpen(draft,true); },
+  'batch-close': async()=>{ const B=BATCH;
+    if(B.running){ closeModal(); toast('Batch keeps running — reopen it from New Skin','ok'); return; }
+    const pending=B.rows.filter(r=>r.status==='pending'||r.status==='failed');
+    if(pending.length&&!(await confirmDlg(`Discard ${pending.length} video${pending.length===1?'':'s'} that ${pending.length===1?'has':'have'} not been created yet? Skins already created are kept.`,'Discard',true))){ modal(batchModal,{wide:true}); return; }
+    for(const r of pending) if(r.draftId&&!r.done.final){ try{ await del(`/api/skins/${encodeURIComponent(r.draftId)}`); }catch(_){} }
+    batchReset(); closeModal(); delete state.pageData.skins; refresh(true); },
+  'batch-notice-x': (el)=>{ BATCH.notices.splice(Number(el.dataset.i),1); bPaint(); },
+  'batch-all': (el)=>{ if(el.classList.contains('disabled')||BATCH.running) return; const k=el.dataset.k; const v=!el.classList.contains('on'); BATCH.settings[k]=v;
+    // Rotation is kept as its own intent and only takes effect while YouTube is on, so
+    // switching YouTube off and back on never silently drops a row out of the rotation.
+    for(const r of BATCH.rows){ if(bLocked(r)) continue; if(k==='rotation'){ if(r.broadcast) r.rotation=v; } else r[k]=v; }
+    bPaint(); },
+  'batch-row': (el)=>{ if(el.classList.contains('disabled')||BATCH.running) return; const r=BATCH.rows.find(x=>x.key===el.dataset.key); if(!r||bLocked(r)) return; const k=el.dataset.k;
+    r[k]=!r[k]; bPaint(); },
+  'batch-default': (el)=>{ if(el.classList.contains('disabled')||BATCH.running) return; BATCH.defaultKey=BATCH.defaultKey===el.dataset.key?null:el.dataset.key; bPaint(); },
+  'batch-accent-preset': (el)=>{ BATCH.accent=el.dataset.c; bPaint(); },
+  'batch-remove': async(el)=>{ const B=BATCH, r=B.rows.find(x=>x.key===el.dataset.key); if(!r||B.running) return;
+    if(r.draftId&&!r.done.final){ try{ await del(`/api/skins/${encodeURIComponent(r.draftId)}`); }catch(_){} }
+    B.rows=B.rows.filter(x=>x!==r); if(B.defaultKey===r.key) B.defaultKey=null; bAutoMatch(); bPaint(); },
+  'batch-img-remove': (el)=>{ const B=BATCH, i=B.images.find(x=>x.key===el.dataset.img); if(!i) return; URL.revokeObjectURL(i.url); B.images=B.images.filter(x=>x!==i); for(const r of B.rows) if(r.thumb===i.key&&!r.done.thumb){ r.thumb=null; r.thumbAuto=false; } bPaint(); },
+  'batch-create': async()=>{ const rows=bReady(); if(!rows.length) return;
+    const skipped=BATCH.rows.filter(r=>r.status==='pending'&&bIssue(r)).length;
+    if(skipped&&!(await confirmDlg(`${skipped} video${skipped===1?' has':'s have'} a problem to fix first and will be left out. Create the other ${rows.length} now?`,`Create ${rows.length}`))){ modal(batchModal,{wide:true}); return; }
+    if(skipped) modal(batchModal,{wide:true});
+    await bRun(rows); },
+  'batch-retry': async()=>{ await bRun(BATCH.rows.filter(r=>r.status==='failed'&&!bIssue(r))); },
+  'batch-retry-row': async(el)=>{ const r=BATCH.rows.find(x=>x.key===el.dataset.key); if(!r) return; const iss=bIssue(r); if(iss){ toast(iss,'err'); return; } await bRun([r]); },
+});
+Object.assign(CHANGES, {
+  'batch-files': (el)=>{ const f=[...el.files]; el.value=''; bAddFiles(f); },
+  'batch-name': (el)=>{ const r=BATCH.rows.find(x=>x.key===el.dataset.key); if(!r||!bEditable(r)) return; r.name=el.value; bPaint(); },
+  'batch-thumb': (el)=>{ const r=BATCH.rows.find(x=>x.key===el.dataset.key); if(!r) return; bSetThumb(r, el.value||null); bPaint(); },
+  'batch-assign': (el)=>{ const r=BATCH.rows.find(x=>x.key===el.value); if(!r) return; bSetThumb(r, el.dataset.img); bPaint(); },
+  'batch-coll': (el)=>{ BATCH.collection=el.value; bPaint(); },
+  'batch-accent': (el)=>{ BATCH.accent=el.value; },
 });
 
 /* ======================= BROADCAST VISUALS ======================= */

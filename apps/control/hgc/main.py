@@ -4,6 +4,7 @@ Everything the browser can do goes through explicit, validated endpoints; there 
 no shell passthrough and the Liquidsoap socket is only reachable from this process.
 """
 from __future__ import annotations
+import asyncio
 import json
 import os
 import re
@@ -2387,8 +2388,12 @@ async def skins_asset(skin_id: str, kind: str, time_key: str | None = None, file
     if len(data) > 120 * 1024 * 1024:
         raise HTTPException(413, "asset too large (120 MB max)")
     try:
-        name = skins_mod.store_asset(skin_id, kind, file.filename or "asset", data, time_key)
-        probe = skins_mod.probe_asset(name) if kind != "thumbnail" else None
+        # ffprobe validation, the auto-thumbnail ffmpeg run and the file write can take
+        # seconds per video; doing them on the event loop stalled every other request to
+        # Control (internal ones from the audio/stream processes included) for that long —
+        # multiplied by ten during a Batch Upload. skins.py serializes its manifest writes.
+        name = await asyncio.to_thread(skins_mod.store_asset, skin_id, kind, file.filename or "asset", data, time_key)
+        probe = await asyncio.to_thread(skins_mod.probe_asset, name) if kind != "thumbnail" else None
     except ValueError as e:
         raise HTTPException(400, str(e))
     except KeyError:
@@ -2457,6 +2462,24 @@ def broadcast_collection_update(cid: str, body: BroadcastCollection, user: str =
         return broadcast_mod.upsert_collection(body.model_dump(), cid)
     except KeyError:
         raise HTTPException(404)
+
+
+class BroadcastCollectionAdd(BaseModel):
+    video_ids: list[str]
+
+
+@app.post("/api/broadcast/collections/{cid}/videos")
+def broadcast_collection_add(cid: str, body: BroadcastCollectionAdd, user: str = Depends(current_user)):
+    """Append skins to a collection without rewriting its whole list (used by Batch Upload's
+    "Add to Broadcast Visual rotation"); idempotent, so a retry never duplicates an entry."""
+    try:
+        c = broadcast_mod.add_to_collection(cid, body.video_ids)
+    except KeyError:
+        raise HTTPException(404, "no such collection")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    db.log_event("info", "system", f"Added {len(body.video_ids)} visual(s) to broadcast collection: {c.get('name') or cid}")
+    return c
 
 
 @app.delete("/api/broadcast/collections/{cid}")

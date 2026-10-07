@@ -34,8 +34,10 @@ YouTube Broadcast Visuals system (hgc/broadcast.py). A skin can be a Player scen
 broadcast visual, both, or neither — enabling one does not imply the other.
 """
 from __future__ import annotations
+import functools
 import json
 import re
+import threading
 import time
 from io import BytesIO
 from pathlib import Path
@@ -55,6 +57,21 @@ AMBIENCE_KEYS = tuple(AMBIENCE_LABELS)
 VIDEO_EXTS = {".mp4", ".webm"}
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
 PLAYER_ORIGIN = "https://player.hungreegoat.com"
+
+# Every read-modify-write of the manifest goes through this lock. Upload/probe work runs in
+# worker threads (see main.py's skins_asset) and Batch Upload drives several skins at once,
+# so two requests touching different rows must never interleave their load()/save() and
+# silently drop each other's change. Re-entrant because upsert() is also called from inside
+# store_asset()/generate_thumbnail(), and delete() from purge_stale_drafts().
+_LOCK = threading.RLock()
+
+
+def _locked(fn):
+    @functools.wraps(fn)
+    def wrapper(*a, **kw):
+        with _LOCK:
+            return fn(*a, **kw)
+    return wrapper
 
 # One-time seed for a brand-new install (or one migrating off the old hardcoded-built-in
 # architecture): the six scenes the player originally shipped with, now real, independently
@@ -94,6 +111,7 @@ def save(d: dict) -> None:
     tmp.replace(MANIFEST)
 
 
+@_locked
 def ensure_seeded() -> None:
     """Two independent jobs, both idempotent and safe to run on every startup:
 
@@ -242,6 +260,7 @@ def get(skin_id: str) -> dict | None:
     return next((s for s in load()["skins"] if s["id"] == skin_id), None)
 
 
+@_locked
 def create_draft() -> dict:
     """Backs the New Skin modal: a real row exists from the moment the modal opens, so
     Upload Video/Image/Thumbnail work immediately — no more 'save first, come back later'.
@@ -260,6 +279,7 @@ def create_draft() -> dict:
     return cur
 
 
+@_locked
 def purge_stale_drafts(max_age_sec: float = 6 * 3600) -> int:
     """A draft the operator opened, uploaded into, then just closed the browser tab on
     (no explicit Cancel) would otherwise sit in the manifest forever with orphaned files
@@ -275,6 +295,7 @@ def purge_stale_drafts(max_age_sec: float = 6 * 3600) -> int:
     return len(stale)
 
 
+@_locked
 def upsert(data: dict, skin_id: str | None = None, finalize_draft: bool = False) -> dict:
     d = load()
     if skin_id:
@@ -326,6 +347,7 @@ def upsert(data: dict, skin_id: str | None = None, finalize_draft: bool = False)
     return cur
 
 
+@_locked
 def delete(skin_id: str) -> None:
     """Unconditional, permanent removal — used to be special-cased for the six built-ins
     (a delete just reset them); it no longer is. Any managed asset file exclusively owned
@@ -354,14 +376,21 @@ def delete(skin_id: str) -> None:
     if d.get("default") == skin_id:
         d["default"] = None
     save(d)
+    # Drop it from any Broadcast Visuals collection too. A dangling id is harmless while it
+    # stays dangling, but ids are name-derived, so a later skin created with the same name
+    # would otherwise silently inherit the deleted one's place in an on-air rotation.
+    from . import broadcast
+    broadcast.forget_visual(skin_id)
 
 
+@_locked
 def set_default(skin_id: str | None) -> None:
     d = load()
     d["default"] = skin_id
     save(d)
 
 
+@_locked
 def reorder(ids: list[str]) -> None:
     d = load()
     by_id = {s["id"]: s for s in d["skins"]}
@@ -432,35 +461,38 @@ def store_asset(skin_id: str, kind: str, filename: str, data: bytes, time_key: s
         except Exception:
             pass
     if time_key:
-        d = load()
-        row = next((s for s in d["skins"] if s["id"] == skin_id), None)
-        if row is None:
-            raise KeyError(skin_id)
-        old = (row.get("time_variants") or {}).get(time_key, {}).get(kind)
-        variants = dict(row.get("time_variants") or {})
-        variants[time_key] = {**variants.get(time_key, {}), kind: name}
-        row["time_variants"] = variants
-        row["time_mode"] = "variants"
-        save(d)
+        with _LOCK:
+            d = load()
+            row = next((s for s in d["skins"] if s["id"] == skin_id), None)
+            if row is None:
+                (SKINS_DIR / name).unlink(missing_ok=True)
+                raise KeyError(skin_id)
+            old = (row.get("time_variants") or {}).get(time_key, {}).get(kind)
+            variants = dict(row.get("time_variants") or {})
+            variants[time_key] = {**variants.get(time_key, {}), kind: name}
+            row["time_variants"] = variants
+            row["time_mode"] = "variants"
+            save(d)
         if old and old != name and _is_managed(old):
             (SKINS_DIR / old).unlink(missing_ok=True)
     else:
-        cur = next((s for s in load()["skins"] if s["id"] == skin_id), None)
-        if cur is None:
-            (SKINS_DIR / name).unlink(missing_ok=True)
-            raise KeyError(skin_id)
-        other_key = "image" if kind == "video" else "video" if kind == "image" else None
-        # A new video/image replaces the previous main visual outright (the two are mutually
-        # exclusive), and any replaced file — main visual or thumbnail — must not linger as an
-        # orphan on disk once nothing in the manifest points to it.
-        stale = [f for f in (cur.get(kind), cur.get(other_key) if other_key else None) if f and f != name and _is_managed(f)]
-        upsert({kind: name}, skin_id)
-        if other_key and cur.get(other_key):
-            d = load()
-            row = next((s for s in d["skins"] if s["id"] == skin_id), None)
-            if row is not None:
-                row[other_key] = None
-                save(d)
+        with _LOCK:
+            cur = next((s for s in load()["skins"] if s["id"] == skin_id), None)
+            if cur is None:
+                (SKINS_DIR / name).unlink(missing_ok=True)
+                raise KeyError(skin_id)
+            other_key = "image" if kind == "video" else "video" if kind == "image" else None
+            # A new video/image replaces the previous main visual outright (the two are mutually
+            # exclusive), and any replaced file — main visual or thumbnail — must not linger as an
+            # orphan on disk once nothing in the manifest points to it.
+            stale = [f for f in (cur.get(kind), cur.get(other_key) if other_key else None) if f and f != name and _is_managed(f)]
+            upsert({kind: name}, skin_id)
+            if other_key and cur.get(other_key):
+                d = load()
+                row = next((s for s in d["skins"] if s["id"] == skin_id), None)
+                if row is not None:
+                    row[other_key] = None
+                    save(d)
         for f in stale:
             (SKINS_DIR / f).unlink(missing_ok=True)
         # A skin must never be left with a main visual and no thumbnail — a video with no
@@ -533,8 +565,13 @@ def generate_thumbnail(skin_id: str, source_name: str) -> str:
     else:
         from PIL import Image
         im = Image.open(SKINS_DIR / source_name).convert("RGB"); im.thumbnail((640, 640)); im.save(out, "WEBP", quality=80)
-    old = (get(skin_id) or {}).get("thumbnail")
-    upsert({"thumbnail": out_name}, skin_id)
+    with _LOCK:
+        old = (get(skin_id) or {}).get("thumbnail")
+        try:
+            upsert({"thumbnail": out_name}, skin_id)
+        except KeyError:
+            out.unlink(missing_ok=True)   # the skin was deleted while the frame was being extracted
+            raise
     if old and old != out_name and _is_managed(old):
         (SKINS_DIR / old).unlink(missing_ok=True)
     return out_name

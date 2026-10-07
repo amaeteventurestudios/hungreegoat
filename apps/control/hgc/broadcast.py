@@ -21,12 +21,26 @@ transition — see advance_if_track_changed(), called from the Streamer's poll l
 from __future__ import annotations
 import json
 import random
+import threading
 import time
 from pathlib import Path
 
 from . import config, skins as skins_mod
 
 MANIFEST = config.DATA_DIR / "broadcast.json"
+# Serializes read-modify-write of broadcast.json across request threads (Batch Upload adds
+# several new skins to a collection concurrently). The Streamer is a separate process and
+# never writes this file, only run/broadcast-<sid>.json.
+_LOCK = threading.RLock()
+
+
+def _locked(fn):
+    def wrapper(*a, **kw):
+        with _LOCK:
+            return fn(*a, **kw)
+    wrapper.__name__ = fn.__name__
+    wrapper.__doc__ = fn.__doc__
+    return wrapper
 
 
 def load() -> dict:
@@ -195,6 +209,7 @@ def public_state() -> dict:
     }
 
 
+@_locked
 def set_mode(mode: str, single_visual: str | None = None, active_collection: str | None = None) -> dict:
     if mode not in ("single", "rotation"):
         raise ValueError("mode must be 'single' or 'rotation'")
@@ -210,6 +225,7 @@ def set_mode(mode: str, single_visual: str | None = None, active_collection: str
     return d
 
 
+@_locked
 def upsert_collection(data: dict, cid: str | None = None) -> dict:
     d = load()
     if cid:
@@ -231,6 +247,7 @@ def upsert_collection(data: dict, cid: str | None = None) -> dict:
     return cur
 
 
+@_locked
 def delete_collection(cid: str) -> None:
     d = load()
     if not any(c["id"] == cid for c in d["collections"]):
@@ -239,3 +256,39 @@ def delete_collection(cid: str) -> None:
     if d.get("active_collection") == cid:
         d["active_collection"] = None
     save(d)
+
+
+@_locked
+def add_to_collection(cid: str, video_ids: list[str]) -> dict:
+    """Append skins to a collection atomically (no client-side read-then-PUT of the whole
+    list, which would race when several new skins are added at once). Already-present ids
+    are left where they are, so a retried request never duplicates an entry. Unknown ids are
+    rejected outright rather than stored as dangling references."""
+    d = load()
+    cur = next((c for c in d["collections"] if c["id"] == cid), None)
+    if cur is None:
+        raise KeyError(cid)
+    known = {s["id"] for s in skins_mod.load()["skins"] if not s.get("draft")}
+    missing = [i for i in video_ids if i not in known]
+    if missing:
+        raise ValueError(f"no such skin: {', '.join(missing)}")
+    ids = list(cur.get("video_ids") or [])
+    for i in video_ids:
+        if i not in ids:
+            ids.append(i)
+    cur["video_ids"] = ids
+    save(d)
+    return cur
+
+
+@_locked
+def forget_visual(skin_id: str) -> None:
+    """Called by skins.delete(): remove a deleted skin from every collection's list."""
+    d = load()
+    changed = False
+    for c in d["collections"]:
+        if skin_id in (c.get("video_ids") or []):
+            c["video_ids"] = [i for i in c["video_ids"] if i != skin_id]
+            changed = True
+    if changed:
+        save(d)
