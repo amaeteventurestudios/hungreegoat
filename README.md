@@ -9,7 +9,7 @@ recovery, and a browser-based DJ/mixing studio.
 
 You can run HUNGREE Goat on your own Linux computer or home server.
 
-HUNGREE Goat is created and maintained by **HUNGREE Goat Media**.
+HUNGREE Goat is an **Amaete Venture Studios** company, and is created and maintained by Amaete Venture Studios.
 
 ---
 
@@ -602,8 +602,8 @@ Need to use HUNGREE Goat in a proprietary product, a white-label deployment, a c
 integration, or another commercial arrangement that doesn't fit the Community Edition's
 AGPL-3.0 terms?
 
-Commercial licensing is available from HUNGREE Goat Media for the original HUNGREE Goat code,
-where HUNGREE Goat Media holds the right to offer alternative terms. This does **not** relicense
+Commercial licensing is available from Amaete Venture Studios for the original HUNGREE Goat code,
+where Amaete Venture Studios holds the right to offer alternative terms. This does **not** relicense
 or change the terms of any third-party component bundled in this repository — `apps/player`,
 `apps/dj-studio`, the bundled fonts, and everything else listed in
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) remain governed by their own licenses
@@ -617,7 +617,7 @@ for the managed-hosting option as well.
 
 HUNGREE Goat Community Edition — the original HUNGREE Goat code and documentation in this
 repository (`apps/website`, `apps/control`, `packages/brand` excluding fonts, `packages/ui`,
-`packages/shared`, `infra/`, and `docs/`) — is **Copyright © 2023–2026 HUNGREE Goat Media**
+`packages/shared`, `infra/`, and `docs/`) — is **Copyright © 2023–2026 Amaete Venture Studios**
 and licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)** — see the root
 [`LICENSE`](LICENSE) file for the full text. Need different terms? See
 [Commercial Licensing](#commercial-licensing) above.
