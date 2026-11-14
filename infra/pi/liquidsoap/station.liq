@@ -111,7 +111,7 @@ main = normalize(target=-16., gain_max=6., gain_min=-12., main)
 
 # Silence guard: skip tracks that go silent, and report it.
 main = blank.skip(id="silence_skip", max_blank=12., threshold=-45., track_sensitive=true, main)
-main = blank.detect(id="silence_detect", max_blank=8., threshold=-45., main)
+main = blank.detect(id="silence_detect", max_blank=20., threshold=-45., main)
 main.on_blank(synchronous=false, fun () -> begin
   if guard_enabled() then
     notify("event", {station=station, severity="warning", category="silence",
