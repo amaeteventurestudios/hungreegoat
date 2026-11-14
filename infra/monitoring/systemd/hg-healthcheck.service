@@ -1,0 +1,5 @@
+[Unit]
+Description=HungreeGoat outside check (api + control)
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/hg-healthcheck

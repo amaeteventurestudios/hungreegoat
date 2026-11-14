@@ -28,8 +28,15 @@ Match User hgtunnel
     PermitTTY no
     X11Forwarding no
     ForceCommand /bin/false
+    # Drop a tunnel connection that stops answering (~90 s), so a reconnect from the Beelink
+    # can always take 127.0.0.1:18090. Without it a dead session can hold the port for days
+    # and every new tunnel fails its -R (ExitOnForwardFailure), leaving api/control at 502.
+    ClientAliveInterval 30
+    ClientAliveCountMax 3
 SSHD
 fi
+# Installs made before ClientAlive was added: add it to the existing block, once.
+grep -q ClientAliveInterval /etc/ssh/sshd_config.d/20-hgtunnel.conf || printf '    ClientAliveInterval 30\n    ClientAliveCountMax 3\n' >> /etc/ssh/sshd_config.d/20-hgtunnel.conf
 sshd -t && systemctl reload ssh
 cp "$H/nginx/api.hungreegoat.com.conf" /etc/nginx/sites-available/api.hungreegoat.com
 cp "$H/nginx/control.hungreegoat.com.conf" /etc/nginx/sites-available/control.hungreegoat.com
