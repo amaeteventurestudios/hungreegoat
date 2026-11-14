@@ -29,6 +29,14 @@ broadcast itself relies on:
    the house, it's the only thing that can still alert if Beelink, the router, or the home ISP
    goes down entirely.
 
+2b. **Log-only gateway check** — `infra/monitoring/hg-healthcheck.sh` with
+   `infra/monitoring/systemd/hg-healthcheck.{service,timer}`, installed on the Hetzner gateway as a
+   root systemd timer (every minute). Checks `api.hungreegoat.com/v1/stations` and `control.`,
+   records `DOWN` once after 3 failures in a row and `RECOVERED` when it answers again, in the
+   journal (`journalctl -t hg-healthcheck`). It sends nothing anywhere unless an executable
+   `/etc/hg-healthcheck/notify` exists (it gets the message as its first argument); that hook is
+   left off by default. Use it where no ntfy topic is configured for the external monitor.
+
 3. **Secondary local monitor** — `infra/monitoring/hgc-monitor-local.sh`, runs via cron on
    `pi-node-01` as its own user. Checks Beelink directly over the LAN
    (`http://192.168.4.41:8090/v1/health/broadcast`), bypassing the public gateway/tunnel
@@ -183,3 +191,21 @@ as a gap.
 - **Uptime Kuma integration on the Pi**: pending the admin login above — see that section for
   the exact ask; the current Pi cron monitor (`hgc-monitor-local.sh`) is fully independent of
   Kuma and keeps working regardless.
+
+## Runbook: api and control return 502, the station is still playing
+
+Symptom: `api.hungreegoat.com` and `control.hungreegoat.com` answer 502 from the gateway's nginx,
+the player shows "Catalog unavailable", but the containers on the Beelink are up and the station
+is on air. Cause: the reverse tunnel. On the gateway, `ss -tlnp | grep 18090` shows the port held
+by an `sshd: hgtunnel` session that no longer carries traffic, so the Beelink's reconnects fail
+their `-R` (ExitOnForwardFailure) and nothing reaches `127.0.0.1:8090`.
+
+Fix (seen November 14, 2026, when a session from November 6 held the port):
+1. On the gateway: `ps -o pid,lstart,args -u hgtunnel` lists the sessions; end the stale one
+   (`kill <pid>`; the oldest, or the one holding 18090 while api answers 502).
+2. The Beelink's `hungree-goat-tunnel` user unit (Restart=always) reconnects within ~15 s and
+   takes the port; check `curl https://api.hungreegoat.com/v1/stations` answers 200.
+
+Prevention: `infra/gateway/install-hetzner.sh` now sets `ClientAliveInterval 30` /
+`ClientAliveCountMax 3` for the `hgtunnel` login, so the gateway drops a dead session after
+~90 s by itself and step 1 should not be needed again.
