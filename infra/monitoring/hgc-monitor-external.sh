@@ -12,7 +12,8 @@
 set -u
 NTFY_TOPIC_FILE="$HOME/.hgc-ntfy-topic"
 STATE_FILE="$HOME/.hgc-monitor-state-external"
-COOLDOWN_SEC=900   # re-remind at most every 15 min while an incident is ongoing
+COOLDOWN_SEC=3600  # after the first alert, remind at most hourly
+GRACE_SEC=1200     # stay silent until a problem has lasted 20 min; brief drops that recover send nothing
 LABEL="External-Hetzner"
 
 [ -f "$NTFY_TOPIC_FILE" ] || { echo "missing $NTFY_TOPIC_FILE — monitor not configured" >&2; exit 1; }
@@ -56,16 +57,22 @@ prev_status="unknown"; prev_first_bad=0; prev_last_alert=0
 [ -f "$STATE_FILE" ] && read -r prev_status prev_first_bad prev_last_alert < "$STATE_FILE"
 
 if [ "$ok" = "1" ]; then
-    if [ "$prev_status" = "bad" ]; then
+    if [ "$prev_status" = "bad" ] && [ "$prev_last_alert" != "0" ]; then
         dur=$((now - prev_first_bad))
         notify "HUNGREE Goat RECOVERED [$LABEL]" "Public services reachable again. Outage duration: $((dur/60))m $((dur%60))s." "high"
     fi
     printf 'good %s %s\n' "$now" "$now" > "$STATE_FILE"
 else
     reasons=${reasons#; }
+    # state: "bad <first_bad> <last_alert>"; last_alert=0 means still inside the grace period (nothing sent yet)
     if [ "$prev_status" != "bad" ]; then
-        notify "HUNGREE Goat OUTAGE [$LABEL]" "$reasons" "urgent"
-        printf 'bad %s %s\n' "$now" "$now" > "$STATE_FILE"
+        printf 'bad %s 0\n' "$now" > "$STATE_FILE"
+    elif [ "$prev_last_alert" = "0" ]; then
+        if [ $((now - prev_first_bad)) -ge "$GRACE_SEC" ]; then
+            dur=$((now - prev_first_bad))
+            notify "HUNGREE Goat OUTAGE [$LABEL]" "Down $((dur/60))m. $reasons" "urgent"
+            printf 'bad %s %s\n' "$prev_first_bad" "$now" > "$STATE_FILE"
+        fi
     elif [ $((now - prev_last_alert)) -ge "$COOLDOWN_SEC" ]; then
         dur=$((now - prev_first_bad))
         notify "HUNGREE Goat STILL DOWN [$LABEL]" "$((dur/60))m elapsed. $reasons" "urgent"

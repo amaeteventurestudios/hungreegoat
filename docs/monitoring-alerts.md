@@ -92,10 +92,14 @@ verify the whole chain end-to-end.
 
 Each monitor tracks its own state (`~/.hgc-monitor-state-external` / `~/.hgc-monitor-state-local`)
 to:
-- send one **OUTAGE** push the moment a check transitions healthy → unhealthy (priority: urgent)
-- send a **STILL DOWN** reminder at most once per 15 minutes while it stays unhealthy (no alert storm)
-- always send a **RECOVERED** push with the outage duration when it transitions back — a
-  monitor that only ever says something is wrong and never confirms it's fixed is incomplete.
+- stay silent for a 20-minute grace period (`GRACE_SEC=1200`) after a check first fails, so brief
+  drops that recover on their own send nothing (owner rule, 2026-11-16)
+- send one **OUTAGE** push once the problem has lasted 20 minutes (priority: urgent)
+- send a **STILL DOWN** reminder at most once per hour (`COOLDOWN_SEC=3600`) while it stays unhealthy
+- send a **RECOVERED** push with the outage duration when it transitions back, but only if an
+  OUTAGE push was actually sent for that incident.
+The HGC-Internal push in `_notify_hgc_alert_state()` follows the same 20-minute grace
+(`ALERT_GRACE_SEC`).
 
 Cron: both run every 2 minutes (`*/2 * * * *`), installed via `crontab -l | ... | crontab -`
 so nothing pre-existing on either host was overwritten.
@@ -130,7 +134,7 @@ Preferred provider per the operator's existing account. Reads the API key from
 response) — activates automatically the moment that file exists, with **no other
 configuration needed**. Sender `alerts@hungreegoat.com`, destination `info@hungreegoat.com`.
 Wired into the escalation ladder: the watchdog's `_notify_hgc_alert_state()` sends one email
-per incident once it's been unresolved for 5 minutes (`EMAIL_ESCALATION_SEC`), and only marks
+per incident once it's been unresolved for 30 minutes (`EMAIL_ESCALATION_SEC`), and only marks
 it sent if the Resend call actually succeeded — a missing/invalid key retries next tick rather
 than silently giving up. `GET /api/monitoring/overview` reports `email.configured` honestly;
 until a key exists this shows **"Resend API key required"**, never a fabricated success.

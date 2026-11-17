@@ -194,7 +194,8 @@ def email_send(subject: str, body: str) -> tuple[bool, str | None]:
         return False, str(e)
 
 
-EMAIL_ESCALATION_SEC = 300   # 5 min unresolved, per the documented escalation policy
+ALERT_GRACE_SEC = 1200       # push only once a problem has lasted 20 min (owner rule, 2026-11-16)
+EMAIL_ESCALATION_SEC = 1800  # email if still unresolved 30 min in (after the push)
 
 
 def _notify_hgc_alert_state(sid: str, health: dict, yt_state: dict | None, stream_: dict) -> None:
@@ -211,17 +212,24 @@ def _notify_hgc_alert_state(sid: str, health: dict, yt_state: dict | None, strea
     bad = level in ("warning", "critical")
     prev = _HGC_ALERT_STATE.get(sid, {"bad": False, "first_bad_at": None, "emailed": False})
     if bad and not prev["bad"]:
-        ntfy_send(f"HUNGREE Goat {level.upper()} [HGC-Internal]",
-                   f"{sid}: {health['overall']['title']} — {health['overall']['message']}",
-                   "urgent" if level == "critical" else "default")
-        _HGC_ALERT_STATE[sid] = {"bad": True, "first_bad_at": time.time(), "emailed": False}
+        # Grace period: start the clock silently — brief drops that recover on their own send nothing.
+        _HGC_ALERT_STATE[sid] = {"bad": True, "first_bad_at": time.time(), "emailed": False, "pushed": False}
     elif bad and prev["bad"]:
-        if not prev.get("emailed") and time.time() - prev["first_bad_at"] >= EMAIL_ESCALATION_SEC:
-            ok, _ = email_send(f"HUNGREE Goat {level.upper()} — unresolved 5+ min",
+        if not prev.get("pushed") and time.time() - prev["first_bad_at"] >= ALERT_GRACE_SEC:
+            ntfy_send(f"HUNGREE Goat {level.upper()} [HGC-Internal]",
+                       f"{sid}: {health['overall']['title']} — {health['overall']['message']} "
+                       f"(for {int((time.time() - prev['first_bad_at']) // 60)}m)",
+                       "urgent" if level == "critical" else "default")
+            prev["pushed"] = True
+            _HGC_ALERT_STATE[sid] = prev
+        if prev.get("pushed") and not prev.get("emailed") and time.time() - prev["first_bad_at"] >= EMAIL_ESCALATION_SEC:
+            ok, _ = email_send(f"HUNGREE Goat {level.upper()} — unresolved {int(EMAIL_ESCALATION_SEC // 60)}+ min",
                                 f"{sid}: {health['overall']['title']} — {health['overall']['message']}\n"
                                 f"Unresolved since {time.strftime('%H:%M:%S', time.localtime(prev['first_bad_at']))}.")
             prev["emailed"] = ok   # only mark sent if it actually succeeded — a missing Resend key retries next tick, never silently gives up
             _HGC_ALERT_STATE[sid] = prev
+    elif not bad and prev["bad"] and not prev.get("pushed"):
+        _HGC_ALERT_STATE[sid] = {"bad": False, "first_bad_at": None, "emailed": False}   # recovered inside the grace period: stay silent
     elif not bad and prev["bad"]:
         dur = time.time() - (prev["first_bad_at"] or time.time())
         fps = stream_.get("fps")
